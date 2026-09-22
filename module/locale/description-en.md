@@ -48,8 +48,11 @@ not only plain wall - and workshops, houses and farms never can. Tunnels may pas
 town to reach what lies behind it, but never beneath a keep.
 
 **Tunnels no longer waste themselves.** A tunnel whose target is destroyed before it arrives
-bends towards a new one from where it stands, instead of digging on to nothing. And if a target
-turns out to be unreachable, the tunnel loses a moment rather than the entrance.
+digs on to the spot anyway and takes its next target from there. That way the hole it makes
+carries straight on from the last one, and a player's tunnels carve one line into the castle
+instead of leaving a piece of untouched wall between one breach and the next. A tunneller
+standing about, with nothing dug yet, is turned at once. And if a target turns out to be
+unreachable, the tunnel loses a moment rather than the entrance.
 
 **Diggers are left alone.** A tunneller digging its entrance or its tunnel cannot be picked by
 the mouse or a drag box, is passed over by the orders you give a group, and enemy archers do
@@ -68,6 +71,7 @@ button; the dig button moves one slot along to make room for it.
 | **Digging on** | A tunnel whose target is gone looks for another | on |
 | Search range | How far a tunnel looks for a target | 80 tiles |
 | **Breach reach** | How near a tunnel must be to join the breach the others are at. Higher: they converge from further apart. Lower: each digs at what is in front of it | 40 tiles |
+| Finish before turning | A tunnel already digging finishes its leg before it takes a new target, so the breaches sit end to end | on |
 | Times per tunnel | How often one tunnel may be turned aside | 10 |
 | Fill in behind | Collapse the stretch already dug when a tunnel turns aside | on |
 | Aim towards the camp | Drive the breaches inwards towards the enemy's campfire | on |

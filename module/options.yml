@@ -82,6 +82,14 @@ options:
       min: 1
       max: 20
       step: 1
+  - url: improved-tunnelers.retarget.finish_leg
+    name: improved-tunnelers-retarget-finish-leg
+    text: '{{retarget_finish_leg}}'
+    tooltip: '{{retarget_finish_leg_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
   - url: improved-tunnelers.retarget.collapse_behind
     name: improved-tunnelers-retarget-collapse-behind
     text: '{{retarget_collapse}}'

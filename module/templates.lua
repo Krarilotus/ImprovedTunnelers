@@ -356,6 +356,14 @@ ret
 -- collapsing anything, so the tunneler digs straight on.
 local arrival = [[
 mov eax, [CURRENT_UNIT_ADDRESS]
+mov ecx, eax
+and ecx, 7
+shr eax, 3
+mov dl, 1
+shl dl, cl
+not dl
+and byte [eax+PENDING_ADDRESS], dl
+mov eax, [CURRENT_UNIT_ADDRESS]
 imul eax, eax, 1168
 mov ecx, [eax+UNIT_TILE]
 mov edx, [CURRENT_UNIT_ADDRESS]
@@ -1540,6 +1548,20 @@ jmp SKIP_ADDRESS
 -- each of its points. It is not set while the tunneler walks to a tunnel it has been told
 -- to dig, or while it is underground, so a stance never cancels a dig order either.
 --
+-- The block at the top of it is the other half of the re-aim. A tunnel whose target has
+-- gone carries a mark - one bit per unit - and this is where the mark is acted on, one
+-- tunneler a tick so the search is never run twice in the same frame.
+--
+-- A tunneler that is standing about is turned there and then. One that is in the middle of
+-- a dig is not: it keeps the mark and digs on to where its target stood, and the arrival
+-- takes its new target from that spot. That is the whole point of it. Turning a tunneler
+-- underground makes it fill in everything it has dug and start again from where it happens
+-- to be standing, which leaves the wall it had already broken and the wall it breaks next
+-- with a stretch of untouched castle between them. Finishing the leg first puts the two
+-- end to end, and a player's tunnels carve one line inwards instead of a scatter of holes.
+-- The four states it waits for are the digging ones: 3 and 4 sinking the entrance, 8 and 9
+-- underground.
+--
 -- Runs before the function's own prologue, so ECX must survive; only EAX and EDX are used.
 local stance = [[
 push ecx
@@ -1551,6 +1573,22 @@ mov dl, 1
 shl dl, cl
 test byte [eax+PENDING_ADDRESS], dl
 je pending_none
+cmp dword [FINISH_LEG_ADDRESS], 0
+je pending_turn
+mov eax, [CURRENT_UNIT_ADDRESS]
+imul eax, eax, 1168
+movzx eax, word [eax+UNIT_STATE]
+cmp eax, 3
+je pending_none
+cmp eax, 4
+je pending_none
+cmp eax, 8
+je pending_none
+cmp eax, 9
+je pending_none
+mov eax, [CURRENT_UNIT_ADDRESS]
+shr eax, 3
+pending_turn:
 mov ecx, [TICKS_ADDRESS]
 cmp ecx, [LAST_REAIM_TICK_ADDRESS]
 je pending_none

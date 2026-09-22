@@ -551,6 +551,8 @@ C.BREACH_REACH = 0x2C0                        -- how near a breach must be, squa
 C.FAMILY_DAMAGE = 0x2C4                       -- the damage running now is this module's,
                                               -- so stairs and crenellations take it too
 C.FAMILY_READY = 0x2C8                        -- ... and the widening that lets them is in
+C.FINISH_LEG = 0x2CC                          -- a tunnel under way digs its leg out before
+                                              -- it is turned towards anything new
 C.GAME_TILE = 0x2AC                           -- what the game's own aim answered, so the
                                               -- module can tell its own target from it
 C.QUEUE = 0x2D0
@@ -570,7 +572,8 @@ C.SIZE = C.SHARED + (PLAYER_COUNT + 1) * 32        -- and y, the tick it was set
 local DEFAULTS = {
   denial = { enabled = true, seconds = 120, message = true },
   retarget = { enabled = true, range = DEFAULT_SEARCH_RANGE, max = 10,
-    collapse_behind = true, towards_camp = true, breach_reach = DEFAULT_BREACH_REACH },
+    collapse_behind = true, towards_camp = true, breach_reach = DEFAULT_BREACH_REACH,
+    finish_leg = true },
   targets = { towers_and_gates = true, under_buildings = true },
   collapse = { damage = 2500, spread = true, spread_damage = 60, spread_radius = 2,
     speed = 2 },
@@ -724,6 +727,7 @@ return {
     local retargetMax = toInteger(setting(config, "retarget", "max"), DEFAULTS.retarget.max)
     local breachReach = toInteger(setting(config, "retarget", "breach_reach"),
       DEFAULTS.retarget.breach_reach)
+    local finishLegOn = setting(config, "retarget", "finish_leg") and true or false
     local collapseBehind = setting(config, "retarget", "collapse_behind") and true or false
     local targetsOn = setting(config, "targets", "towers_and_gates") and true or false
     local collapseDamage = toInteger(setting(config, "collapse", "damage"),
@@ -794,6 +798,7 @@ return {
     writeInteger(control + C.RETARGET_RANGE, retargetRange)
     writeInteger(control + C.RETARGET_MAX, retargetMax)
     writeInteger(control + C.BREACH_REACH, breachReach * breachReach)
+    writeInteger(control + C.FINISH_LEG, finishLegOn and 1 or 0)
     writeInteger(control + C.UI_ENABLED, uiOn and 1 or 0)
     writeInteger(control + C.STANCE_ENABLED, stancesOn and 1 or 0)
     writeInteger(control + C.COLLAPSE_BEHIND, collapseBehind and 1 or 0)
@@ -1148,6 +1153,7 @@ return {
         DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
         REPORT_ADDRESS = report,
         REPORT_PAD_ADDRESS = reportPad,
+        PENDING_ADDRESS = control + C.PENDING,
         WALL_FAMILY = WALL_FAMILY_FLAGS,
         REAIM_ADDRESS = reaim or core.allocateCode({ 0xC3 }),
         REAIM_UNIT_ADDRESS = control + C.REAIM_UNIT,
@@ -1511,6 +1517,7 @@ return {
         PENDING_ADDRESS = control + C.PENDING,
         TICKS_ADDRESS = ticks,
         LAST_REAIM_TICK_ADDRESS = control + C.LAST_REAIM_TICK,
+        FINISH_LEG_ADDRESS = control + C.FINISH_LEG,
         REAIM_ADDRESS = reaim or core.allocateCode({ 0xC3 }),
         REAIM_UNIT_ADDRESS = control + C.REAIM_UNIT,
         REAIM_ARRIVED_ADDRESS = control + C.REAIM_ARRIVED,
@@ -1532,8 +1539,10 @@ return {
         and (messageReady and ", with its own refusal message" or ", with the game's message")
         or "",
       retargetReady and (retargetOn and string.format(
-        "on, %d times, search %d tiles, joining a breach within %d",
-        retargetMax, retargetRange, breachReach) or "off") or "unavailable",
+        "on, %d times, search %d tiles, joining a breach within %d, %s",
+        retargetMax, retargetRange, breachReach,
+        finishLegOn and "finishing the leg first" or "turning where it stands")
+        or "off") or "unavailable",
       targetsReady and (targetsOn and "walls, towers and gates" or "walls only")
         .. (underOn and ", digging under the town" or "")
         .. (familyReady and ", stairs and crenellations damaged as wall is" or "")

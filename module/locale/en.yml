@@ -69,6 +69,14 @@ retarget_max_tooltip: |
   How often a single tunneler may be turned aside before it stops taking new targets and
   collapses at the end of the tunnel it is on. Keeps one tunneler from digging all day.
   Default 5.
+retarget_finish_leg: Finish the tunnel before turning
+retarget_finish_leg_tooltip: |
+  A tunnel whose target is destroyed before it gets there keeps digging to the spot anyway,
+  and only then looks for its next target - from that spot. The breaches it makes then sit
+  end to end and a player's tunnels carve one line into the castle. Off, the tunnel turns
+  the moment its target goes, fills in everything it has dug and starts again from where it
+  stands, which leaves a piece of untouched castle between one breach and the next.
+
 retarget_collapse: Collapse the stretch already dug
 retarget_collapse_tooltip: |
   A tunnel that turns towards a new target always fills in the stretch it has already dug,

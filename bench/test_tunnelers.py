@@ -96,6 +96,7 @@ class Fixture:
         self.origin_x = self.control + 0x224
         self.origin_y = self.control + 0x228
         self.zones = self.control + 0x2D0 + 512 * 16
+        self.finish_leg = self.control + 0x2CC
         self.family_damage = self.control + 0x2C4
         self.family_ready = self.control + 0x2C8
         self.pinned = self.control + 0x290
@@ -365,6 +366,11 @@ def scenario(extreme):
     check('  the tunneler keeps digging', f.unit_field(unit, 'state'), 3)
     check('  and the game returns without collapsing', cpu.eip, tail)
 
+    h.put8(f.pending + (unit >> 3), 1 << (unit & 7))        # ... and a tunnel that was
+    h.run(arrived, until=tail)                              # carrying a mark is settled
+    check('a mark is used up when the tunnel gets to the end of its leg',
+          (h.m.read(f.pending + (unit >> 3), 1)[0] >> (unit & 7)) & 1, 0)
+
     h.put32(f.alg_result, 0)                                # ... and when nothing is found
     before = len(paths)
     cpu = h.run(arrived, until=resume)
@@ -498,17 +504,51 @@ def scenario(extreme):
     h.run(collapsed, until=after)
     check('both are told to look again', (waiting(digger), waiting(elsewhere)), (1, 1))
 
+    # ... but not while they are still digging. A tunneler that turned underground would
+    # fill in everything it had dug and start again from where it stands, which leaves a
+    # piece of untouched castle between the wall it has broken and the wall it breaks next.
+    check('the setting that keeps a tunnel on its leg is on by default',
+          h.u32(f.finish_leg), 1)
+    paths.clear()
+    h.put32(f.ticks, 8000)
+    h.put32(f.last_reaim_tick, 0)
+    h.put32(f.current_unit, digger)
+    for state in (3, 4, 8, 9):
+        f.set_unit(digger, state=state)
+        h.run(f.tunneler, until=f.tunneler + 7)
+        check('in state %d it digs on rather than turning' % state, len(paths), 0)
+        check('  and keeps its mark for the end of the leg', waiting(digger), 1)
+
+    f.set_unit(digger, state=0)                             # above ground it turns at once
+    h.run(f.tunneler, until=f.tunneler + 7)
+    check('above ground the mark is acted on there and then', len(paths), 1)
+    check('  and used up', waiting(digger), 0)
+
+    h.put32(f.finish_leg, 0)                                # ... and switched off, a
+    h.put8(f.pending + (digger >> 3), 1 << (digger & 7))    # digging tunnel turns as well
+    h.put32(f.last_reaim_tick, 0)
+    f.set_unit(digger, state=3)
+    h.run(f.tunneler, until=f.tunneler + 7)
+    check('switched off, a digging tunnel is turned where it stands', len(paths), 2)
+    h.put32(f.finish_leg, 1)
+
+    for i in (digger, elsewhere):                           # back to where the tick test
+        byte = f.pending + (i >> 3)                         # wants them: both marked, and
+        h.put8(byte, h.m.read(byte, 1)[0] | (1 << (i & 7)))  # above ground so they act -
+        f.set_unit(i, state=0)                              # and they share a byte, so the
+    paths.clear()                                           # second must not wipe the first
+
     h.put32(f.ticks, 9000)
     h.put32(f.last_reaim_tick, 0)
     paths.clear()
     h.put32(f.current_unit, digger)
-    f.set_unit(digger, state=3)
+    f.set_unit(digger, state=0)
     h.run(f.tunneler, until=f.tunneler + 7)
     check('the first of them looks again on its own tick', len(paths), 1)
     check('  and stops waiting', waiting(digger), 0)
 
     h.put32(f.current_unit, elsewhere)
-    f.set_unit(elsewhere, state=3)
+    f.set_unit(elsewhere, state=0)
     h.run(f.tunneler, until=f.tunneler + 7)
     check('the second waits for the next tick', len(paths), 1)
     check('  and is still waiting', waiting(elsewhere), 1)
