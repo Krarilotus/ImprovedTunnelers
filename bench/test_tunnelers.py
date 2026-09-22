@@ -96,6 +96,8 @@ class Fixture:
         self.origin_x = self.control + 0x224
         self.origin_y = self.control + 0x228
         self.zones = self.control + 0x2D0 + 512 * 16
+        self.family_damage = self.control + 0x2C4
+        self.family_ready = self.control + 0x2C8
         self.pinned = self.control + 0x290
         self.depth_limit = self.control + 0x294
         self.shared_slot = self.control + 0x298
@@ -345,6 +347,13 @@ def scenario(extreme):
     cpu = h.run(arrived, until=resume)
     check('a building is still there -> collapse as usual', len(searches), 0)
     h.put32(f.building_tiles + 2 * empty, 0)
+
+    for bit, name in ((0x800, 'stairs'), (0x200, 'a crenellation')):
+        h.put32(f.tile_flags + 4 * empty, bit)
+        cpu = h.run(arrived, until=resume)
+        check('%s is still there -> collapse as usual' % name, len(searches), 0)
+        check('  and the tunneler is not sent anywhere else', cpu.eip, resume)
+    h.put32(f.tile_flags + 4 * empty, 0)
 
     cpu = h.run(arrived, until=tail)                        # nothing left above the tunnel
     check('nothing there -> the game is asked for another target', len(searches), 1)
@@ -1040,6 +1049,43 @@ def scenario(extreme):
     h.put32(f.pinned, 0)
     h.put32(f.bias, 0)
 
+    # ------------------------------------------------------------ the damage routine
+    print(' the game\'s own damage, where it sorts the tile it is handed')
+    landed = []
+    stop = h.allocate_code([0xC3])                      # the sentinel run() pushed is
+
+    def lands_at(where):
+        def hook(cpu):
+            landed.append((where, cpu.r['eax']))
+            cpu.eip = stop                              # ... still what that ret returns to
+        return hook
+
+    h.cpu.hooks[f.process_damage + 0x69] = lands_at('the wall loop')
+    h.cpu.hooks[f.process_damage + 0xA6C] = lands_at('nothing at all')
+
+    def sorted_into(flags, ours):
+        h.put32(f.family_damage, 1 if ours else 0)
+        landed.clear()
+        h.run(f.process_damage + 0x5E, regs={'eax': flags})
+        return landed[-1] if landed else ('nowhere', 0)
+
+    for ours in (False, True):
+        whose = 'this module' if ours else 'the game itself'
+        check('a wall goes into the wall loop, damaged by %s' % whose,
+              sorted_into(0x100, ours)[0], 'the wall loop')
+        check('  and bare ground is still dropped', sorted_into(0, ours)[0],
+              'nothing at all')
+    for bit, name in ((0x800, 'stairs'), (0x200, 'a crenellation')):
+        check('%s damaged by the game itself is dropped, as always' % name,
+              sorted_into(bit, False)[0], 'nothing at all')
+        check('  but damaged by this module goes into the wall loop',
+              sorted_into(bit, True)[0], 'the wall loop')
+    check('the tile flags are handed on exactly as they were found',
+          sorted_into(0x100 | 0x40000, True)[1], 0x100 | 0x40000)
+    h.put32(f.family_damage, 0)
+    h.cpu.hooks.pop(f.process_damage + 0x69, None)
+    h.cpu.hooks.pop(f.process_damage + 0xA6C, None)
+
     # ------------------------------------------------------------ the collapse
     print(' what a collapse does')
     hits = []
@@ -1061,22 +1107,35 @@ def scenario(extreme):
     reset_tile = (f.tunneler + 0x916 + 5
                   + struct.unpack('<i', h.m.read(f.tunneler + 0x917, 4))[0]) & 0xFFFFFFFF
     h.stub(reset_tile, 1, 12, record=resets)
+    check('the widening that lets the game damage stairs is in',
+          h.u32(f.family_ready), 1)
     for bit, name in ((0x800, 'stairs'), (0x200, 'a crenellation')):
         h.put32(f.tile_flags + 4 * ctile, bit)              # nothing but stairs on the tile
         h.put16(f.building_tiles + 2 * ctile, 0)
         hits.clear()
         resets.clear()
         h.run(collapse, until=carries_on)
-        check('a tunnel coming up under %s takes it away' % name, len(resets), 1)
-        check('  at that tile', resets[-1][1][0], ctile)
-        check('  without asking the damage routine, which ignores it', len(hits), 0)
+        check('a tunnel coming up under %s damages it' % name, len(hits), 1)
+        check('  at that tile, for the figure from the settings',
+              hits[-1][1][:4], [ctile, 130, 120, h.u32(f.collapse_damage)])
+        check('  and it is not taken away behind the game\'s back', len(resets), 0)
 
     h.put32(f.tile_flags + 4 * ctile, 0x100 | 0x800)        # stairs against a wall
     hits.clear()
     resets.clear()
     h.run(collapse, until=carries_on)
-    check('one against a wall is damaged as a wall instead',
+    check('one against a wall is damaged the same way',
           (len(hits), len(resets)), (1, 0))
+
+    h.put32(f.family_ready, 0)                              # ... and where the widening
+    h.put32(f.tile_flags + 4 * ctile, 0x800)                # could not be installed, the
+    hits.clear()                                            # tile is taken away as before
+    resets.clear()
+    h.run(collapse, until=carries_on)
+    check('without the widening stairs are taken away as they were',
+          (len(resets), len(hits)), (1, 0))
+    check('  at that tile', resets[-1][1][0], ctile)
+    h.put32(f.family_ready, 1)
     h.put32(f.tile_flags + 4 * ctile, 0x100)
     h.cpu.hooks.pop(reset_tile, None)
     check('  the tunnel behind it is queued to fall in', h.u32(f.queue_count) > 0, True)

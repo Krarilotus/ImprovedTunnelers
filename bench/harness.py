@@ -17,7 +17,8 @@ from shc import Exe, G
 from x86emu_t import Memory, CPU, MASK
 from host import fasm, ucp_source
 
-MODULE = G + r'\ucp\modules\improved-tunnelers-1.4.8'
+MODULE = os.environ.get('TUNNELERS_MODULE',
+                        r'H:\shc-modding\improved-tunnelers\module')
 VAN_PATH = G + r'\Stronghold Crusader.exe'
 EXT_PATH = G + r'\Stronghold_Crusader_Extreme.exe'
 HEAP = 0x60000000

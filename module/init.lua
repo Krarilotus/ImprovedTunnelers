@@ -192,6 +192,20 @@ local DAMAGE_WALK_GUARDS = {
   [DAMAGE_WALK_DIRECTIONS_OPERAND - 3] = { 0x03, 0x34, 0x95 },
 }
 
+-- Offsets inside processDamageToBuilding, the game's own damage, where it sorts the tile
+-- it has been handed: a building one way, a tile with the wall bit into the wall loop, and
+-- anything else straight back out again having done nothing at all. Both executables have
+-- the function byte for byte the same; only the addresses in its operands differ.
+local DAMAGE_WALL_TEST = 0x5E                 -- test eax, 0x100 - is a wall standing here?
+local DAMAGE_WALL_TEST_SIZE = 5
+local DAMAGE_WALL_CARRY_ON = 0x69             -- ... there is: on into the wall loop
+local DAMAGE_NOTHING = 0xA6C                  -- ... there is not: out, having done nothing
+local DAMAGE_GUARDS = {
+  [DAMAGE_WALL_TEST] = { 0xA9, 0x00, 0x01, 0x00, 0x00 },
+  [DAMAGE_WALL_TEST + DAMAGE_WALL_TEST_SIZE] = { 0x0F, 0x84 },
+  [DAMAGE_WALL_CARRY_ON] = { 0xA8, 0x02 },
+}
+
 -- Offsets inside findTunnelTarget. Nothing is written there; it is read for the three
 -- addresses the game's own target search works through - the path finding state it is
 -- called on, the result it sets, and the search itself.
@@ -407,6 +421,10 @@ local RETARGET_SCAN_RADIUS = 1
 -- ground under them is never touched, since for a wall that height is its strength.
 local WALL_FAMILY_FLAGS = 0x100 | 0x200 | 0x800
 
+-- ... and the two of them the game's own damage routine does not sort into its wall loop
+-- by itself, so that a tunnel could never do anything but take them away outright.
+local STAIR_FAMILY_FLAGS = 0x200 | 0x800
+
 -- Inside the target search: the test that asks whether a wall stands on the tile it has
 -- reached. Widening that one constant is what lets a tunnel be aimed at stairs and
 -- crenellations as well.
@@ -530,6 +548,9 @@ C.BREACH_X = 0x2B4
 C.BREACH_Y = 0x2B8
 C.STEP_DAMAGE = 0x2A8                         -- what this one tile is taking
 C.BREACH_REACH = 0x2C0                        -- how near a breach must be, squared
+C.FAMILY_DAMAGE = 0x2C4                       -- the damage running now is this module's,
+                                              -- so stairs and crenellations take it too
+C.FAMILY_READY = 0x2C8                        -- ... and the widening that lets them is in
 C.GAME_TILE = 0x2AC                           -- what the game's own aim answered, so the
                                               -- module can tell its own target from it
 C.QUEUE = 0x2D0
@@ -828,7 +849,7 @@ return {
     -- and the tunneler is sent back to the game's own search.
 
     local denialReady, retargetReady, messageReady = false, false, false
-    local collapseReady = false
+    local collapseReady, familyReady = false, false
     local teamSite = scanOptional(AOB_PLAYER_TEAMS, "the player team table")
     local enemySite = scanOptional(AOB_ENEMY_TOO_CLOSE, "the build denial check")
 
@@ -948,6 +969,23 @@ return {
           and rowTable ~= nil then
         local tileMapState = readAddress(walk + DAMAGE_WALK_TILE_MAP_OPERAND)
         local processDamage = callTarget(walk + DAMAGE_WALK_DAMAGE_CALL)
+
+        -- Stairs and crenellations are sorted out of the game's own damage before it does
+        -- anything; widening that one test hands them to the wall loop instead, which
+        -- already knows how to damage them, how to have them drawn damaged and how to
+        -- clear them away. It only holds while this module's own damage is running.
+        if guardsHold(processDamage, DAMAGE_GUARDS, "the game's own damage") then
+          local family = core.allocateAssembly(templates.damage_family, {
+            STAIR_FAMILY = STAIR_FAMILY_FLAGS,
+            FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
+            CARRY_ON_ADDRESS = processDamage + DAMAGE_WALL_CARRY_ON,
+            NOTHING_ADDRESS = processDamage + DAMAGE_NOTHING,
+          })
+          remember(processDamage + DAMAGE_WALL_TEST, DAMAGE_WALL_TEST_SIZE)
+          writeJump(processDamage + DAMAGE_WALL_TEST, family, DAMAGE_WALL_TEST_SIZE)
+          writeInteger(control + C.FAMILY_READY, 1)
+          familyReady = true
+        end
         local queue = control + C.QUEUE
         -- Writing a tunnel into the queue, one tile of it at a time.
         local fill = core.allocateAssembly(templates.queue_fill, {
@@ -998,6 +1036,7 @@ return {
           BUILDING_TILE_ADDRESS = buildingTiles,
           TILE_MAP_STATE_ADDRESS = tileMapState,
           PROCESS_DAMAGE_ADDRESS = processDamage,
+          FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
         })
 
         -- ... and the tick that works through what is queued.
@@ -1035,6 +1074,8 @@ return {
           UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
           TILE_MAP_STATE_ADDRESS = tileMapState,
           PROCESS_DAMAGE_ADDRESS = processDamage,
+          FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
+          FAMILY_READY_ADDRESS = control + C.FAMILY_READY,
           FILL_ADDRESS = fill,
           FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
           FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
@@ -1107,6 +1148,7 @@ return {
         DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
         REPORT_ADDRESS = report,
         REPORT_PAD_ADDRESS = reportPad,
+        WALL_FAMILY = WALL_FAMILY_FLAGS,
         REAIM_ADDRESS = reaim or core.allocateCode({ 0xC3 }),
         REAIM_UNIT_ADDRESS = control + C.REAIM_UNIT,
         REAIM_ARRIVED_ADDRESS = control + C.REAIM_ARRIVED,
@@ -1229,6 +1271,7 @@ return {
         CAMP_Y_ADDRESS = control + C.CAMP_Y,
         SCRATCH_ADDRESS = control + C.SCRATCH,
         SHARED_ADDRESS = control + C.SHARED,
+        WALL_FAMILY = WALL_FAMILY_FLAGS,
         RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
         DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
         REPORT_ADDRESS = report,
@@ -1492,7 +1535,9 @@ return {
         "on, %d times, search %d tiles, joining a breach within %d",
         retargetMax, retargetRange, breachReach) or "off") or "unavailable",
       targetsReady and (targetsOn and "walls, towers and gates" or "walls only")
-        .. (underOn and ", digging under the town" or "") or "unavailable",
+        .. (underOn and ", digging under the town" or "")
+        .. (familyReady and ", stairs and crenellations damaged as wall is" or "")
+        or "unavailable",
       collapseReady and string.format("%d damage%s", collapseDamage,
         spreadOn and string.format(" and %d within %d tiles", spreadDamage, spreadRadius)
         or "") .. string.format(", %d tiles a tick", collapseSpeed) or "unavailable",

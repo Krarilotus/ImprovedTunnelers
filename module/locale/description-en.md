@@ -24,7 +24,10 @@ around the keep, never under it - towards the campfire.
 **A collapse damages, it does not delete.** What the tunnel comes up under takes a damage
 figure you set, through the game's own damage. At the default nothing survives, as before; turn
 it down and a large gatehouse shrugs off the first tunnel, keeps the damage, and falls to the
-second.
+second. Stairs and crenellations are damaged the same way: they lose height, they are drawn in
+the game's own damaged state while they are still standing, and the game clears them away
+itself once there is nothing left of them. Only tunnels do this - a catapult or a fire arrow
+treats them exactly as it always did.
 
 **The tunnel falls in from the far end.** Rather than the whole tunnel vanishing in one frame,
 it comes apart a few tiles at a time, starting under the target and running back to the

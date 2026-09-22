@@ -363,7 +363,7 @@ mov [REPORT_ADDRESS], edx
 mov [REPORT_ADDRESS+4], ecx
 mov edx, [ecx*4+TILE_FLAGS_ADDRESS]
 mov [REPORT_ADDRESS+8], edx
-test edx, 256
+test edx, WALL_FAMILY
 jnz arrived_on_something
 movzx edx, word [ecx*2+BUILDING_TILE_ADDRESS]
 mov [REPORT_ADDRESS+12], edx
@@ -527,7 +527,7 @@ movsx edx, word [eax+UNIT_OWNER]
 cmp edx, ebp
 jne scan_next
 mov edx, [eax+UNIT_DEST_TILE]
-test dword [edx*4+TILE_FLAGS_ADDRESS], 256
+test dword [edx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
 jnz scan_next
 cmp word [edx*2+BUILDING_TILE_ADDRESS], 0
 jne scan_next
@@ -635,22 +635,61 @@ jmp RETURN_ADDRESS
 --
 -- EAX holds the building id on entry and the game wants it multiplied out by the building
 -- size, which is the instruction this replaces; EDX is free here.
+-- Stairs and crenellations, damaged the way the game damages a wall.
+--
+-- The game's own damage routine sorts the tile it is handed before it does anything. A
+-- building, or a tile carrying a building id, goes down the building path. A tile with the
+-- wall bit (0x100) goes into the wall loop. Everything else is dropped on the floor: the
+-- routine returns having done nothing at all. Stairs (0x800) and crenellations (0x200) are
+-- in that last group, which is why the only thing a tunnel could ever do with them was
+-- take them away outright.
+--
+-- The wall loop itself is already written for the whole family. It takes a point of height
+-- for every point of damage - height above the ground is what a wall has instead of hit
+-- points - and raises the tile's own damage figure, which is the thing the game's drawing
+-- code reads to decide whether to draw the intact piece or the damaged one. When the
+-- height reaches the ground it clears all three flags in one go (0xFFBEF4FF keeps neither
+-- the wall bit nor the crenellation bit nor the stairs bit), puts the height back, wipes
+-- the damage figure and has the tile redrawn. So there is nothing here to imitate: the
+-- damaged look, the stages and the tidying up are the game's own, and the only thing
+-- standing in the way was the sorting test.
+--
+-- It is widened for this module's damage alone. The module sets FAMILY_ACTIVE for the
+-- length of its own call and clears it again afterwards, so a catapult stone, a fire arrow
+-- or anything else that damages a tile still finds the routine exactly as it was.
+--
+-- Replaces the five byte test itself. EAX carries the tile's flags and the instructions
+-- further along read its low byte, so it is handed on untouched.
+local damage_family = [[
+test eax, 0x100
+jnz family_carry_on
+test eax, STAIR_FAMILY
+jz family_nothing
+cmp dword [FAMILY_ACTIVE_ADDRESS], 0
+je family_nothing
+family_carry_on:
+jmp CARRY_ON_ADDRESS
+family_nothing:
+jmp NOTHING_ADDRESS
+]]
+
 -- What a collapse does to the thing it arrived under. A wall, a gate or a tower takes the
 -- damage figure from the settings through the game's own damage, which for a wall means its
 -- height comes down by that much and it is gone once that reaches the ground.
 --
--- Stairs and crenellations are a different matter. They live in the same flag layer as a
--- wall (0x100 a wall, 0x200 a crenellation, 0x800 stairs - the set the game's own
--- destroyWall clears), but the damage routine only knows what to do with the wall bit and
--- quietly does nothing for the other two. So a tile that is stairs or crenellation and
--- nothing else is taken away with the game's own resetTileToDefaultState, which is what the
--- unmodified game itself calls when a tunnel comes up under something that is not a
--- building. The game demolishes it outright,
--- whatever it is; this hands it the module's damage figure through the game's own damage
--- function instead, which is what a catapult stone or a fire arrow goes through. Walls and
--- weak gates still come down in one tunnel, a square tower or a large gatehouse only if the
--- figure is set high enough - and whatever survives keeps the damage, so the next tunnel
--- finishes it.
+-- Stairs and crenellations now go the same way, because the sorting test in the damage
+-- routine has been widened and it takes them: they lose height, they are drawn damaged
+-- while they are still standing, and the game itself clears them away once the height is
+-- gone. Where that widening could not be installed - another module in the same place, or
+-- code that did not look the way it should - FAMILY_READY stays zero and the older
+-- behaviour is kept, which is to take the tile away with the game's own
+-- resetTileToDefaultState, so a tunnel arriving under stairs still does something.
+--
+-- The game demolishes what it arrives under outright, whatever it is; this hands it the
+-- module's damage figure through the game's own damage function instead, which is what a
+-- catapult stone or a fire arrow goes through. Walls and weak gates still come down in one
+-- tunnel, a square tower or a large gatehouse only if the figure is set high enough - and
+-- whatever survives keeps the damage, so the next tunnel finishes it.
 --
 -- Replaces the read of the unit's tile that the demolition branch starts with. EBX must
 -- stay zero for the instructions after this, which the game's own functions see to.
@@ -658,6 +697,8 @@ local collapse_target = [[
 mov eax, [CURRENT_UNIT_ADDRESS]
 imul eax, eax, 1168
 mov ecx, [eax+UNIT_TILE]
+cmp dword [FAMILY_READY_ADDRESS], 0
+jne collapse_damage
 test dword [ecx*4+TILE_FLAGS_ADDRESS], 256
 jnz collapse_damage
 test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
@@ -675,6 +716,7 @@ jmp collapse_taken
 collapse_damage:
 mov eax, [CURRENT_UNIT_ADDRESS]
 imul eax, eax, 1168
+mov dword [FAMILY_ACTIVE_ADDRESS], 1
 push 0
 push 0
 movsx ecx, word [eax+UNIT_OWNER]
@@ -688,6 +730,7 @@ push ecx
 push dword [eax+UNIT_TILE]
 mov ecx, TILE_MAP_STATE_ADDRESS
 call PROCESS_DAMAGE_ADDRESS
+mov dword [FAMILY_ACTIVE_ADDRESS], 0
 collapse_taken:
 mov eax, [CURRENT_UNIT_ADDRESS]
 imul eax, eax, 1168
@@ -1083,6 +1126,7 @@ cmp dword [STEP_DY_ADDRESS], 0
 jne step_next
 mov dword [STEP_DAMAGE_ADDRESS], TUNNEL_DAMAGE
 step_shake:
+mov dword [FAMILY_ACTIVE_ADDRESS], 1
 push 0
 push 0
 mov eax, [STEP_FLAGS_ADDRESS]
@@ -1095,6 +1139,7 @@ push dword [STEP_THIS_X_ADDRESS]
 push dword [STEP_THIS_TILE_ADDRESS]
 mov ecx, TILE_MAP_STATE_ADDRESS
 call PROCESS_DAMAGE_ADDRESS
+mov dword [FAMILY_ACTIVE_ADDRESS], 0
 step_next:
 add dword [STEP_DX_ADDRESS], 1
 mov eax, [STEP_DX_ADDRESS]
@@ -1624,6 +1669,7 @@ return {
   tunnel_targets = tunnel_targets,
   tunnel_accept = tunnel_accept,
   collapse_target = collapse_target,
+  damage_family = damage_family,
   not_a_target = not_a_target,
   accept_towards = accept_towards,
   initial_aim = initial_aim,
