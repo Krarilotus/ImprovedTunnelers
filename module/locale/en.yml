@@ -53,12 +53,16 @@ retarget_enabled_tooltip: Off means a tunnel keeps digging at a wall that is no 
 retarget_breach_reach: How near a tunnel joins the breach (tiles)
 retarget_breach_reach_tooltip: |
   When one of a player's tunnels settles on a piece of wall, that piece becomes the breach
-  they are all working at, and every other tunnel of theirs digging within this many tiles of
-  it goes for that same spot instead of looking for its own. Higher means tunnels converge
-  from further apart; lower means each tunnel digs at whatever is in front of it. Too high and
-  a tunnel will be dragged sideways across the map past a perfectly good wall, so this is
-  deliberately shorter than the search range above. It also saves work: a tunnel that joins a
-  breach asks the game's search once instead of several times over. Default 40.
+  they are all working at, and every other tunnel of theirs that started within this many
+  tiles of it goes for that same spot instead of looking for its own. It is the distance
+  between the two tunnels' own starting points, not the distance to the wall, so tunnellers
+  dug in side by side agree on one piece of wall however far out in front of them it is - and
+  a tunnel that happens to start right beside a breach joins that one too. Higher means
+  tunnels converge from further apart; lower means each tunnel digs at whatever is in front
+  of it. Too high and a tunnel will be dragged sideways across the map past a perfectly good
+  wall, so this is deliberately shorter than the search range above. It also saves work: a
+  tunnel that joins a breach asks the game's search once instead of several times over.
+  Default 40.
 retarget_range: Search range (tiles)
 retarget_range_tooltip: |
   How far a tunnel being turned aside may look for its next target, counted from where the

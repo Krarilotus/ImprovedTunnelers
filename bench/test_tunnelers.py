@@ -785,14 +785,17 @@ def scenario(extreme):
     check('the reach a breach is joined from is the one in the settings',
           h.u32(reach), 40 * 40)
 
-    def breach_at(x, y, uid):
+    def breach_at(x, y, uid, origin=None):
         tile = y * 400 + x
-        h.put32(f.tile_flags + 4 * tile, 0x100)
+        ox, oy = origin or (x, y)                           # where the tunnel that set it
+        h.put32(f.tile_flags + 4 * tile, 0x100)             # started digging
         h.put16(f.building_tiles + 2 * tile, 0)
         h.put32(slot, tile)
         h.put32(slot + 4, x)
         h.put32(slot + 8, y)
         h.put32(slot + 12, h.u32(f.ticks))
+        h.put32(slot + 20, ox)
+        h.put32(slot + 24, oy)
         asked.clear()
         f.set_unit(unit, uid=uid, owner=1, x=100, y=100, siege=2)
         h.run(arrived, until=tail)
@@ -810,6 +813,21 @@ def scenario(extreme):
     check('  turned down, the same breach is left alone', got, 0)
     h.put32(reach, 40 * 40)
 
+    # the reach a tunnel is really judged by is how far the tunnel that found the breach
+    # started from this one, not how far off the wall they are both digging at is - a row
+    # of tunnelers dug in at a safe distance has to agree on one piece of wall however far
+    # away that wall is
+    got, tile = breach_at(100, 190, 1273, origin=(112, 102))
+    check('a breach ninety tiles off, dug from beside us, is joined', got, tile)
+
+    got, tile = breach_at(118, 124, 1274, origin=(190, 190))
+    check('  and one right in front of us is joined whoever dug it', got, tile)
+
+    h.put32(reach, 10 * 10)                             # neither near us nor dug near us
+    got, tile = breach_at(100, 190, 1275, origin=(112, 102))
+    check('  and that reach is the setting too', got, 0)
+    h.put32(reach, 40 * 40)
+
     far = 300 * 400 + 320
     h.put32(f.tile_flags + 4 * far, 0x100)                  # a wall stands there too
     h.put16(f.building_tiles + 2 * far, 0)
@@ -817,6 +835,8 @@ def scenario(extreme):
     h.put32(slot + 4, 320)
     h.put32(slot + 8, 300)
     h.put32(slot + 12, h.u32(f.ticks))
+    h.put32(slot + 20, 320)
+    h.put32(slot + 24, 300)
     asked.clear()
     f.set_unit(unit, uid=1260, owner=1, x=100, y=100, siege=2)
     h.run(arrived, until=tail)
@@ -932,6 +952,112 @@ def scenario(extreme):
     h.put16(f.unit(unit) + 0x338, ENTRANCE_B)
     h.put32(f.camp_ids + 0x39F4 * 2, 9)
     f.set_unit(unit, siege=2)
+
+    print('  and that the player s tunnels agree on it from the very first aim')
+    # two tunnelers, two entrances twenty tiles apart, and a wall fifty tiles out in
+    # front of them both - the ordinary siege, and the one the joining is for
+    ENTRANCE_C = 41
+    f.building(ENTRANCE_C, state=1)
+    h.put16(f.building_base + ENTRANCE_C * 0x32C + 0x260, 120)
+    h.put16(f.building_base + ENTRANCE_C * 0x32C + 0x262, 100)
+    h.put16(f.building_base + ENTRANCE_B * 0x32C + 0x260, 100)
+    h.put16(f.building_base + ENTRANCE_B * 0x32C + 0x262, 100)
+    other = 12
+    f.set_unit(unit, owner=1, siege=2, x=100, y=100, uid=1301)
+    h.put16(f.unit(unit) + 0x338, ENTRANCE_B)
+    f.set_unit(other, owner=1, siege=2, x=120, y=100, uid=1302)
+    h.put16(f.unit(other) + 0x338, ENTRANCE_C)
+
+    wall = {unit: (150 * 400 + 100, 100, 150),          # what each would find on its own
+            other: (150 * 400 + 120, 120, 150)}
+    for tile, x, y in wall.values():
+        h.put32(f.tile_flags + 4 * tile, 0x100)
+        h.put16(f.building_tiles + 2 * tile, 0)
+    pins = []
+
+    def own_wall():
+        return wall[h.u32(f.current_unit)]
+
+    def game_answer(cpu):                               # findTunnelTarget, the game's own
+        tile, x, y = own_wall()
+        h.put32(f.alg_result, tile)
+        h.put32(f.alg_x, x)
+        h.put32(f.alg_y, y)
+        cpu.r['eax'] = 1
+        cpu.eip = cpu.pop()
+        cpu.r['esp'] += 8
+
+    def honours_pin(cpu):                               # ... and the search that follows
+        pin = h.u32(f.pinned)
+        pins.append(pin)
+        tile, x, y = (pin, pin % 400, pin // 400) if pin else own_wall()
+        h.put32(f.alg_result, tile)
+        h.put32(f.alg_x, x)
+        h.put32(f.alg_y, y)
+        cpu.r['eax'] = 0
+        cpu.eip = cpu.pop()
+        cpu.r['esp'] += 20
+
+    was_finder, was_find = h.cpu.hooks[f.finder], h.cpu.hooks[f.alg_find]
+    h.cpu.hooks[f.finder] = game_answer
+    h.cpu.hooks[f.alg_find] = honours_pin
+    for k in range(0, 32, 4):
+        h.put32(slot + k, 0)
+
+    def aim_of(index):
+        pins.clear()
+        h.put32(f.current_unit, index)
+        h.run(first, until=first_on)
+        return h.u32(f.alg_result)
+
+    first_tile = aim_of(unit)
+    check('the first tunnel to dig in takes its own wall', first_tile, wall[unit][0])
+    check('  and writes down the breach, and where it dug from',
+          (h.u32(slot), h.u32(slot + 20), h.u32(slot + 24)), (wall[unit][0], 100, 100))
+    check('  having asked for nothing in particular', pins, [0, 0, 0])
+
+    second = aim_of(other)
+    check('the next one is sent at that same tile, though the wall is fifty tiles out',
+          second, first_tile)
+    check('  and asked for it and nothing else', pins, [first_tile])
+
+    # the mark a collapse leaves behind: how close to the enemy camp this player has got.
+    # A tunnel dug after the breach fell has to beat it, so the next hole is further in
+    # rather than another bite of the same outer wall.
+    demanded = []
+
+    def watch_demand(cpu):
+        demanded.append(h.u32(f.origin_distance))
+        honours_pin(cpu)
+
+    h.cpu.hooks[f.alg_find] = watch_demand
+    for k in range(0, 32, 4):
+        h.put32(slot + k, 0)
+    h.put32(slot + 12, h.u32(f.ticks))
+    h.put32(slot + 16, 900)                             # the tunnels are already this deep
+    demanded.clear()
+    aim_of(unit)
+    check('a first aim has to beat how deep the player has already got',
+          demanded and demanded[0], 900)
+
+    h.put32(slot + 16, 0)
+    demanded.clear()
+    aim_of(unit)
+    check('  and with nothing behind it, its own wall s distance', demanded and demanded[0],
+          (100 - 300) ** 2 + (150 - 310) ** 2)
+
+    h.cpu.hooks[f.finder], h.cpu.hooks[f.alg_find] = was_finder, was_find
+    for tile, x, y in wall.values():
+        h.put32(f.tile_flags + 4 * tile, 0)
+    for k in range(0, 32, 4):
+        h.put32(slot + k, 0)
+    f.set_unit(other, alive=0, kind=0)
+    h.put16(f.building_base + ENTRANCE_B * 0x32C + 0x260, 105)
+    h.put16(f.building_base + ENTRANCE_B * 0x32C + 0x262, 106)
+    f.set_unit(unit, owner=1, siege=2, x=100, y=100)
+    h.put32(f.alg_result, 4242)
+    h.put32(f.alg_x, 200)
+    h.put32(f.alg_y, 200)
 
     h.put32(f.towards, 0)
     h.put32(f.alg_result, 4242)

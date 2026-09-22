@@ -11,10 +11,10 @@ Everything below can be switched on or off on its own.
 ## What it does
 
 **They all dig at the same spot.** When one of your tunnels picks a piece of wall, that becomes
-*the* breach your tunnels are working at, and every other tunnel of yours digging nearby goes
-for that same piece. Instead of six holes in six places you get one road in. A tunnel too far
-off to join sensibly digs at whatever is in front of it rather than being dragged across the
-map.
+*the* breach your tunnels are working at, and every other tunnel of yours that started nearby
+goes for that same piece - however far out in front of them the wall itself is. Instead of six
+holes in six places you get one road in. A tunnel too far off to join sensibly digs at whatever
+is in front of it rather than being dragged across the map.
 
 **And then they work inwards.** Every time a tunnel brings something down, the game remembers
 how close to the enemy's camp you have got, and the next tunnel has to beat it. The first
@@ -70,7 +70,7 @@ button; the dig button moves one slot along to make room for it.
 | Own refusal message | Say "the ground is too unstable" rather than the game's message | on |
 | **Digging on** | A tunnel whose target is gone looks for another | on |
 | Search range | How far a tunnel looks for a target | 80 tiles |
-| **Breach reach** | How near a tunnel must be to join the breach the others are at. Higher: they converge from further apart. Lower: each digs at what is in front of it | 40 tiles |
+| **Breach reach** | How near a tunnel must have started to join the breach the others are at - the distance between the two tunnels, not to the wall. Higher: they converge from further apart. Lower: each digs at what is in front of it | 40 tiles |
 | Finish before turning | A tunnel already digging finishes its leg before it takes a new target, so the breaches sit end to end | on |
 | Times per tunnel | How often one tunnel may be turned aside | 10 |
 | Fill in behind | Collapse the stretch already dug when a tunnel turns aside | on |

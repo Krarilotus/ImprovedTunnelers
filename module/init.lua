@@ -376,7 +376,9 @@ local BUILDING_TYPE_LIMIT = 127
 -- How near a tunnel has to be to a breach to join it rather than dig its own way in, when
 -- the settings say nothing. Shorter than the search range on purpose - tunnels that start
 -- together should arrive together, while one that starts across the map has its own wall in
--- front of it - but long enough that a spread of entrances still converges.
+-- front of it - but long enough that a spread of entrances still converges. It is measured
+-- from where the tunnel that found the breach started, not from the breach itself, so how
+-- far off the wall is makes no difference to whether a group of tunnels agrees on it.
 local DEFAULT_BREACH_REACH = 40
 
 -- How long a player's breach stands as the place their tunnels work at, before the next
@@ -561,8 +563,9 @@ C.PENDING_SIZE = 320
 C.ZONES = C.QUEUE + QUEUE_MAX * 16
 C.RECORDS = C.ZONES + ZONE_COUNT * ZONE_SIZE
 C.SHARED = C.RECORDS + RECORD_COUNT * RECORD_SIZE   -- per player: the breach tile, its x
-C.SIZE = C.SHARED + (PLAYER_COUNT + 1) * 32        -- and y, the tick it was set, and how
-                                                   -- close to the camp they have got
+C.SIZE = C.SHARED + (PLAYER_COUNT + 1) * 32        -- and y, the tick it was set, how close
+                                                   -- to the camp they have got, and where
+                                                   -- the tunnel that set it started
 
 ---------------------------------------------------------------------------------------
 -- Defaults

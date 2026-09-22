@@ -303,6 +303,10 @@ mov edx, [BEST_Y_ADDRESS]
 mov [ecx+8], edx
 mov edx, [TICKS_ADDRESS]
 mov [ecx+12], edx
+mov edx, [BREACH_X_ADDRESS]
+mov [ecx+20], edx
+mov edx, [BREACH_Y_ADDRESS]
+mov [ecx+24], edx
 reaim_told_nobody:
 mov eax, [SCALED_ADDRESS]
 movzx ecx, word [eax+UNIT_PATH_INDEX]
@@ -836,6 +840,14 @@ jmp GIVE_UP_ADDRESS
 -- never be dragged eighty tiles sideways to join somebody else's breach when there is a
 -- castle wall in front of it. A breach further off than this belongs to the tunnels over
 -- there; this one digs at whatever it finds for itself.
+--
+-- What "close by" is measured from is **where the other tunnel started**, kept in the slot
+-- beside the breach, not the breach tile: tunnels dug side by side should arrive together
+-- however far off the wall they picked is. Measured to the tile instead, a group of
+-- tunnelers dug in at a safe distance - the usual thing, well outside the towers - would
+-- each quietly go their own way as soon as the wall was further off than the reach, which
+-- is exactly the siege the joining is for. The tile is still tried as well, so a tunnel
+-- that starts somewhere else but right beside the breach joins it as it always did.
 -- The age test also throws away a breach left over from an earlier match, since the tick
 -- counter starts again and the subtraction runs wide.
 -- How many times this tunnel has already been turned aside. The count lives in a small
@@ -892,9 +904,21 @@ jne breach_stands
 breach_gone:
 mov dword [ecx], 0
 mov dword [ecx+16], 0
+mov dword [ecx+20], 0
+mov dword [ecx+24], 0
 jmp breach_done
 breach_stands:
 mov [PIN_SCRATCH_ADDRESS], edx
+mov eax, [BREACH_X_ADDRESS]
+sub eax, [ecx+20]
+imul eax, eax
+mov edx, eax
+mov eax, [BREACH_Y_ADDRESS]
+sub eax, [ecx+24]
+imul eax, eax
+add eax, edx
+cmp eax, [BREACH_REACH_ADDRESS]
+jbe breach_join
 mov eax, [BREACH_X_ADDRESS]
 sub eax, [ecx+4]
 imul eax, eax
@@ -905,6 +929,7 @@ imul eax, eax
 add eax, edx
 cmp eax, [BREACH_REACH_ADDRESS]
 ja breach_done
+breach_join:
 mov edx, [PIN_SCRATCH_ADDRESS]
 mov [PINNED_TILE_ADDRESS], edx
 breach_done:
@@ -1359,16 +1384,6 @@ add ecx, edx
 mov [ORIGIN_DISTANCE_ADDRESS], ecx
 mov dword [ROUNDS_ADDRESS], 0
 mov dword [BIAS_ACTIVE_ADDRESS], 1
-mov ecx, [SHARED_SLOT_ADDRESS]
-test ecx, ecx
-je initial_no_mark
-mov ecx, [ecx+16]
-test ecx, ecx
-je initial_no_mark
-cmp ecx, [ORIGIN_DISTANCE_ADDRESS]
-jae initial_no_mark
-mov [ORIGIN_DISTANCE_ADDRESS], ecx
-initial_no_mark:
 mov ecx, [BEST_TILE_ADDRESS]
 movsx ecx, word [ecx*2+DISTANCE_MAP_ADDRESS]
 add ecx, DEPTH_SLACK
@@ -1381,6 +1396,15 @@ mov [BREACH_X_ADDRESS], ecx
 mov ecx, [ORIGIN_Y_ADDRESS]
 mov [BREACH_Y_ADDRESS], ecx
 call BREACH_ADDRESS
+mov ecx, [SHARED_SLOT_ADDRESS]
+test ecx, ecx
+je initial_round
+mov ecx, [ecx+16]
+test ecx, ecx
+je initial_round
+cmp ecx, [ORIGIN_DISTANCE_ADDRESS]
+jae initial_round
+mov [ORIGIN_DISTANCE_ADDRESS], ecx
 initial_round:
 mov ecx, [INITIAL_UNIT_ADDRESS]
 push dword [ORIGIN_Y_ADDRESS]
@@ -1439,6 +1463,10 @@ mov edx, [BEST_Y_ADDRESS]
 mov [ecx+8], edx
 mov edx, [TICKS_ADDRESS]
 mov [ecx+12], edx
+mov edx, [BREACH_X_ADDRESS]
+mov [ecx+20], edx
+mov edx, [BREACH_Y_ADDRESS]
+mov [ecx+24], edx
 initial_told_nobody:
 mov ecx, [BEST_TILE_ADDRESS]
 cmp ecx, [GAME_TILE_ADDRESS]
