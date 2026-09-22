@@ -60,6 +60,17 @@ options:
       min: 20
       max: 200
       step: 10
+  - url: improved-tunnelers.retarget.breach_reach
+    name: improved-tunnelers-retarget-breach-reach
+    text: '{{retarget_breach_reach}}'
+    tooltip: '{{retarget_breach_reach_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 40
+      min: 5
+      max: 100
+      step: 5
   - url: improved-tunnelers.retarget.max
     name: improved-tunnelers-retarget-max
     text: '{{retarget_max}}'
@@ -101,6 +112,86 @@ options:
   text: '{{ui_group_descr}}'
   hasHeader: true
   children:
+  - url: improved-tunnelers.targets.under_buildings
+    name: improved-tunnelers-targets-under-buildings
+    text: '{{targets_under}}'
+    tooltip: '{{targets_under_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.retarget.towards_camp
+    name: improved-tunnelers-retarget-towards-camp
+    text: '{{retarget_towards}}'
+    tooltip: '{{retarget_towards_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.digging.unselectable
+    name: improved-tunnelers-digging-unselectable
+    text: '{{digging_unselectable}}'
+    tooltip: '{{digging_unselectable_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.digging.untargetable
+    name: improved-tunnelers-digging-untargetable
+    text: '{{digging_untargetable}}'
+    tooltip: '{{digging_untargetable_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.collapse.damage
+    name: improved-tunnelers-collapse-damage
+    text: '{{collapse_damage}}'
+    tooltip: '{{collapse_damage_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 2500
+      min: 1
+      max: 10000
+  - url: improved-tunnelers.collapse.spread
+    name: improved-tunnelers-collapse-spread
+    text: '{{collapse_spread}}'
+    tooltip: '{{collapse_spread_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.collapse.speed
+    name: improved-tunnelers-collapse-speed
+    text: '{{collapse_speed}}'
+    tooltip: '{{collapse_speed_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 2
+      min: 1
+      max: 100
+  - url: improved-tunnelers.collapse.spread_radius
+    name: improved-tunnelers-collapse-spread-radius
+    text: '{{collapse_spread_radius}}'
+    tooltip: '{{collapse_spread_radius_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 2
+      min: 0
+      max: 8
+  - url: improved-tunnelers.collapse.spread_damage
+    name: improved-tunnelers-collapse-spread-damage
+    text: '{{collapse_spread_damage}}'
+    tooltip: '{{collapse_spread_damage_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 20
+      min: 0
+      max: 1000
   - url: improved-tunnelers.ui.enabled
     name: improved-tunnelers-ui-enabled
     text: '{{ui_enabled}}'

@@ -50,6 +50,15 @@ retarget_group_descr: |
   it is, exactly as the unmodified game does.
 retarget_enabled: Turn tunnels towards another wall
 retarget_enabled_tooltip: Off means a tunnel keeps digging at a wall that is no longer there and collapses into the empty ground, the way it does in the unmodified game.
+retarget_breach_reach: How near a tunnel joins the breach (tiles)
+retarget_breach_reach_tooltip: |
+  When one of a player's tunnels settles on a piece of wall, that piece becomes the breach
+  they are all working at, and every other tunnel of theirs digging within this many tiles of
+  it goes for that same spot instead of looking for its own. Higher means tunnels converge
+  from further apart; lower means each tunnel digs at whatever is in front of it. Too high and
+  a tunnel will be dragged sideways across the map past a perfectly good wall, so this is
+  deliberately shorter than the search range above. It also saves work: a tunnel that joins a
+  breach asks the game's search once instead of several times over. Default 40.
 retarget_range: Search range (tiles)
 retarget_range_tooltip: |
   How far a tunnel being turned aside may look for its next target, counted from where the
@@ -62,10 +71,79 @@ retarget_max_tooltip: |
   Default 5.
 retarget_collapse: Collapse the stretch already dug
 retarget_collapse_tooltip: |
-  When a tunnel that has reached its destination turns towards a new target, bring the
-  stretch it has already dug down first, which flattens its mound and damages whatever it
-  ran under - the same thing a finished tunnel does. A tunnel turned aside in mid dig is
-  never collapsed behind, because it has not finished digging it yet.
+  A tunnel that turns towards a new target always fills in the stretch it has already dug,
+  so the raised ground it left never stays behind. This says whether that also damages what
+  the old stretch ran under, the way a finished tunnel does. Off means the ground is put
+  back quietly.
+
+targets_under: Tunnels may dig under the town
+targets_under_tooltip: |
+  The game's search refuses to pass under any building except the three small towers, so a
+  tunnel stops at the first workshop and never reaches what lies behind it. With this on a
+  tunnel may pass beneath the town - it still only comes up under a wall, a gate or a tower,
+  but it can get to the ones on the far side. The keep is the one exception: a tunnel is
+  never dug underneath one, it works its way around it.
+retarget_towards: Aim towards the enemy campground
+retarget_towards_tooltip: |
+  The first tunnel to be aimed asks the search several times over, each round demanding a
+  target closer to the enemy's campground - where their peasants gather - than the last answer,
+  and the piece of wall it settles on becomes the breach that player is working at. Every other
+  tunnel of theirs digging near it goes for that same tile, so they open one road in instead of
+  a scatter of holes; how near is the setting below. A tunnel further off digs at whatever it
+  finds in front of itself rather than being dragged across the map, and one that cannot reach
+  the breach does the same.
+  Each breach also leaves a mark - how close to the camp that player's tunnels have got - and
+  every aim after it has to beat that mark. That is what drives the breaches inwards towards
+  the camp instead of widening the same stretch of wall sideways: the first opens the outer
+  wall, the next has to find something past it, and so on, round the keep rather than under it.
+  The mark only moves inwards, it is set when a tunnel actually brings something down, and it
+  is forgotten after a minute and a half without a breach so a stalled assault starts afresh.
+  A tunnel dug by hand is sent against nobody in particular, and then the nearest camp that is
+  not ours and not an ally's is the one it works towards. Off means the nearest target in any
+  direction, which is what the game does.
+digging_unselectable: Digging tunnelers cannot be picked
+digging_unselectable_tooltip: |
+  While a tunneler is digging its entrance or its tunnel it is passed over by the mouse, by
+  a drag box and by the orders you give a group, so it is not dragged off its work and does
+  not clutter a selection. It can be picked again the moment it is above ground.
+digging_untargetable: Nothing shoots at a digging tunneler
+digging_untargetable_tooltip: |
+  A tunneler digging its entrance or its tunnel is left alone by enemy archers and soldiers,
+  through the game's own "is this worth aiming at" test - the same answer it gives for a man
+  working inside a building.
+
+collapse_damage: Damage a collapse does
+collapse_damage_tooltip: |
+  What the collapse does to the wall, gate or tower it arrived under, through the game's own
+  damage. Anything left standing keeps the damage, so the next tunnel finishes it. For scale:
+  a wooden gate has 200 hit points, a lookout tower 250, a small gatehouse 1000, a defence
+  turret 1200, a square tower 1600, and a large gatehouse or round tower 2000. Default 2500,
+  which takes anything down in one tunnel, the way the unmodified game does.
+collapse_spread: Damage what stands beside the tunnel
+collapse_spread_tooltip: |
+  A collapsing tunnel also shakes the ground around every tile it ran under, as far as the
+  reach below, not only the tiles themselves. This is for the town, not the castle: walls,
+  stairs, gates, gatehouses, towers, keeps and keep doors are never shaken by it, and a
+  fortification the tunnel ran directly underneath takes the same five points the unmodified
+  game took off it, no more. Bare ground costs nothing either. Turn it off for the unmodified
+  behaviour.
+collapse_speed: How fast a tunnel falls in (tiles a tick)
+collapse_speed_tooltip: |
+  A tunnel comes down from the far end back towards its entrance, this many tiles each tick,
+  instead of all at once the moment the tunneler arrives. Lower is slower and prettier -
+  at 2 a long tunnel takes a couple of seconds to fall in - and higher is closer to the way
+  the game did it, which was a single frame. Default 2.
+collapse_spread_radius: How far the shaking reaches (tiles)
+collapse_spread_radius_tooltip: |
+  How many tiles either side of the tunnel are shaken when it comes down. 1 is the tiles
+  touching it, 2 reaches a wall standing just off the tunnel's line, and so on. Only tiles
+  with a wall or a building on them cost anything. Default 2.
+collapse_spread_damage: Damage beside the tunnel
+collapse_spread_damage_tooltip: |
+  How much each ordinary building within that reach takes - workshops, houses, farms and the
+  rest. Fortifications are not shaken at all, beyond the five points the game itself took off
+  whatever the tunnel ran under, and what the tunnel arrives under takes the damage figure
+  above instead. Default 60.
 
 targets_group: What a tunnel may aim at
 targets_group_descr: |
