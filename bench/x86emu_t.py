@@ -246,6 +246,30 @@ class CPU:
                 self.logic_flags(v, bits)
                 if mn != 'test':
                     self.set(insn, ops[0], v)
+        elif mn in ('adc', 'sbb'):
+            size = ops[0].size
+            bits = size * 8
+            mask = (1 << bits) - 1
+            a = self.get(insn, ops[0])
+            b = self.get(insn, ops[1], size)
+            if ops[1].type == X.X86_OP_IMM:
+                b = ops[1].imm & mask
+            carry = int(self.cf)
+            if mn == 'adc':
+                full = a + b + carry
+                r = full & mask
+                self.cf = full > mask
+                sa, sb, sr = a >> (bits - 1), b >> (bits - 1), r >> (bits - 1)
+                self.of = sa == sb and sr != sa
+            else:
+                full = a - b - carry
+                r = full & mask
+                self.cf = full < 0
+                sa, sb, sr = a >> (bits - 1), b >> (bits - 1), r >> (bits - 1)
+                self.of = sa != sb and sr != sa
+            self.zf = r == 0
+            self.sf = bool(r >> (bits - 1))
+            self.set(insn, ops[0], r)
         elif mn == 'neg':
             bits = ops[0].size * 8
             a = self.get(insn, ops[0])

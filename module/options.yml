@@ -60,28 +60,6 @@ options:
       min: 20
       max: 200
       step: 10
-  - url: improved-tunnelers.retarget.breach_reach
-    name: improved-tunnelers-retarget-breach-reach
-    text: '{{retarget_breach_reach}}'
-    tooltip: '{{retarget_breach_reach_tooltip}}'
-    display: Number
-    contents:
-      type: integer
-      value: 40
-      min: 5
-      max: 100
-      step: 5
-  - url: improved-tunnelers.retarget.advance
-    name: improved-tunnelers-retarget-advance
-    text: '{{retarget_advance}}'
-    tooltip: '{{retarget_advance_tooltip}}'
-    display: Number
-    contents:
-      type: integer
-      value: 8
-      min: 0
-      max: 40
-      step: 1
   - url: improved-tunnelers.retarget.max
     name: improved-tunnelers-retarget-max
     text: '{{retarget_max}}'
@@ -89,26 +67,10 @@ options:
     display: Number
     contents:
       type: integer
-      value: 5
+      value: 10
       min: 1
-      max: 20
+      max: 30
       step: 1
-  - url: improved-tunnelers.retarget.finish_leg
-    name: improved-tunnelers-retarget-finish-leg
-    text: '{{retarget_finish_leg}}'
-    tooltip: '{{retarget_finish_leg_tooltip}}'
-    display: Switch
-    contents:
-      type: boolean
-      value: true
-  - url: improved-tunnelers.retarget.collapse_behind
-    name: improved-tunnelers-retarget-collapse-behind
-    text: '{{retarget_collapse}}'
-    tooltip: '{{retarget_collapse_tooltip}}'
-    display: Switch
-    contents:
-      type: boolean
-      value: true
 
 - display: GroupBox
   category: [Improved Tunnelers]
@@ -135,14 +97,6 @@ options:
     name: improved-tunnelers-targets-under-buildings
     text: '{{targets_under}}'
     tooltip: '{{targets_under_tooltip}}'
-    display: Switch
-    contents:
-      type: boolean
-      value: true
-  - url: improved-tunnelers.retarget.towards_camp
-    name: improved-tunnelers-retarget-towards-camp
-    text: '{{retarget_towards}}'
-    tooltip: '{{retarget_towards_tooltip}}'
     display: Switch
     contents:
       type: boolean

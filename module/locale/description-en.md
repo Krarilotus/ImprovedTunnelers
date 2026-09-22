@@ -10,24 +10,25 @@ Everything below can be switched on or off on its own.
 
 ## What it does
 
-**They all dig at the same spot.** When one of your tunnels picks a piece of wall, that becomes
-*the* breach your tunnels are working at, and every other tunnel of yours that started nearby
-goes for that same piece - however far out in front of them the wall itself is. Instead of six
-holes in six places you get one road in. A tunnel too far off to join sensibly digs at whatever
-is in front of it rather than being dragged across the map.
+**They all dig at the same spot.** The first tunnel you dig in at a castle aims where the game
+would have aimed it, and that piece of fortification becomes the meeting point. Every tunnel you
+dig in after it goes for that same spot if it can reach it - instead of six holes in six places,
+one road in. A tunnel too far off to reach it starts a meeting point of its own, so a second
+siege somewhere else gets one too.
 
-**And then they work inwards.** Every spot a collapse takes is kept as a line, along with how
-close to the enemy's camp you have got, and the next tunnel has to beat it. The first breach
-opens the outer wall; the tunnels still digging arrive at that spot, find it already open, and
-take their next target from there, so they carry straight on through the hole rather than
-starting again somewhere else. Once a tunnel has reached the front it is not sent back at it -
-it picks the next thing further in, and never one of your own tunnels is already digging at, so
-each of them brings its own piece down instead of the first one taking the spot and the rest
-arriving at bare ground. Each turn has to gain real ground too, eight tiles by default, so a
-tunnel goes on to the next fortification rather than creeping along the wall it has just
-broken. A tunnel dug later, anywhere along the line, joins whatever the line is
-working at now. The line advances - around the keep, never under it - towards the campfire, and
-is forgotten only after five minutes with nothing taken.
+**Then they go on through the hole, one after another.** The first tunnel to get there brings the
+spot down. The next arrives at the hole, finds nothing left to collapse on, and is sent on from
+where it stands to the nearest fortification further in, in the direction of the enemy's
+campfire. That becomes the new meeting point; the tunnel after it goes on through to the next
+one; and so the line works its way in, one hit at a time, round the keep - which no tunnel can
+pass under - towards the campfire. Once nothing stands between the hole and the campfire any
+more, a tunnel takes the nearest fortification instead and widens the way in.
+
+**A tunnel that is sent on is still one tunnel.** It carries on from where it stands, and when
+it comes up under its new target it collapses exactly the way it would have at the first one -
+the same damage, and the whole tunnel behind it, back to its entrance, comes down with it.
+Tunnels arriving together are sent on one a tick, so a group reaching the same hole never does
+more than one tunnel's searching in a single frame.
 
 **A collapse damages, it does not delete.** What the tunnel comes up under takes a damage
 figure you set, through the game's own damage. At the default nothing survives, as before; turn
@@ -55,13 +56,6 @@ tries is told the ground is too unstable.
 not only plain wall - and workshops, houses and farms never can. Tunnels may pass beneath the
 town to reach what lies behind it, but never beneath a keep.
 
-**Tunnels no longer waste themselves.** A tunnel whose target is destroyed before it arrives
-digs on to the spot anyway and takes its next target from there. That way the hole it makes
-carries straight on from the last one, and a player's tunnels carve one line into the castle
-instead of leaving a piece of untouched wall between one breach and the next. A tunneller
-standing about, with nothing dug yet, is turned at once. And if a target turns out to be
-unreachable, the tunnel loses a moment rather than the entrance.
-
 **Diggers are left alone.** A tunneller digging its entrance or its tunnel cannot be picked by
 the mouse or a drag box, is passed over by the orders you give a group, and enemy archers do
 not shoot at it. It is back to normal the moment it is above ground.
@@ -76,14 +70,9 @@ button; the dig button moves one slot along to make room for it.
 | **Build denial** | Nobody may build on a fresh breach | on |
 | Denial time | How long the rubble stays unbuildable | 120 s |
 | Own refusal message | Say "the ground is too unstable" rather than the game's message | on |
-| **Digging on** | A tunnel whose target is gone looks for another | on |
-| Search range | How far a tunnel looks for a target | 80 tiles |
-| **Breach reach** | How near a tunnel must have started to join the breach the others are at - the distance between the two tunnels, not to the wall. Higher: they converge from further apart. Lower: each digs at what is in front of it | 40 tiles |
-| Finish before turning | A tunnel already digging finishes its leg before it takes a new target, so the breaches sit end to end | on |
-| Deeper each turn | The least ground a turned tunnel must gain before a target counts | 8 tiles |
-| Times per tunnel | How often one tunnel may be turned aside | 10 |
-| Fill in behind | Collapse the stretch already dug when a tunnel turns aside | on |
-| Aim towards the camp | Drive the breaches inwards towards the enemy's campfire | on |
+| **Tunnels meet** | Tunnels share a meeting point and go on through the hole towards the enemy's campfire | on |
+| How far a tunnel reaches | How far a tunnel looks for the meeting point, or for its next target | 80 tiles |
+| Times one tunnel is sent on | How often one tunnel may arrive at an empty spot and be sent further in | 10 |
 | **Towers and gates** | Gatehouses and towers count as targets, not only wall | on |
 | Dig under the town | Tunnels may pass beneath buildings to reach what is behind them | on |
 | **Collapse damage** | What the tunnel does to what it arrives under. For scale: wooden gate 200, lookout tower 250, small gatehouse 1000, square tower 1600, large gatehouse 2000 | 2500 |
@@ -95,7 +84,7 @@ button; the dig button moves one slot along to make room for it.
 | Nothing shoots diggers | Archers ignore a tunneller while it is digging | on |
 | **Attack-here button** | Tunnellers get the ordinary attack-here button | on |
 | **Stances** | Tunnellers obey defensive and aggressive stance | on |
-| Diagnostics | Write a line to `ucp3.log` for every tunnel arrival, collapse and refused building | off |
+| Diagnostics | Write a line to `ucp3.log` for every tunnel dug in, every arrival and every refused building | off |
 
 Everything is found by pattern scan and works on both Stronghold Crusader and Stronghold
 Crusader Extreme. Times are counted in game ticks, so they are identical on every machine in a

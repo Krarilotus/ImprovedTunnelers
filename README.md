@@ -17,7 +17,9 @@ What the module does, in plain English, is in `module/locale/description-en.md`.
 ## Working on it
 
 1. Edit under `module/`.
-2. Run the bench (`bench/test_tunnelers.py`) until it is green.
+2. Run the bench until it is green: `bench/test_tunnelers.py` (both executables, stubbed game
+   functions, quick) and `bench/test_real_lines.py` (vanilla, the game's own mover, search,
+   trace and collapse running whole tunnels tick by tick - a few minutes).
 3. `python tools/publish.py --bump` - raises the last version slot and copies the module to
    `ucp/modules/improved-tunnelers-<version>`, leaving the build before it installed and
    clearing anything older.

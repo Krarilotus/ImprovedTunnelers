@@ -30,74 +30,39 @@ denial_seconds_tooltip: |
   machine is set to, and a second tunnel through the same breach adds this time again.
   Default 30.
 
-retarget_group: Digging on to the next wall
+retarget_group: Where tunnels go
 retarget_group_descr: |
-  In the unmodified game a tunnel is aimed once, when the tunneler digs itself in, and it
-  keeps that target whatever happens to it. If another tunnel, a catapult or anything else
-  takes that piece of wall away first, the tunnel arrives under bare earth, collapses into
-  nothing and the tunneler is spent for nothing.
+  In the unmodified game every tunnel is aimed once, at whatever piece of wall is nearest to
+  it, and keeps that target whatever happens. Six tunnels make six holes, and a tunnel whose
+  wall someone else takes down first arrives under bare earth and is spent for nothing.
 
-  With this on, a tunnel bends towards another target instead, using the game's own search
-  and its own path finder from wherever the tunneler is at that moment. Nothing is sent back
-  to the entrance and no second tunnel is started: the tunnel simply carries on as one
-  continuous tunnel that turns towards the new wall.
+  With this on, a player's tunnels meet. The first tunnel dug in at a castle aims where the
+  game would have aimed it, and that piece of fortification becomes the meeting point. Every
+  tunnel dug in after it goes for that same spot if it can reach it, so they open one road in.
 
-  It happens at two moments. The moment one of your tunnels collapses a wall, every other
-  tunnel of yours that was digging at that same spot is turned aside there and then - they
-  do not waste the rest of their dig on a wall that is already down. And a tunnel that
-  arrives to find its target gone anyway - taken by a catapult, or by fire - looks for
-  another one before it collapses. Only if there is nothing in range does it collapse where
-  it is, exactly as the unmodified game does.
-retarget_enabled: Turn tunnels towards another wall
-retarget_enabled_tooltip: Off means a tunnel keeps digging at a wall that is no longer there and collapses into the empty ground, the way it does in the unmodified game.
-retarget_breach_reach: How near a tunnel joins the breach (tiles)
-retarget_breach_reach_tooltip: |
-  When one of a player's tunnels settles on a piece of wall, that piece becomes the breach
-  they are all working at, and every other tunnel of theirs that started within this many
-  tiles of it goes for that same spot instead of looking for its own. It is the distance
-  between the two tunnels' own starting points, not the distance to the wall, so tunnellers
-  dug in side by side agree on one piece of wall however far out in front of them it is - and
-  a tunnel that happens to start right beside a breach joins that one too. Higher means
-  tunnels converge from further apart; lower means each tunnel digs at whatever is in front
-  of it. Too high and a tunnel will be dragged sideways across the map past a perfectly good
-  wall, so this is deliberately shorter than the search range above. It also saves work: a
-  tunnel that joins a breach asks the game's search once instead of several times over.
-  Default 40.
-retarget_advance: How much deeper each turn digs (tiles)
-retarget_advance_tooltip: |
-  When a tunnel is turned at a breach that is already open, this is the least it must gain
-  before a target counts - measured in tiles of tunnel, from where the tunneller is standing.
-  Without it the only test is "closer to the enemy camp than where I stand", which the very
-  next tile of the wall the tunnel has just come up under passes, so the tunnel creeps along
-  that wall a tile at a time and uses up its whole allowance of turns doing it, collapsing
-  a few tiles from the last breach with nothing to show for it. Eight is past the wall face
-  and the towers on it, and short enough that the next ring of a castle is still in reach.
-  Higher and each hit lands deeper in but a tunnel more often finds nothing and stops;
-  0 turns it off. Default 8.
-retarget_range: Search range (tiles)
+  The first tunnel to get there brings it down. Every other one arrives at the hole, finds
+  nothing left to collapse on, and is sent on from there: to the nearest fortification
+  further in, in the direction of the enemy's campfire. That becomes the new meeting point,
+  the next tunnel to arrive goes on through it to the next one, and so the line works its way
+  in, hit by hit, round the keep - which cannot be tunnelled - towards the campfire. When
+  nothing stands between the hole and the campfire any more, a tunnel takes the nearest
+  fortification instead and widens the way.
+
+  A tunnel that is sent on is not a new tunnel: it carries on from where it stands, and when
+  it finally comes up under its target it collapses exactly as any tunnel does, with the same
+  damage - and the whole tunnel behind it, back to the entrance, comes down with it.
+retarget_enabled: Tunnels meet, and go on through the breach
+retarget_enabled_tooltip: Off means every tunnel digs at the wall nearest to it and collapses into empty ground if that wall is already gone, the way it does in the unmodified game.
+retarget_range: How far a tunnel reaches (tiles)
 retarget_range_tooltip: |
-  How far a tunnel being turned aside may look for its next target, counted from where the
-  tunneler is. The game's own first search uses up to 80 tiles, and this leaves it alone.
-  Default 80.
-retarget_max: Times one tunnel may re-aim
+  How far a tunnel may look for the meeting point or for its next target, in tiles. A tunnel
+  dug in further than this from the meeting point starts one of its own, so a second siege
+  somewhere else gets its own. The game's own first search reaches 80 tiles, which is where
+  this starts. Default 80.
+retarget_max: Times one tunnel may be sent on
 retarget_max_tooltip: |
-  How often a single tunneler may be turned aside before it stops taking new targets and
-  collapses at the end of the tunnel it is on. Keeps one tunneler from digging all day.
-  Default 5.
-retarget_finish_leg: Finish the tunnel before turning
-retarget_finish_leg_tooltip: |
-  A tunnel whose target is destroyed before it gets there keeps digging to the spot anyway,
-  and only then looks for its next target - from that spot. The breaches it makes then sit
-  end to end and a player's tunnels carve one line into the castle. Off, the tunnel turns
-  the moment its target goes, fills in everything it has dug and starts again from where it
-  stands, which leaves a piece of untouched castle between one breach and the next.
-
-retarget_collapse: Collapse the stretch already dug
-retarget_collapse_tooltip: |
-  A tunnel that turns towards a new target always fills in the stretch it has already dug,
-  so the raised ground it left never stays behind. This says whether that also damages what
-  the old stretch ran under, the way a finished tunnel does. Off means the ground is put
-  back quietly.
+  How often a single tunnel may arrive on an empty spot and be sent on before it collapses
+  there instead. Each time is one more fortification further in. Default 10.
 
 targets_under: Tunnels may dig under the town
 targets_under_tooltip: |
@@ -106,33 +71,6 @@ targets_under_tooltip: |
   tunnel may pass beneath the town - it still only comes up under a wall, a gate or a tower,
   but it can get to the ones on the far side. The keep is the one exception: a tunnel is
   never dug underneath one, it works its way around it.
-retarget_towards: Aim towards the enemy campground
-retarget_towards_tooltip: |
-  The first tunnel to be aimed asks the search several times over, each round demanding a
-  target closer to the enemy's campground - where their peasants gather - than the last answer,
-  and the piece of wall it settles on becomes the breach that player is working at. Every other
-  tunnel of theirs digging near it goes for that same tile, so they open one road in instead of
-  a scatter of holes; how near is the setting below. A tunnel further off digs at whatever it
-  finds in front of itself rather than being dragged across the map, and one that cannot reach
-  the breach does the same.
-  Every spot a collapse takes joins a line that player is carving, and with it a mark - how
-  close to the enemy camp their tunnels have got. Every aim after it has to beat that mark.
-  That is what drives the breaches inwards towards the camp instead of widening the same
-  stretch of wall sideways: the first opens the outer wall, the next has to find something
-  past it, and so on, round the keep rather than under it. The line outlives any one breach
-  on purpose - a breach lasts only until it is open, and the whole point is that the tunnels
-  after it know how far in the ones before them got, so they aim through the hole rather than
-  taking a fresh bite of the outer wall. A tunnel that starts beside any spot on the line
-  joins whatever the line is working at now, however far ahead that has moved. The mark only
-  moves inwards, it is set when a tunnel actually brings something down, and the whole line
-  is forgotten after five minutes with nothing taken, so a stalled assault starts afresh.
-  A tunnel that has already reached the front is not sent back at it - it takes the next thing
-  further in, and steps over anything this player's other tunnels are already digging at, so
-  each of them brings its own piece down rather than the first one taking the spot and the rest
-  arriving at bare ground with nothing left to collapse on.
-  A tunnel dug by hand is sent against nobody in particular, and then the nearest camp that is
-  not ours and not an ally's is the one it works towards. Off means the nearest target in any
-  direction, which is what the game does.
 digging_unselectable: Digging tunnelers cannot be picked
 digging_unselectable_tooltip: |
   While a tunneler is digging its entrance or its tunnel it is passed over by the mouse, by

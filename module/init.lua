@@ -54,14 +54,6 @@ local SEARCH_BUILDING_TEST = 0x23E            -- add edx, -0x4A; cmp edx, 2
 local SEARCH_BUILDING_TEST_SIZE = 6
 local SEARCH_ALLOW = 0x246                    -- ... and where it goes when the tile is fine
 local SEARCH_SKIP = 0x2C4                     -- ... or when the neighbour is not usable
--- How many times a search may be run, each round asking for something closer to the enemy
--- camp than the last answer, before the module settles for what it has.
--- How many times an aim may ask the game's own search, each round demanding something
--- closer to the enemy's camp. Every round is a full spread over the map - the search clears
--- a 160 KB buffer before it starts - so this is kept short: after a breach falls, every
--- tunnel that was working at it re-aims, and the cost of that shows as a stutter.
-local SEARCH_ROUNDS = 3
-
 -- The map is 400 across; tiles on its very edge are never touched.
 local MAP_LIMIT = 398
 
@@ -263,8 +255,6 @@ local CAMP_GUARDS = {
 }
 local KEEP_IDS_OPERAND = 0x12
 local PLAYER_COUNT = 8                        -- the lords a map can hold, numbered from 1
-local DEPTH_SLACK = 12                        -- how far past the nearest target a search may
-                                              -- reach for a better one, in tiles of tunnel
 local PLAYER_STRIDE = 0x39F4
 local KEEP_GUARDS = {
   [0x0A] = { 0x69, 0xED, 0xF4, 0x39, 0x00, 0x00 },
@@ -353,6 +343,7 @@ local UNIT_DEST_Y = 0xCA
 local UNIT_DEST_TILE = 0xD8                   -- ... as a tile, which is what the maps want
 local UNIT_PATH_INDEX = 0xFA                  -- how far along its tunnel it has got
 local UNIT_PATH_LENGTH = 0xFC                 -- ... and how long the whole tunnel is
+local UNIT_MOVE_STATUS = 0xF6                 -- 0 arrived, 1 waiting, 2 on its way
 local UNIT_SIEGE_TARGET = 0x432               -- the player this tunneler was sent against
 local UNIT_WORKPLACE = 0x338                  -- the tunnel entrance this tunneler built
 local UNIT_SELECTABLE = 0x2A4                 -- 0 = the mouse and the tribes pass it by
@@ -373,44 +364,6 @@ local BUILDING_TYPE_LIMIT = 127
 
 -- The three keep types, from the game's own table of per-type update functions: 40 a manor
 -- house, 41 a stone keep, 42 a stronghold. A tunnel is never dug underneath one.
--- How near a tunnel has to be to a breach to join it rather than dig its own way in, when
--- the settings say nothing. Shorter than the search range on purpose - tunnels that start
--- together should arrive together, while one that starts across the map has its own wall in
--- front of it - but long enough that a spread of entrances still converges. It is measured
--- from where the tunnel that found the breach started, not from the breach itself, so how
--- far off the wall is makes no difference to whether a group of tunnels agrees on it.
-local DEFAULT_BREACH_REACH = 40
-
--- How long a player's breach stands as the place their tunnels work at, before the next
--- tunnel to look picks a fresh one. It also clears a breach left over from an earlier
--- match, since the tick counter starts again and the subtraction goes wide.
-local BREACH_LIFETIME_SECONDS = 90
-
--- The line a player's tunnels are carving: the spots their collapses have taken, in the
--- order they were taken, and how long the line is remembered for. The line outlives any
--- one breach on purpose - a breach lasts only until it is open, and the whole point is
--- that the next tunnel knows how far in the ones before it got. It is only forgotten
--- after this long with no collapse at all, which is a siege that has stalled, or a match
--- that has started over.
--- One table rather than four names: the module's main chunk is close to Lua's ceiling of
--- two hundred locals.
-local TRAIL = {
-  count = 8,                                  -- spots kept
-  entry = 12,                                 -- tile, x, y
-  lifetimeSeconds = 300,
-}
-TRAIL.stride = 4 + TRAIL.count * TRAIL.entry  -- ... behind a cursor, per player
-
--- And what that player's tunnels are aimed at right now. A tunnel pushing on past a breach
--- that has been opened must not be sent at a tile one of its fellows is already digging
--- towards, or the first of them takes it and the rest arrive at bare ground and collapse
--- having done nothing. Each aim writes its answer here and every later search steps over
--- what it finds, so the tunnels spread along the line inwards instead of piling onto one
--- tile. A ring, so it forgets by itself; and a search that can find nothing else is run
--- again with the list down rather than left with no target at all.
-TRAIL.claims = 8
-TRAIL.claimStride = 4 + TRAIL.claims * 4
-
 local KEEP_FIRST_TYPE = 40
 local KEEP_TYPE_SPAN = 2
 
@@ -432,23 +385,29 @@ local FORTIFIED_TYPES = {
 -- under. A fortification is never shaken for more than this.
 local TUNNEL_DAMAGE = 5
 
--- How far a re-aimed tunnel may look for its next target, in tiles. The game's own first
--- search uses 20, then 40, then 80, and that is left alone.
+-- How far a tunnel's search may reach, in tiles, when it looks for its line or for its next
+-- target. The game's own first search widens to 80 and stops there, which is also where
+-- this starts: "the tunnels that can reach the spot" is the tunnels the game itself would
+-- let dig that far.
 local DEFAULT_SEARCH_RANGE = 80
+local VANILLA_RANGE = 80
 
--- ... and how much ground it has to gain to be worth turning for, also in tiles of digging.
--- The inward test on its own is only "closer to the enemy camp than where I stand", which
--- the next tile of the wall the tunnel has just broken satisfies, so without this a turned
--- tunnel creeps along that wall a tile at a time and spends its whole allowance of turns
--- doing it. Eight tiles is far enough to be past the wall face and the towers on it, and
--- short enough that the next ring of a castle is still in reach.
-local DEFAULT_ADVANCE = 8
+-- A unit's path plan holds 400 bytes of four-bit steps. A tunnel that is sent on keeps the
+-- whole of what it has dug in front of the new leg, so this is how long a tunnel can get.
+local PLAN_STEPS = 800
+local PLAN_BYTES = 400
+
+-- The lines a player's tunnels gather on: four to a player, 16 bytes each - the target's
+-- tile, x and y, and the tick the line was last used.
+local LINE_BLOCK = 64
+
+-- ... and how long a line is kept with nobody using it: long enough for any pause in a siege,
+-- short enough that a line from a game played before a load is not waiting in the next one.
+local LINE_LIFETIME_SECONDS = 600
 
 -- How close two collapses have to be to count as the same breach, so the second one adds
--- its time to the first zone instead of taking a second one; and how close a tunnel's
--- destination has to be to a collapse for that tunnel to count as aimed at the same spot.
+-- its time to the first zone instead of taking a second one.
 local DENIAL_STACK_RADIUS = 2
-local RETARGET_SCAN_RADIUS = 1
 
 -- The map's per-tile flag word. A wall is 0x100, a crenellation 0x200 and stairs 0x800 -
 -- the three the game's own destroyWall clears together, and the three this module treats
@@ -488,32 +447,27 @@ local TICKS_PER_SECOND = 40
 local ZONE_COUNT = 32
 local ZONE_SIZE = 16
 
--- Re-aim records, a small ring of {unit uid, re-aims used}. Only a handful of tunnels are
--- ever digging at once; a uid pushed out of the ring only means that tunneler starts its
--- budget over.
-local RECORD_COUNT = 32
-local RECORD_SIZE = 8
+-- Tunnel records, a ring of {unit uid, times sent on, its line, spare}. A uid pushed out of
+-- the ring only means that tunneler starts its count over and has no line to follow.
+local RECORD_COUNT = 64
+local RECORD_SIZE = 16
 
--- Layout of the module's own control block.
+-- Layout of the module's own control block. Whatever did not change keeps the offset it
+-- always had.
 local C = {}                                  -- the module's own control block
 C.DENIAL_ENABLED = 0x00
 C.DENIAL_DURATION = 0x04
 C.RETARGET_ENABLED = 0x08
 C.RETARGET_RANGE = 0x0C
-C.RETARGET_MAX = 0x10
+C.RETARGET_MAX = 0x10             -- how often one tunnel may be sent on
 C.UI_ENABLED = 0x14
 C.STANCE_ENABLED = 0x18
-C.COLLAPSE_BEHIND = 0x1C
 C.TARGETS_ENABLED = 0x20
 C.DIAGNOSTICS = 0x24
 C.LAST_TICK = 0x28                -- the tick the zones were last looked at
 C.LAST_REPORT_TICK = 0x2C         -- the build check reports at most once a second
 C.SCRATCH = 0x30
-C.RING_CURSOR = 0x34
-C.REAIM_UNIT = 0x38               -- which tunneler the re-aim is working on
-C.REAIM_ARRIVED = 0x3C            -- ... and whether it is standing at its target
-C.REAIM_RECORD = 0x40
-C.REAIM_COUNT = 0x44              -- how many a collapse sent somewhere new
+C.RING_CURSOR = 0x34              -- the next entry of the tunnel records to hand out
 C.REPORT = 0x48                   -- ten dwords the hooks fill in before logging
 C.MINE = 0x70                     -- the last refusal was this module's own
 C.MINE_TICK = 0x74                -- ... on this tick
@@ -524,18 +478,9 @@ C.SUPPRESS = 0x84                 -- fill the tunnel in, but quietly
 C.SPREAD_INDEX = 0x88
 C.HIDE_SELECT = 0x8C              -- a digging tunneler cannot be picked
 C.HIDE_TARGET = 0x90              -- ... and nothing aims at it
-C.TOWARDS = 0x94                  -- aim at what lies towards the enemy keep
-C.BIAS_ACTIVE = 0x98              -- ... only while the module's own search runs
-C.ORIGIN_DISTANCE = 0x9C
-C.CAMP_X = 0xA0
+C.CAMP_X = 0xA0                   -- the enemy's campfire, as find_anchor last saw it
 C.CAMP_Y = 0xA4
 C.UNDER_BUILDINGS = 0xA8          -- a tunnel may pass beneath the town
-C.ADVANCE = 0xAC                  -- how much ground a turned tunnel has to gain, in tiles
-C.BEST_TILE = 0xB0                -- the best target a search has turned up
-C.BEST_X = 0xB4
-C.BEST_Y = 0xB8
-C.ROUNDS = 0xBC
-C.LAST_REAIM_TICK = 0xC0          -- one tunnel is re-aimed per tick, no more
 C.SPREAD_RADIUS = 0xC4
 C.SPREAD_DX = 0xC8
 C.SPREAD_DY = 0xCC
@@ -543,17 +488,35 @@ C.SPREAD_TILE = 0xD0
 C.SPREAD_TX = 0xD4
 C.SPREAD_TY = 0xD8
 C.FLAT_INDEX = 0xDC
-C.INITIAL_UNIT = 0xE0
-C.ORIGIN_X = 0x224                            -- where the first search was run from
-C.ORIGIN_Y = 0x228
-C.FILL_UNIT = 0x22C                           -- the tunnel being written into the queue
+C.AIM_MODE = 0xE4                 -- what the search filter does: 0 off, 1 pin, 2 cone
+C.AIM_PIN = 0xE8                  -- ... the one tile a pinned search takes
+C.AIM_FROM_X = 0xEC               -- where the search runs from
+C.AIM_FROM_Y = 0xF0
+C.AIM_DIR_X = 0xF4                -- ... and the way to the enemy's campfire, scaled to 64
+C.AIM_DIR_Y = 0xF8
+C.AIM_DIR_LENGTH = 0xFC           -- ... squared
+C.AIM_UNIT = 0x100                -- the tunneler being aimed, scaled
+C.AIM_RANGE = 0x104
+C.AIM_OWNER = 0x108
+C.AIM_SIEGE = 0x10C
+C.GAME_TILE = 0x110               -- what the game's own first search answered
+C.GAME_X = 0x114
+C.GAME_Y = 0x118
+C.OURS = 0x11C                    -- the first aim is a line, not the game's own answer
+C.REDIRECT_HOW = 0x120            -- how a tunnel was sent on, or why it was not
+C.RECORD = 0x128                  -- the record of the tunneler being aimed
+C.SAVE_LADDER_X = 0x12C           -- where the tunnel being extended began
+C.SAVE_LADDER_Y = 0x130
+C.SAVE_PREVIOUS = 0x134
+C.LAST_REDIRECT = 0x138            -- the tick a tunnel was last sent on
+C.FILL_UNIT = 0x22C               -- the tunnel being written into the queue
 C.FILL_FLAGS = 0x230
 C.FILL_TILE = 0x234
 C.FILL_X = 0x238
 C.FILL_Y = 0x23C
 C.FILL_STEP = 0x240
 C.FILL_LEFT = 0x244
-C.STEP_TILE = 0x248                           -- the tile being taken apart this tick
+C.STEP_TILE = 0x248               -- the tile being taken apart this tick
 C.STEP_X = 0x24C
 C.STEP_Y = 0x250
 C.STEP_FLAGS = 0x254
@@ -565,52 +528,22 @@ C.STEP_THIS_Y = 0x268
 C.TICK_LEFT = 0x26C
 C.QUEUE_COUNT = 0x270
 C.SPEED = 0x274
-C.ANCHOR_UNIT = 0x278                         -- the tunnel looking for a camp to aim at
-C.ANCHOR_FROM = 0x27C                         -- the players still to be considered
+C.ANCHOR_UNIT = 0x278             -- the tunnel looking for a camp to aim at
+C.ANCHOR_FROM = 0x27C             -- the players still to be considered
 C.ANCHOR_TO = 0x280
-C.ANCHOR_BEST = 0x284                         -- how far off the nearest camp so far is
+C.ANCHOR_BEST = 0x284             -- how far off the nearest camp so far is
 C.ANCHOR_X = 0x288
 C.ANCHOR_Y = 0x28C
-C.PINNED_TILE = 0x290                         -- the one tile a search may take, or 0
-C.DEPTH_LIMIT = 0x294                         -- ... and how deep it may reach for it
-C.SHARED_SLOT = 0x298                         -- where this player's breach is written down
-C.PIN_SCRATCH = 0x29C                         -- the breach being measured for reach
-C.OURS = 0x2A0                                -- this aim is the module's, not the game's
-C.SKIP_UNIT = 0x2A4                           -- ... and this tunneler's next aim is the
-                                              -- game's own, after a path we could not lay
-C.SCALED_UNIT = 0x2BC                         -- the re-aim's own unit, already scaled
-C.BREACH_OWNER = 0x2B0                        -- what the breach lookup is being asked
-C.BREACH_X = 0x2B4
-C.BREACH_Y = 0x2B8
-C.STEP_DAMAGE = 0x2A8                         -- what this one tile is taking
-C.BREACH_REACH = 0x2C0                        -- how near a breach must be, squared
-C.FAMILY_DAMAGE = 0x2C4                       -- the damage running now is this module's,
-                                              -- so stairs and crenellations take it too
-C.FAMILY_READY = 0x2C8                        -- ... and the widening that lets them is in
-C.FINISH_LEG = 0x2CC                          -- a tunnel under way digs its leg out before
-                                              -- it is turned towards anything new
-C.CLAIMS_SLOT = 0x2D8                         -- the claims of the player being aimed for
-C.CLAIMS_ACTIVE = 0x2DC                       -- ... and whether a search is stepping over
-                                              -- them, which is only while the module's own
-                                              -- search runs
-C.SEARCH_RANGE = 0x2E0                        -- how far this round of the search may reach
-C.MIN_ADVANCE = 0x2E4                         -- ... and how far in it must reach before a
-                                              -- target counts, while the narrowing is up
-C.GAME_TILE = 0x2AC                           -- what the game's own aim answered, so the
-                                              -- module can tell its own target from it
+C.STEP_DAMAGE = 0x2A8             -- what this one tile is taking
+C.FAMILY_DAMAGE = 0x2C4           -- the damage running now is this module's, so stairs
+                                  -- and crenellations take it too
+C.FAMILY_READY = 0x2C8            -- ... and the widening that lets them is in
 C.QUEUE = 0x2E8
-C.PENDING = 0xE4                  -- one bit per unit: this tunnel wants a target
-C.PENDING_SIZE = 320
 C.ZONES = C.QUEUE + QUEUE_MAX * 16
 C.RECORDS = C.ZONES + ZONE_COUNT * ZONE_SIZE
-C.SHARED = C.RECORDS + RECORD_COUNT * RECORD_SIZE   -- per player: the breach tile, its x
-                                                   -- and y, the tick it was set, how close
-                                                   -- to the camp they have got and when
-                                                   -- that was, and where the tunnel that
-                                                   -- set it started
-C.TRAIL = C.SHARED + (PLAYER_COUNT + 1) * 32       -- ... and the spots their collapses
-C.CLAIMS = C.TRAIL + (PLAYER_COUNT + 1) * TRAIL.stride  -- have taken, in order, and the
-C.SIZE = C.CLAIMS + (PLAYER_COUNT + 1) * TRAIL.claimStride  -- tiles they are digging at now
+C.LINES = C.RECORDS + RECORD_COUNT * RECORD_SIZE     -- four lines per player
+C.PLAN_BUFFER = C.LINES + (PLAYER_COUNT + 1) * LINE_BLOCK  -- a plan being extended
+C.SIZE = C.PLAN_BUFFER + PLAN_BYTES
 
 ---------------------------------------------------------------------------------------
 -- Defaults
@@ -619,10 +552,7 @@ C.SIZE = C.CLAIMS + (PLAYER_COUNT + 1) * TRAIL.claimStride  -- tiles they are di
 -- module nobody has opened in the GUI gets an empty table. These are the real defaults.
 local DEFAULTS = {
   denial = { enabled = true, seconds = 120, message = true },
-  retarget = { enabled = true, range = DEFAULT_SEARCH_RANGE, max = 10,
-    collapse_behind = true, towards_camp = true, breach_reach = DEFAULT_BREACH_REACH,
-    advance = DEFAULT_ADVANCE,
-    finish_leg = true },
+  retarget = { enabled = true, range = DEFAULT_SEARCH_RANGE, max = 10 },
   targets = { towers_and_gates = true, under_buildings = true },
   collapse = { damage = 2500, spread = true, spread_damage = 60, spread_radius = 2,
     speed = 2 },
@@ -636,22 +566,19 @@ local DEFAULTS = {
 -- Nothing here runs unless diagnostics are switched on, and then only when a tunnel
 -- arrives, a tunnel collapses, or somebody tries to build within twenty tiles of a zone.
 local REPORT_WORDS = {
-  [1] = "tunnel arrived on a wall, collapsing as usual",
-  [2] = "tunnel arrived on a building, collapsing as usual",
-  [6] = "tunnel arrived on empty ground but has used up its re-aims, collapsing",
-  [7] = "tunnel arrived on empty ground and is digging on towards a new target",
-  [8] = "a collapse sent the player's other tunnels at new targets",
-  [9] = "tunnel arrived on empty ground with nothing in range, collapsing",
-  [10] = "tunnel collapsed on empty ground, no denial laid",
-  [11] = "tunnel collapsed but every denial slot is in use",
-  [12] = "tunnel collapsed on something, denial laid",
-  [13] = "tunnel collapsed where a denial already stood, its time added on",
-  [14] = "the breach line moved on (tile and b/c = the spot taken, f = how far in it is, "
-      .. "g = spots on the line)",
-  [30] = "tunnel aimed (tile = ours, b = the game's own, c = the player's breach)",
-  [31] = "the path would not lay; the entrance kept, the game aims this one next tick",
+  [11] = "tunnel arrived on a fortification, collapsing; every denial slot is in use",
+  [12] = "tunnel arrived on a fortification, collapsing; denial laid",
+  [13] = "tunnel arrived on a fortification, collapsing; its time added to the denial there",
   [20] = "building attempt near a denial, not refused",
   [21] = "building attempt inside a denial, refused",
+  [40] = "tunnel dug in (tile = its target, b = the game's own, c = its line, "
+      .. "d = 1 joined the line, 2 started a line, 3 the line was the game's own answer)",
+  [41] = "tunnel arrived on a fortification, collapsing",
+  [42] = "tunnel arrived on empty ground and is sent on (tile = its new target, "
+      .. "b = 1 its line, 2 towards the campfire, 3 widening, c = its line, d = times sent on)",
+  [43] = "tunnel arrived on empty ground and collapses there (b = 4 sent on too often, "
+      .. "5 nothing in reach, 6 the path would not lay or the tunnel is as long as it gets)",
+  [45] = "a line's path would not lay; the tunnel keeps the game's own target (b = laid)",
 }
 
 ---------------------------------------------------------------------------------------
@@ -776,19 +703,12 @@ return {
     local retargetRange = toInteger(setting(config, "retarget", "range"),
       DEFAULTS.retarget.range)
     local retargetMax = toInteger(setting(config, "retarget", "max"), DEFAULTS.retarget.max)
-    local breachReach = toInteger(setting(config, "retarget", "breach_reach"),
-      DEFAULTS.retarget.breach_reach)
-    local advance = toInteger(setting(config, "retarget", "advance"),
-      DEFAULTS.retarget.advance)
-    local finishLegOn = setting(config, "retarget", "finish_leg") and true or false
-    local collapseBehind = setting(config, "retarget", "collapse_behind") and true or false
     local targetsOn = setting(config, "targets", "towers_and_gates") and true or false
     local collapseDamage = toInteger(setting(config, "collapse", "damage"),
       DEFAULTS.collapse.damage)
     local spreadOn = setting(config, "collapse", "spread") and true or false
     local unselectableOn = setting(config, "digging", "unselectable") and true or false
     local untargetableOn = setting(config, "digging", "untargetable") and true or false
-    local towardsOn = setting(config, "retarget", "towards_camp") and true or false
     local underOn = setting(config, "targets", "under_buildings") and true or false
     local spreadDamage = toInteger(setting(config, "collapse", "spread_damage"),
       DEFAULTS.collapse.spread_damage)
@@ -850,12 +770,8 @@ return {
     writeInteger(control + C.RETARGET_ENABLED, retargetOn and 1 or 0)
     writeInteger(control + C.RETARGET_RANGE, retargetRange)
     writeInteger(control + C.RETARGET_MAX, retargetMax)
-    writeInteger(control + C.BREACH_REACH, breachReach * breachReach)
-    writeInteger(control + C.ADVANCE, advance)
-    writeInteger(control + C.FINISH_LEG, finishLegOn and 1 or 0)
     writeInteger(control + C.UI_ENABLED, uiOn and 1 or 0)
     writeInteger(control + C.STANCE_ENABLED, stancesOn and 1 or 0)
-    writeInteger(control + C.COLLAPSE_BEHIND, collapseBehind and 1 or 0)
     writeInteger(control + C.TARGETS_ENABLED, targetsOn and 1 or 0)
     writeInteger(control + C.COLLAPSE_DAMAGE, collapseDamage)
     writeInteger(control + C.SPREAD_ENABLED, spreadOn and 1 or 0)
@@ -864,7 +780,6 @@ return {
     writeInteger(control + C.SPEED, collapseSpeed)
     writeInteger(control + C.HIDE_SELECT, unselectableOn and 1 or 0)
     writeInteger(control + C.HIDE_TARGET, untargetableOn and 1 or 0)
-    writeInteger(control + C.TOWARDS, towardsOn and 1 or 0)
     writeInteger(control + C.UNDER_BUILDINGS, underOn and 1 or 0)
     writeInteger(control + C.DIAGNOSTICS, diagnosticsOn and 1 or 0)
     writeInteger(control + C.RING_CURSOR, records)
@@ -987,65 +902,12 @@ return {
       core.writeByte(fortified + kind, 1)
     end
 
-    -- How often a tunnel has been turned aside already.
-    local record = core.allocateAssembly(templates.find_record, {
-      SCALED_ADDRESS = control + C.SCALED_UNIT,
-      RECORD_ADDRESS = control + C.REAIM_RECORD,
-      RECORDS_ADDRESS = records,
-      RECORDS_END_ADDRESS = records + RECORD_COUNT * RECORD_SIZE,
-      RING_CURSOR_ADDRESS = control + C.RING_CURSOR,
-      MAX_RETARGETS_ADDRESS = control + C.RETARGET_MAX,
-      UNIT_UID = (unitBase + UNIT_UID) & 0xFFFFFFFF,
-    })
-
-    -- Forgetting the line a player was carving, when nothing has been taken for long
-    -- enough that the siege has plainly stopped - or the match has started over.
-    local clearTrail = core.allocateAssembly(templates.clear_trail, {
-      BREACH_OWNER_ADDRESS = control + C.BREACH_OWNER,
-      TRAIL_ADDRESS = control + C.TRAIL,
-      TRAIL_STRIDE = TRAIL.stride,
-      TRAIL_COUNT = TRAIL.count,
-      TRAIL_ENTRY = TRAIL.entry,
-      CLAIMS_ADDRESS = control + C.CLAIMS,
-      CLAIM_STRIDE = TRAIL.claimStride,
-      CLAIM_COUNT = TRAIL.claims,
-    })
-
-    -- Writing down what an aim settled on, so the next search steps over it.
-    local claim = core.allocateAssembly(templates.claim_target, {
-      CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
-      BEST_TILE_ADDRESS = control + C.BEST_TILE,
-      CLAIM_COUNT = TRAIL.claims,
-    })
-
-    -- Which piece of wall this player's tunnels are already working at.
-    local breach = core.allocateAssembly(templates.find_breach, {
-      BREACH_OWNER_ADDRESS = control + C.BREACH_OWNER,
-      BREACH_X_ADDRESS = control + C.BREACH_X,
-      BREACH_Y_ADDRESS = control + C.BREACH_Y,
-      SHARED_ADDRESS = control + C.SHARED,
-      SHARED_SLOT_ADDRESS = control + C.SHARED_SLOT,
-      PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
-      PIN_SCRATCH_ADDRESS = control + C.PIN_SCRATCH,
-      BREACH_REACH_ADDRESS = control + C.BREACH_REACH,
-      CLEAR_TRAIL_ADDRESS = clearTrail,
-      TRAIL_ADDRESS = control + C.TRAIL,
-      TRAIL_STRIDE = TRAIL.stride,
-      TRAIL_COUNT = TRAIL.count,
-      TRAIL_ENTRY = TRAIL.entry,
-      TRAIL_LIFETIME = TRAIL.lifetimeSeconds * TICKS_PER_SECOND,
-      TICKS_ADDRESS = ticks or 0,
-      BREACH_LIFETIME = BREACH_LIFETIME_SECONDS * TICKS_PER_SECOND,
-      TILE_FLAGS_ADDRESS = tileFlags or 0,
-      BUILDING_TILE_ADDRESS = buildingTiles or 0,
-    })
-
     -- ... and what stands in for it when those tables were not found: "no camp".
     local anchorStub = core.allocateAssembly(templates.no_anchor, {
       ANCHOR_BEST_ADDRESS = control + C.ANCHOR_BEST,
     })
 
-    local reaim, queueFill
+    local queueFill
     if tunneler ~= nil and ticks ~= nil and search ~= nil then
       local walk = callTarget(tunneler + TUNNELER_TUNNEL_DAMAGE_CALL)
       local tickSite = scanOptional(AOB_UPDATE_UNITS, "the game's pass over its units")
@@ -1172,277 +1034,231 @@ return {
         collapseReady = true
       end
 
-      -- The one routine that changes a tunnel's aim. Both hooks below call it.
-      -- The three short routines both aims call rather than carry twice; see the note
-      -- above them in templates.lua for why.
-      local takeResult = core.allocateAssembly(templates.take_result, {
-        ALG_RESULT_ADDRESS = readAddress(finder + FIND_RESULT_OPERAND),
-        ALG_TARGET_X_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_X_OPERAND),
-        ALG_TARGET_Y_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_Y_OPERAND),
-        BEST_TILE_ADDRESS = control + C.BEST_TILE,
-        BEST_X_ADDRESS = control + C.BEST_X,
-        BEST_Y_ADDRESS = control + C.BEST_Y,
+      -------------------------------------------------------------------------------
+      -- Where a tunnel goes
+      -------------------------------------------------------------------------------
+      local algResult = readAddress(finder + FIND_RESULT_OPERAND)
+      local algX = readAddress(tunneler + TUNNELER_ALG_TARGET_X_OPERAND)
+      local algY = readAddress(tunneler + TUNNELER_ALG_TARGET_Y_OPERAND)
+      local setDestination = callTarget(tunneler + TUNNELER_SET_DESTINATION_CALL)
+      local lines = control + C.LINES
+      local function unitField(offset)
+        return (unitBase + offset) & 0xFFFFFFFF
+      end
+
+      -- The filter every search runs through. It stays off - the game's own searches, the
+      -- AI's included, never see it - except for the single run one of the routines below
+      -- asks it for.
+      local filter = core.allocateAssembly(templates.aim_filter, {
+        AIM_MODE_ADDRESS = control + C.AIM_MODE,
+        AIM_PIN_ADDRESS = control + C.AIM_PIN,
+        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+        AIM_DIR_X_ADDRESS = control + C.AIM_DIR_X,
+        AIM_DIR_Y_ADDRESS = control + C.AIM_DIR_Y,
+        AIM_DIR_LENGTH_ADDRESS = control + C.AIM_DIR_LENGTH,
+        RESULT_TILE = SEARCH_RESULT_TILE,
+        RESULT_Y = SEARCH_RESULT_Y,
+        RESULT_X = SEARCH_RESULT_X,
+        SPREAD_ADDRESS = search + SEARCH_SPREAD,
+        RETURN_ADDRESS = search + SEARCH_TAKE_IT_DONE,
       })
-      local bestDistance = core.allocateAssembly(templates.best_distance, {
-        BEST_X_ADDRESS = control + C.BEST_X,
-        BEST_Y_ADDRESS = control + C.BEST_Y,
-        CAMP_X_ADDRESS = control + C.CAMP_X,
-        CAMP_Y_ADDRESS = control + C.CAMP_Y,
-        ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,
-      })
-      local runSearch                                   -- built once pickRange is in hand
-      local pickRange = core.allocateAssembly(templates.pick_range, {
-        RANGE_ADDRESS = control + C.RETARGET_RANGE,
-        BIAS_ACTIVE_ADDRESS = control + C.BIAS_ACTIVE,
-        PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
-        DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
-        SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
-      })
-      runSearch = core.allocateAssembly(templates.run_search, {
-        PICK_RANGE_ADDRESS = pickRange,
-        SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
-        SEARCH_UNIT_ADDRESS = control + C.INITIAL_UNIT,
-        ORIGIN_X_ADDRESS = control + C.ORIGIN_X,
-        ORIGIN_Y_ADDRESS = control + C.ORIGIN_Y,
+      remember(search + SEARCH_TAKE_IT, SEARCH_TAKE_IT_SIZE)
+      writeJump(search + SEARCH_TAKE_IT, filter, SEARCH_TAKE_IT_SIZE)
+
+      local lineSearch = core.allocateAssembly(templates.line_search, {
+        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+        AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
+        AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+        AIM_MODE_ADDRESS = control + C.AIM_MODE,
         PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
         SEARCH_ADDRESS = search,
-        UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-        UNIT_SIEGE_TARGET = (unitBase + UNIT_SIEGE_TARGET) & 0xFFFFFFFF,
+        ALG_RESULT_ADDRESS = algResult,
       })
-      local recordBreach = core.allocateAssembly(templates.record_breach, {
-        SHARED_SLOT_ADDRESS = control + C.SHARED_SLOT,
-        BEST_TILE_ADDRESS = control + C.BEST_TILE,
-        BEST_X_ADDRESS = control + C.BEST_X,
-        BEST_Y_ADDRESS = control + C.BEST_Y,
-        BREACH_X_ADDRESS = control + C.BREACH_X,
-        BREACH_Y_ADDRESS = control + C.BREACH_Y,
+      local stands = core.allocateAssembly(templates.stands, {
+        TILE_FLAGS_ADDRESS = tileFlags,
+        BUILDING_TILE_ADDRESS = buildingTiles,
+        WALL_FAMILY = WALL_FAMILY_FLAGS,
+      })
+      local recordOf = core.allocateAssembly(templates.record_of, {
+        AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+        UNIT_UID = unitField(UNIT_UID),
+        RECORDS_ADDRESS = records,
+        RECORDS_END_ADDRESS = records + RECORD_COUNT * RECORD_SIZE,
+        RING_CURSOR_ADDRESS = control + C.RING_CURSOR,
+        RECORD_ADDRESS = control + C.RECORD,
+      })
+      local newLine = core.allocateAssembly(templates.new_line, {
+        AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+        LINE_ADDRESS = lines,
+        STANDS_ADDRESS = stands,
+        ALG_RESULT_ADDRESS = algResult,
+        ALG_TARGET_X_ADDRESS = algX,
+        ALG_TARGET_Y_ADDRESS = algY,
         TICKS_ADDRESS = ticks,
+        RECORD_ADDRESS = control + C.RECORD,
       })
 
-      reaim = core.allocateAssembly(templates.reaim, {
-        TAKE_RESULT_ADDRESS = takeResult,
-        BEST_DISTANCE_ADDRESS = bestDistance,
-        RECORD_BREACH_ADDRESS = recordBreach,
-        RUN_SEARCH_ADDRESS = runSearch,
-        SEARCH_UNIT_ADDRESS = control + C.INITIAL_UNIT,
-        ORIGIN_X_ADDRESS = control + C.ORIGIN_X,
-        ORIGIN_Y_ADDRESS = control + C.ORIGIN_Y,
-        ADVANCE_ADDRESS = control + C.ADVANCE,
-        MIN_ADVANCE_ADDRESS = control + C.MIN_ADVANCE,
-        UNIT_ADDRESS = control + C.REAIM_UNIT,
-        ARRIVED_ADDRESS = control + C.REAIM_ARRIVED,
-        RECORD_ADDRESS = control + C.REAIM_RECORD,
-        COLLAPSE_BEHIND_ADDRESS = control + C.COLLAPSE_BEHIND,
-        FILL_ADDRESS = queueFill or core.allocateCode({ 0xC3 }),
-        FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
-        FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
-        TOWARDS_ENABLED_ADDRESS = control + C.TOWARDS,
-        BIAS_ACTIVE_ADDRESS = control + C.BIAS_ACTIVE,
-        ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,
-        CAMP_X_ADDRESS = control + C.CAMP_X,
-        CAMP_Y_ADDRESS = control + C.CAMP_Y,
-        BEST_TILE_ADDRESS = control + C.BEST_TILE,
-        BEST_X_ADDRESS = control + C.BEST_X,
-        BEST_Y_ADDRESS = control + C.BEST_Y,
-        ROUNDS_ADDRESS = control + C.ROUNDS,
-        SEARCH_ROUNDS = SEARCH_ROUNDS,
+      -- Laying the next leg while keeping the tunnel one piece.
+      local extend = core.allocateAssembly(templates.extend_plan, {
+        AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+        UNIT_PATH_INDEX = unitField(UNIT_PATH_INDEX),
+        UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
+        UNIT_PATH_PLAN = unitField(UNIT_PATH_PLAN),
+        UNIT_LADDER_X = unitField(UNIT_LADDER_X),
+        UNIT_LADDER_Y = unitField(UNIT_LADDER_Y),
+        UNIT_PREVIOUS_TILE = unitField(UNIT_PREVIOUS_TILE),
+        UNIT_MOVE_STATUS = unitField(UNIT_MOVE_STATUS),
+        SAVE_LADDER_X_ADDRESS = control + C.SAVE_LADDER_X,
+        SAVE_LADDER_Y_ADDRESS = control + C.SAVE_LADDER_Y,
+        SAVE_PREVIOUS_ADDRESS = control + C.SAVE_PREVIOUS,
+        PLAN_BUFFER_ADDRESS = control + C.PLAN_BUFFER,
+        PLAN_STEPS = PLAN_STEPS,
+        ALG_TARGET_X_ADDRESS = algX,
+        ALG_TARGET_Y_ADDRESS = algY,
+        CURRENT_UNIT_ADDRESS = currentUnit,
+        UNITS_STATE_ADDRESS = unitsState,
+        SET_DESTINATION_ADDRESS = setDestination,
+      })
+
+      -- Sending a tunnel on from empty ground.
+      local redirect = core.allocateAssembly(templates.redirect, {
+        CURRENT_UNIT_ADDRESS = currentUnit,
+        AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+        RECORD_OF_ADDRESS = recordOf,
+        RECORD_ADDRESS = control + C.RECORD,
+        REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
+        MAX_ADDRESS = control + C.RETARGET_MAX,
+        UNIT_OWNER = unitField(UNIT_OWNER),
+        UNIT_SIEGE_TARGET = unitField(UNIT_SIEGE_TARGET),
+        UNIT_X = unitField(UNIT_X),
+        UNIT_Y = unitField(UNIT_Y),
+        UNIT_TILE = unitField(UNIT_TILE),
+        AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+        AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
+        RANGE_ADDRESS = control + C.RETARGET_RANGE,
+        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+        TICKS_ADDRESS = ticks,
+        STANDS_ADDRESS = stands,
+        AIM_PIN_ADDRESS = control + C.AIM_PIN,
+        AIM_MODE_ADDRESS = control + C.AIM_MODE,
+        LINE_SEARCH_ADDRESS = lineSearch,
         ANCHOR_ADDRESS = anchor or anchorStub,
         ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
-        ANCHOR_BEST_ADDRESS = control + C.ANCHOR_BEST,
-        PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
-        DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
-        SHARED_SLOT_ADDRESS = control + C.SHARED_SLOT,
-        CLAIMS_ADDRESS = control + C.CLAIMS,
-        CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
-        CLAIMS_ACTIVE_ADDRESS = control + C.CLAIMS_ACTIVE,
-        CLAIM_STRIDE = TRAIL.claimStride,
-        CLAIM_ADDRESS = claim,
-        SCALED_ADDRESS = control + C.SCALED_UNIT,
-        FIND_RECORD_ADDRESS = record,
-        BREACH_ADDRESS = breach,
-        BREACH_OWNER_ADDRESS = control + C.BREACH_OWNER,
-        BREACH_X_ADDRESS = control + C.BREACH_X,
-        BREACH_Y_ADDRESS = control + C.BREACH_Y,
-        DEPTH_SLACK = DEPTH_SLACK,
-        DISTANCE_MAP_ADDRESS = search ~= nil
-          and readAddress(search + SEARCH_DISTANCE_OPERAND) or 0,
-        UNIT_PATH_INDEX = (unitBase + UNIT_PATH_INDEX) & 0xFFFFFFFF,
-        UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
-        UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
-        UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
-        UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-        ALG_RESULT_ADDRESS = readAddress(finder + FIND_RESULT_OPERAND),
-        SET_DESTINATION_ADDRESS = callTarget(tunneler + TUNNELER_SET_DESTINATION_CALL),
-        UNITS_STATE_ADDRESS = unitsState,
+        CAMP_X_ADDRESS = control + C.CAMP_X,
+        CAMP_Y_ADDRESS = control + C.CAMP_Y,
+        AIM_DIR_X_ADDRESS = control + C.AIM_DIR_X,
+        AIM_DIR_Y_ADDRESS = control + C.AIM_DIR_Y,
+        AIM_DIR_LENGTH_ADDRESS = control + C.AIM_DIR_LENGTH,
+        NEW_LINE_ADDRESS = newLine,
+        LINE_LIFETIME = LINE_LIFETIME_SECONDS * TICKS_PER_SECOND,
+        ALG_RESULT_ADDRESS = algResult,
+        ALG_TARGET_X_ADDRESS = algX,
+        ALG_TARGET_Y_ADDRESS = algY,
+        EXTEND_ADDRESS = extend,
       })
 
       local arrival = core.allocateAssembly(templates.arrival, {
-        DENIAL_ENABLED_ADDRESS = control + C.DENIAL_ENABLED,
-        DURATION_ADDRESS = control + C.DENIAL_DURATION,
+        CURRENT_UNIT_ADDRESS = currentUnit,
+        UNIT_TILE = unitField(UNIT_TILE),
+        UNIT_X = unitField(UNIT_X),
+        UNIT_Y = unitField(UNIT_Y),
+        UNIT_OWNER = unitField(UNIT_OWNER),
+        TILE_FLAGS_ADDRESS = tileFlags,
+        BUILDING_TILE_ADDRESS = buildingTiles,
+        WALL_FAMILY = WALL_FAMILY_FLAGS,
         RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
+        LAST_REDIRECT_ADDRESS = control + C.LAST_REDIRECT,
+        REDIRECT_ADDRESS = redirect,
+        REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
+        RECORD_ADDRESS = control + C.RECORD,
+        ALG_RESULT_ADDRESS = algResult,
         DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
         REPORT_ADDRESS = report,
         REPORT_PAD_ADDRESS = reportPad,
-        PENDING_ADDRESS = control + C.PENDING,
-        WALL_FAMILY = WALL_FAMILY_FLAGS,
-        REAIM_ADDRESS = reaim or core.allocateCode({ 0xC3 }),
-        REAIM_UNIT_ADDRESS = control + C.REAIM_UNIT,
-        REAIM_ARRIVED_ADDRESS = control + C.REAIM_ARRIVED,
+        DENIAL_ENABLED_ADDRESS = control + C.DENIAL_ENABLED,
+        DURATION_ADDRESS = control + C.DENIAL_DURATION,
         TICKS_ADDRESS = ticks,
         LAST_TICK_ADDRESS = control + C.LAST_TICK,
         ZONES_ADDRESS = zones,
         ZONES_END_ADDRESS = zones + ZONE_COUNT * ZONE_SIZE,
         STACK_RADIUS = DENIAL_STACK_RADIUS,
         STACK_SPAN = 2 * DENIAL_STACK_RADIUS,
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        TILE_FLAGS_ADDRESS = tileFlags,
-        BUILDING_TILE_ADDRESS = buildingTiles,
-        UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
-        UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
-        UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
-        UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
         TAIL_ADDRESS = tunneler + TUNNELER_TAIL,
         RETURN_ADDRESS = tunneler + TUNNELER_ARRIVED_HOOK + TUNNELER_ARRIVED_HOOK_SIZE,
       })
       remember(tunneler + TUNNELER_ARRIVED_HOOK, TUNNELER_ARRIVED_HOOK_SIZE)
       writeJump(tunneler + TUNNELER_ARRIVED_HOOK, arrival, TUNNELER_ARRIVED_HOOK_SIZE)
-      retargetReady = true
 
-      -- The first target a tunnel is ever given goes through the same narrowing, so a
-      -- tunnel starts out aimed at the piece of wall nearest the enemy's camp.
-      if keepIds ~= nil or campIds ~= nil then
-        local firstAim = core.allocateAssembly(templates.initial_aim, {
-          TAKE_RESULT_ADDRESS = takeResult,
-          BEST_DISTANCE_ADDRESS = bestDistance,
-          RECORD_BREACH_ADDRESS = recordBreach,
-          RUN_SEARCH_ADDRESS = runSearch,
-          MIN_ADVANCE_ADDRESS = control + C.MIN_ADVANCE,
-          FIND_TARGET_ADDRESS = finder,
-          ALG_RESULT_ADDRESS = readAddress(finder + FIND_RESULT_OPERAND),
-          ALG_TARGET_X_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_X_OPERAND),
-          ALG_TARGET_Y_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_Y_OPERAND),
-          CURRENT_UNIT_ADDRESS = currentUnit,
-          TOWARDS_ENABLED_ADDRESS = control + C.TOWARDS,
-          BIAS_ACTIVE_ADDRESS = control + C.BIAS_ACTIVE,
-          ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,
-          BEST_TILE_ADDRESS = control + C.BEST_TILE,
-          ROUNDS_ADDRESS = control + C.ROUNDS,
-          INITIAL_UNIT_ADDRESS = control + C.INITIAL_UNIT,
-          ORIGIN_X_ADDRESS = control + C.ORIGIN_X,
-          ORIGIN_Y_ADDRESS = control + C.ORIGIN_Y,
-          BEST_X_ADDRESS = control + C.BEST_X,
-          BEST_Y_ADDRESS = control + C.BEST_Y,
-          UNIT_WORKPLACE = (unitBase + UNIT_WORKPLACE) & 0xFFFFFFFF,
-          BUILDING_SOME_X = (buildingBase + BUILDING_SOME_X) & 0xFFFFFFFF,
-          BUILDING_SOME_Y = (buildingBase + BUILDING_SOME_Y) & 0xFFFFFFFF,
-          SEARCH_ROUNDS = SEARCH_ROUNDS,
-          ANCHOR_ADDRESS = anchor or anchorStub,
-          ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
-          PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
-          DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
-          SHARED_SLOT_ADDRESS = control + C.SHARED_SLOT,
-          CLAIMS_ADDRESS = control + C.CLAIMS,
-          CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
-          CLAIMS_ACTIVE_ADDRESS = control + C.CLAIMS_ACTIVE,
-          CLAIM_STRIDE = TRAIL.claimStride,
-          CLAIM_ADDRESS = claim,
-          OURS_ADDRESS = control + C.OURS,
-          GAME_TILE_ADDRESS = control + C.GAME_TILE,
-          SKIP_UNIT_ADDRESS = control + C.SKIP_UNIT,
-          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-          REPORT_ADDRESS = report,
-          REPORT_PAD_ADDRESS = reportPad,
-          BREACH_ADDRESS = breach,
-          BREACH_OWNER_ADDRESS = control + C.BREACH_OWNER,
-          BREACH_X_ADDRESS = control + C.BREACH_X,
-          BREACH_Y_ADDRESS = control + C.BREACH_Y,
-          DEPTH_SLACK = DEPTH_SLACK,
-          DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
-          BUILDING_STRIDE = SEARCH_STRIDE,
-          UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-          RETURN_ADDRESS = tunneler + TUNNELER_FIND_TARGET_CALL + 5,
-        })
-        remember(tunneler + TUNNELER_FIND_TARGET_CALL, 5)
-        writeJump(tunneler + TUNNELER_FIND_TARGET_CALL, firstAim, 5)
-
-        -- ... and the net beneath it: the game tears the entrance down the moment the path
-        -- to the new target will not lay, so a target of ours that the path finder refuses
-        -- would cost the player their tunnel. This puts the game's own answer back and
-        -- tries that before letting it give up.
-        if guardsHold(tunneler + TUNNELER_PATH_HOOK,
-            { [0] = TUNNELER_GUARDS[TUNNELER_PATH_HOOK] }, "the tunnel's own path") then
-          -- The game's own "nothing to do this tick" exit, read out of the jump it takes
-          -- when its search comes up empty, so no offset for it is guessed at.
-          local nothingToday = jumpTarget(tunneler + TUNNELER_NO_TARGET_JUMP)
-          if nothingToday < tunneler or nothingToday >= tunneler + TUNNELER_LENGTH then
-            log(WARNING, string.format(
-              "improved-tunnelers: the tunneler's own give-up point came out at 0x%X, which "
-              .. "is not inside its update function; the net under a refused path is off.",
-              nothingToday))
-            nothingToday = nil
-          end
-          local pathCheck = nothingToday ~= nil and core.allocateAssembly(templates.path_check, {
-            OURS_ADDRESS = control + C.OURS,
-            SKIP_UNIT_ADDRESS = control + C.SKIP_UNIT,
-            ALG_RESULT_ADDRESS = readAddress(finder + FIND_RESULT_OPERAND),
-            CURRENT_UNIT_ADDRESS = currentUnit,
-            NOTHING_TODAY_ADDRESS = nothingToday,
-            DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-            REPORT_ADDRESS = report,
-            REPORT_PAD_ADDRESS = reportPad,
-            RETURN_ADDRESS = tunneler + TUNNELER_PATH_LAID,
-            GIVE_UP_ADDRESS = tunneler + TUNNELER_PATH_GIVE_UP,
-          })
-          if pathCheck then
-            remember(tunneler + TUNNELER_PATH_HOOK, TUNNELER_PATH_HOOK_SIZE)
-            writeJump(tunneler + TUNNELER_PATH_HOOK, pathCheck, TUNNELER_PATH_HOOK_SIZE)
-          end
-        end
-      end
-
-      -- ... and the other trigger: the moment a collapse takes a building down, every
-      -- other tunnel of that player aimed at the same spot is sent somewhere new.
-      local scan = core.allocateAssembly(templates.collapse_scan, {
-        ANCHOR_ADDRESS = anchor or anchorStub,
-        ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
-        ANCHOR_BEST_ADDRESS = control + C.ANCHOR_BEST,
-        CAMP_X_ADDRESS = control + C.CAMP_X,
-        CAMP_Y_ADDRESS = control + C.CAMP_Y,
-        SCRATCH_ADDRESS = control + C.SCRATCH,
-        SHARED_ADDRESS = control + C.SHARED,
-        TRAIL_ADDRESS = control + C.TRAIL,
-        TRAIL_STRIDE = TRAIL.stride,
-        TRAIL_COUNT = TRAIL.count,
-        TRAIL_ENTRY = TRAIL.entry,
-        TICKS_ADDRESS = ticks or 0,
-        UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
-        WALL_FAMILY = WALL_FAMILY_FLAGS,
+      -- The first target: lines, over the game's own answer.
+      local firstAim = core.allocateAssembly(templates.place_aim, {
+        OURS_ADDRESS = control + C.OURS,
+        FIND_TARGET_ADDRESS = finder,
         RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
+        ALG_RESULT_ADDRESS = algResult,
+        ALG_TARGET_X_ADDRESS = algX,
+        ALG_TARGET_Y_ADDRESS = algY,
+        GAME_TILE_ADDRESS = control + C.GAME_TILE,
+        GAME_X_ADDRESS = control + C.GAME_X,
+        GAME_Y_ADDRESS = control + C.GAME_Y,
+        CURRENT_UNIT_ADDRESS = currentUnit,
+        AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+        UNIT_OWNER = unitField(UNIT_OWNER),
+        UNIT_SIEGE_TARGET = unitField(UNIT_SIEGE_TARGET),
+        UNIT_WORKPLACE = unitField(UNIT_WORKPLACE),
+        AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+        AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
+        RANGE_ADDRESS = control + C.RETARGET_RANGE,
+        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+        BUILDING_STRIDE = SEARCH_STRIDE,
+        BUILDING_SOME_X = (buildingBase + BUILDING_SOME_X) & 0xFFFFFFFF,
+        BUILDING_SOME_Y = (buildingBase + BUILDING_SOME_Y) & 0xFFFFFFFF,
+        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+        RECORD_OF_ADDRESS = recordOf,
+        RECORD_ADDRESS = control + C.RECORD,
+        LINE_ADDRESS = lines,
+        TICKS_ADDRESS = ticks,
+        STANDS_ADDRESS = stands,
+        AIM_PIN_ADDRESS = control + C.AIM_PIN,
+        AIM_MODE_ADDRESS = control + C.AIM_MODE,
+        LINE_SEARCH_ADDRESS = lineSearch,
+        VANILLA_RANGE = VANILLA_RANGE,
+        LINE_LIFETIME = LINE_LIFETIME_SECONDS * TICKS_PER_SECOND,
+        NEW_LINE_ADDRESS = newLine,
         DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
         REPORT_ADDRESS = report,
         REPORT_PAD_ADDRESS = reportPad,
-        PENDING_ADDRESS = control + C.PENDING,
-        REAIM_COUNT_ADDRESS = control + C.REAIM_COUNT,
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        UNIT_COUNT_ADDRESS = unitsState,
-        UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
-        UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
-        UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-        UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
-        UNIT_TYPE = (unitBase + UNIT_TYPE) & 0xFFFFFFFF,
-        UNIT_LOGICAL_STATE = (unitBase + UNIT_LOGICAL_STATE) & 0xFFFFFFFF,
-        UNIT_DYING = (unitBase + UNIT_DYING) & 0xFFFFFFFF,
-        UNIT_DEST_TILE = (unitBase + UNIT_DEST_TILE) & 0xFFFFFFFF,
-        TILE_FLAGS_ADDRESS = tileFlags,
-        BUILDING_TILE_ADDRESS = buildingTiles,
-        TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
-        LOGICAL_ALIVE = UNIT_LOGICAL_ALIVE,
-        DIGGING_STATE = UNIT_STATE_DIGGING,
-        RETURN_ADDRESS = tunneler + TUNNELER_COLLAPSE_DONE_HOOK
-          + TUNNELER_COLLAPSE_DONE_HOOK_SIZE,
+        RETURN_ADDRESS = tunneler + TUNNELER_FIND_TARGET_CALL + 5,
       })
-      remember(tunneler + TUNNELER_COLLAPSE_DONE_HOOK, TUNNELER_COLLAPSE_DONE_HOOK_SIZE)
-      writeJump(tunneler + TUNNELER_COLLAPSE_DONE_HOOK, scan, TUNNELER_COLLAPSE_DONE_HOOK_SIZE)
+      remember(tunneler + TUNNELER_FIND_TARGET_CALL, 5)
+      writeJump(tunneler + TUNNELER_FIND_TARGET_CALL, firstAim, 5)
+
+      -- ... and the net under it, should a line's path refuse to lay.
+      local net = core.allocateAssembly(templates.place_net, {
+        OURS_ADDRESS = control + C.OURS,
+        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+        VANILLA_RANGE = VANILLA_RANGE,
+        LINE_SEARCH_ADDRESS = lineSearch,
+        GAME_TILE_ADDRESS = control + C.GAME_TILE,
+        GAME_X_ADDRESS = control + C.GAME_X,
+        GAME_Y_ADDRESS = control + C.GAME_Y,
+        CURRENT_UNIT_ADDRESS = currentUnit,
+        UNITS_STATE_ADDRESS = unitsState,
+        SET_DESTINATION_ADDRESS = setDestination,
+        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+        REPORT_ADDRESS = report,
+        REPORT_PAD_ADDRESS = reportPad,
+        GIVE_UP_ADDRESS = tunneler + TUNNELER_PATH_GIVE_UP,
+        LAID_ADDRESS = tunneler + TUNNELER_PATH_LAID,
+      })
+      remember(tunneler + TUNNELER_PATH_HOOK, TUNNELER_PATH_HOOK_SIZE)
+      writeJump(tunneler + TUNNELER_PATH_HOOK, net, TUNNELER_PATH_HOOK_SIZE)
+      retargetReady = true
 
       -- The denial test itself, in the one function every placement check goes through.
       if teamSite ~= nil and enemySite ~= nil
@@ -1507,7 +1323,7 @@ return {
     -- 2b. Towers and gates as tunnel targets
     ---------------------------------------------------------------------------------
 
-    local targetsReady, towardsReady = false, false
+    local targetsReady = false
     if tunneler ~= nil then
       if search ~= nil then
         local targets = core.allocateAssembly(templates.tunnel_targets, {
@@ -1541,30 +1357,6 @@ return {
         remember(search + SEARCH_ACCEPT, SEARCH_ACCEPT_SIZE)
         writeJump(search + SEARCH_ACCEPT, accept, SEARCH_ACCEPT_SIZE)
 
-        -- ... and the filter that keeps a re-aimed tunnel working inwards
-        if keepIds ~= nil then
-          local towards = core.allocateAssembly(templates.accept_towards, {
-            BIAS_ACTIVE_ADDRESS = control + C.BIAS_ACTIVE,
-            PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
-            CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
-            CLAIMS_ACTIVE_ADDRESS = control + C.CLAIMS_ACTIVE,
-            CLAIM_COUNT = TRAIL.claims,
-            MIN_ADVANCE_ADDRESS = control + C.MIN_ADVANCE,
-            DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
-            DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
-            ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,
-            CAMP_X_ADDRESS = control + C.CAMP_X,
-            CAMP_Y_ADDRESS = control + C.CAMP_Y,
-            RESULT_TILE = SEARCH_RESULT_TILE,
-            RESULT_Y = SEARCH_RESULT_Y,
-            RESULT_X = SEARCH_RESULT_X,
-            SPREAD_ADDRESS = search + SEARCH_SPREAD,
-            RETURN_ADDRESS = search + SEARCH_TAKE_IT_DONE,
-          })
-          remember(search + SEARCH_TAKE_IT, SEARCH_TAKE_IT_SIZE)
-          writeJump(search + SEARCH_TAKE_IT, towards, SEARCH_TAKE_IT_SIZE)
-          towardsReady = true
-        end
         targetsReady = true
       end
     end
@@ -1657,13 +1449,6 @@ return {
         UNIT_LOOKING_AROUND = (unitBase + UNIT_LOOKING_AROUND) & 0xFFFFFFFF,
         UNIT_SELECTABLE = (unitBase + UNIT_SELECTABLE) & 0xFFFFFFFF,
         HIDE_ENABLED_ADDRESS = control + C.HIDE_SELECT,
-        PENDING_ADDRESS = control + C.PENDING,
-        TICKS_ADDRESS = ticks,
-        LAST_REAIM_TICK_ADDRESS = control + C.LAST_REAIM_TICK,
-        FINISH_LEG_ADDRESS = control + C.FINISH_LEG,
-        REAIM_ADDRESS = reaim or core.allocateCode({ 0xC3 }),
-        REAIM_UNIT_ADDRESS = control + C.REAIM_UNIT,
-        REAIM_ARRIVED_ADDRESS = control + C.REAIM_ARRIVED,
         RETURN_ADDRESS = tunneler + 7,
       })
       remember(tunneler, 7)
@@ -1674,18 +1459,19 @@ return {
     ---------------------------------------------------------------------------------
 
     log(INFO, string.format(
-      "improved-tunnelers: build denial %s%s, digging on %s, targets %s, collapse %s, "
-      .. "buttons %s, tunnelers %s, aim %s, stances %s.",
+      "improved-tunnelers: build denial %s%s, tunnels %s, targets %s, collapse %s, "
+      .. "buttons %s, tunnelers %s, stances %s.",
       denialReady and (denialOn and string.format("on, %d s", denialSeconds) or "off")
         or "unavailable",
       (denialReady and denialOn and messageOn)
         and (messageReady and ", with its own refusal message" or ", with the game's message")
         or "",
       retargetReady and (retargetOn and string.format(
-        "on, %d times, search %d tiles, joining a breach within %d, %s",
-        retargetMax, retargetRange, breachReach,
-        finishLegOn and "finishing the leg first" or "turning where it stands")
-        or "off") or "unavailable",
+        "gather on lines and are sent on %s up to %d times, reaching %d tiles",
+        (anchor ~= nil) and ((campIds ~= nil) and "towards the enemy campfire"
+          or "towards the enemy keep") or "to the nearest fortification",
+        retargetMax, retargetRange)
+        or "as the game digs them") or "unavailable",
       targetsReady and (targetsOn and "walls, towers and gates" or "walls only")
         .. (underOn and ", digging under the town" or "")
         .. (familyReady and ", stairs and crenellations damaged as wall is" or "")
@@ -1695,13 +1481,10 @@ return {
         or "") .. string.format(", %d tiles a tick", collapseSpeed) or "unavailable",
       uiReady and (uiOn and "on" or "off") or "unavailable",
       (aimReady and untargetableOn) and "hidden while digging" or "as the game leaves them",
-      (towardsReady and towardsOn)
-        and ((campIds ~= nil) and "towards the enemy campground" or "towards the enemy keep")
-        or "the nearest one",
       stanceReady and (stancesOn and "on" or "off") or "unavailable"))
     if diagnosticsOn then
-      log(INFO, "improved-tunnelers: diagnostics are on; every tunnel arrival, every tunnel "
-        .. "collapse and every building attempt near a denial writes a line to this log.")
+      log(INFO, "improved-tunnelers: diagnostics are on; every tunnel dug in, every arrival "
+        .. "and every building attempt near a denial writes a line to this log.")
     end
   end,
 

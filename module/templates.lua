@@ -27,6 +27,7 @@
 -- way of its owner or its owner's allies.
 --
 -- Loading a save or starting a new game moves the tick counter backwards; when that
+-- Loading a save or starting a new game moves the tick counter backwards; when that
 -- happens the whole list is dropped rather than left to expire against a clock that no
 -- longer applies.
 local denial_check = [[
@@ -157,200 +158,760 @@ push ebx
 jmp RETURN_ADDRESS
 ]]
 
----------------------------------------------------------------------------------------
--- Sending a tunnel at another target
----------------------------------------------------------------------------------------
--- The one place that changes a tunnel's aim, called from both hooks below. It runs the
--- game's own tunnel target search from wherever the tunneler is standing and, when the
--- search finds something, gives it a new destination with the game's own path finder. The
--- tunneler stays in its digging state and simply carries on from where it is: nothing is
--- teleported back to the entrance and no state is invented, so the tunnel is one
--- continuous tunnel that bends towards the new target.
+-- Hooked where the placement handler has decided it cannot build and is about to put the
+-- reason up in the bottom left corner. The game looks its message up as text group 0x4D
+-- entry <reason code>, so when the refusal was this module's own denial zone - and from
+-- this very tick, never a stale one - the entry number is swapped for the one the module
+-- wrote its own line into. Everything else about the refusal is untouched, including the
+-- reason code itself, so the lord still says what he always says.
 --
--- Each tunneler may only do this so many times, counted in a small ring of {uid, count}.
--- A search that finds nothing does not count against it.
+-- EAX carries the entry number and is meant to be changed here; ECX is loaded with the
+-- display's address two instructions later, so it is free.
+local placement_message = [[
+cmp dword [MINE_ADDRESS], 0
+je message_vanilla
+mov ecx, [TICKS_ADDRESS]
+cmp ecx, [MINE_TICK_ADDRESS]
+jne message_vanilla
+mov eax, MESSAGE_ENTRY
+message_vanilla:
+push 6000
+jmp RETURN_ADDRESS
+]]
+
+---------------------------------------------------------------------------------------
+-- Where a tunnel goes
+---------------------------------------------------------------------------------------
+-- Everything below sits on the game's own tunnel target search, algTunnelerFindTarget: a
+-- spread over the map from a starting tile that stops at the first enemy wall, gate or
+-- tower it will take. What it leaves behind is both the answer and the distance map the
+-- game's setDestinationForUnit(..., 2) traces the tunnel back along, so choosing a target
+-- is only ever a matter of running the search in a way that makes it stop somewhere else.
+-- Nothing here lays a path by any other means.
 --
--- Returns 1 when the tunnel was sent somewhere new, 2 when the tunneler has used up its
--- re-aims, and 0 when there was nothing to go to. Only EAX, ECX and EDX are touched, and
--- the game's own functions preserve the rest.
-local reaim = [[
-mov eax, [UNIT_ADDRESS]
-imul eax, eax, 1168
-mov [SCALED_ADDRESS], eax
-call FIND_RECORD_ADDRESS
+-- The rules, per player:
+--
+--   * A player's tunnels gather on lines. The first tunnel dug in at a castle takes the
+--     game's own answer, and that becomes a line; every tunnel dug after it is sent at that
+--     line if its own search can reach it within the search range. One that can reach no
+--     line starts a line of its own, so a second siege somewhere else gets its own meeting
+--     point. A player keeps up to four lines.
+--   * A tunnel that arrives on a fortification is left entirely to the game: its own
+--     collapse, its own damage.
+--   * A tunnel that arrives on empty ground - another tunnel took its target first - is sent
+--     on from where it stands: at its line if the line still stands and is in reach, else at
+--     the nearest fortification lying towards the enemy's campfire, else, when nothing
+--     stands between it and the campfire, at the nearest fortification of all, which widens
+--     the way in. The line follows: when what it pointed at is gone, the next target one of
+--     its tunnels is sent at becomes the line.
+--   * The keep is never spread into (tunnel_targets below), so every path goes round it.
+--
+-- Sending a tunnel on never replaces the tunnel it has dug. Its path plan is kept whole
+-- from the entrance and the new leg added to the end, so when it finally collapses the
+-- game's own collapse, and everything this module adds to it, runs over the entire tunnel
+-- exactly as it would for one dug in a straight line.
+
+-- The filter the searches run through. Hooked on the three stores inside the search that
+-- say "this tile is the target" - the one place walls, gates and towers all come through.
+-- AIM_MODE picks what it does, and every search this module runs sets it and clears it
+-- again straight afterwards, so the game's own searches - its first aim, the AI's tunnels -
+-- always find the filter off:
+--
+--   0  take the tile, as the game does
+--   1  take only AIM_PIN, and spread on past anything else
+--   2  take only a tile inside a cone of 45 degrees either side of the line from
+--      AIM_FROM towards the enemy's campfire, and spread on past anything else
+--
+-- The cone test is dot(v, w) > 0 and 2 dot(v, w)^2 >= |v|^2 |w|^2, v being the candidate
+-- less AIM_FROM and w the direction to the camp scaled down to 64 on its longer side, so
+-- everything fits a 32 bit register however far across the map the camp is.
+--
+-- EBP is the tile, EDI its y and EDX its x, which is what the three stores it replaces
+-- are about; EAX and ECX are dead here either way and EBX is kept for the search.
+local aim_filter = [[
+mov eax, [AIM_MODE_ADDRESS]
 test eax, eax
-jne reaim_budget_left
-mov eax, 2
+je filter_take
+cmp eax, 1
+jne filter_cone
+cmp ebp, [AIM_PIN_ADDRESS]
+je filter_take
+jmp SPREAD_ADDRESS
+filter_cone:
+push ebx
+mov eax, edx
+sub eax, [AIM_FROM_X_ADDRESS]
+mov ecx, edi
+sub ecx, [AIM_FROM_Y_ADDRESS]
+mov ebx, eax
+imul ebx, [AIM_DIR_X_ADDRESS]
+imul eax, eax
+push eax
+mov eax, ecx
+imul eax, [AIM_DIR_Y_ADDRESS]
+add ebx, eax
+imul ecx, ecx
+pop eax
+add eax, ecx
+test ebx, ebx
+jle filter_outside
+imul eax, [AIM_DIR_LENGTH_ADDRESS]
+imul ebx, ebx
+add ebx, ebx
+cmp ebx, eax
+jb filter_outside
+pop ebx
+filter_take:
+mov [esi+RESULT_TILE], ebp
+mov [esi+RESULT_Y], edi
+mov [esi+RESULT_X], edx
+jmp RETURN_ADDRESS
+filter_outside:
+pop ebx
+jmp SPREAD_ADDRESS
+]]
+
+-- One run of the search: for AIM_OWNER against AIM_SIEGE, from AIM_FROM, no further than
+-- AIM_RANGE, through the filter in AIM_MODE - which it puts back to 0 before it returns,
+-- whatever happened. EAX comes back as the tile found, 0 for nothing. EAX, ECX and EDX.
+local line_search = [[
+push dword [AIM_FROM_Y_ADDRESS]
+push dword [AIM_FROM_X_ADDRESS]
+push dword [AIM_RANGE_ADDRESS]
+push dword [AIM_SIEGE_ADDRESS]
+push dword [AIM_OWNER_ADDRESS]
+mov ecx, PATH_STATE_ADDRESS
+call SEARCH_ADDRESS
+mov dword [AIM_MODE_ADDRESS], 0
+mov eax, [ALG_RESULT_ADDRESS]
 ret
-reaim_budget_left:
-mov eax, [SCALED_ADDRESS]
-mov dword [BEST_TILE_ADDRESS], 0
-mov dword [ROUNDS_ADDRESS], 0
-mov dword [BIAS_ACTIVE_ADDRESS], 0
-mov dword [DEPTH_LIMIT_ADDRESS], 0
-mov dword [PINNED_TILE_ADDRESS], 0
-mov dword [SHARED_SLOT_ADDRESS], 0
-mov ecx, [ADVANCE_ADDRESS]
-mov [MIN_ADVANCE_ADDRESS], ecx
-mov [SEARCH_UNIT_ADDRESS], eax
-movsx ecx, word [eax+UNIT_X]
-mov [ORIGIN_X_ADDRESS], ecx
-movsx ecx, word [eax+UNIT_Y]
-mov [ORIGIN_Y_ADDRESS], ecx
+]]
+
+-- Whether a fortification still stands on tile EDX: a wall, a crenellation or a stair in
+-- the flag layer, or a building. EAX 1 or 0; nothing else is touched.
+local stands = [[
+xor eax, eax
+test edx, edx
+jle stands_done
+test dword [edx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
+jnz stands_yes
+cmp word [edx*2+BUILDING_TILE_ADDRESS], 0
+je stands_done
+stands_yes:
+mov eax, 1
+stands_done:
+ret
+]]
+
+-- The record of the tunneler at AIM_UNIT (scaled): {uid, times sent on, its line, spare},
+-- 16 bytes, found by uid in a ring. A tunneler not in it takes the next entry of the ring,
+-- starting from nothing, so one that dies simply leaves its entry to be reused. The entry
+-- is left in RECORD_ADDRESS. EAX, ECX and EDX.
+local record_of = [[
+mov eax, [AIM_UNIT_ADDRESS]
+mov edx, [eax+UNIT_UID]
+mov ecx, RECORDS_ADDRESS
+record_look:
+cmp [ecx], edx
+je record_found
+add ecx, 16
+cmp ecx, RECORDS_END_ADDRESS
+jb record_look
+mov ecx, [RING_CURSOR_ADDRESS]
+mov [ecx], edx
+mov dword [ecx+4], 0
+mov dword [ecx+8], 0
+lea edx, [ecx+16]
+cmp edx, RECORDS_END_ADDRESS
+jb record_cursor
+mov edx, RECORDS_ADDRESS
+record_cursor:
+mov [RING_CURSOR_ADDRESS], edx
+record_found:
+mov [RECORD_ADDRESS], ecx
+ret
+]]
+
+-- A new line for AIM_OWNER at what the last search found, handed to the record in
+-- RECORD_ADDRESS. A line is 16 bytes, {tile, x, y, tick last used}, four to a player. The
+-- slot taken is an empty one if there is one, else one whose target has come down, else
+-- the one used least recently. EAX, ECX and EDX; ESI and EDI are kept.
+local new_line = [[
+push esi
+push edi
+mov esi, [AIM_OWNER_ADDRESS]
+shl esi, 6
+add esi, LINE_ADDRESS
+mov ecx, 4
+new_empty:
+cmp dword [esi], 0
+jle new_take
+add esi, 16
+sub ecx, 1
+jnz new_empty
+sub esi, 64
+mov edi, esi
+mov ecx, 4
+new_down:
+mov edx, [esi]
+call STANDS_ADDRESS
+test eax, eax
+je new_take
+mov eax, [esi+12]
+cmp eax, [edi+12]
+jae new_not_older
+mov edi, esi
+new_not_older:
+add esi, 16
+sub ecx, 1
+jnz new_down
+mov esi, edi
+new_take:
+mov edx, [ALG_RESULT_ADDRESS]
+mov [esi], edx
+mov edx, [ALG_TARGET_X_ADDRESS]
+mov [esi+4], edx
+mov edx, [ALG_TARGET_Y_ADDRESS]
+mov [esi+8], edx
+mov edx, [TICKS_ADDRESS]
+mov [esi+12], edx
+mov ecx, [RECORD_ADDRESS]
+mov [ecx+8], esi
+pop edi
+pop esi
+ret
+]]
+
+-- The first target a tunnel is given. Replaces the call to findTunnelTarget in the
+-- tunneler's state 9, which the game makes once a tick - widening its search 20, 20, 40,
+-- 40, 80, 80 tiles - until it finds something. That call still happens, unchanged, and
+-- decides when the tunnel is ready; nothing is done until it has an answer.
+--
+-- Then each of the player's lines is tried in turn: one whose target still stands, is not
+-- further off than the search range in either direction, and which the search - run from
+-- the very spot the game searched from - can actually reach. The first that answers is
+-- joined, and the game goes on to trace its path there. If a line's target is the game's
+-- own answer it is joined without a search at all. If none answers, the game's own search
+-- is run once more at its own full reach, so that its answer and the map the path is
+-- traced along are what they were, and that answer starts a new line.
+--
+-- A line nobody has used for LINE_LIFETIME ticks is dropped: the siege it belonged to has
+-- stopped, or the game was restarted or loaded - one unsigned comparison catches both, since
+-- a clock that went backwards makes the difference wrap to something enormous. A line in
+-- use never ages, because every tunnel that joins it or moves it on stamps it afresh. OURS records that the answer is a line rather than the game's own, for
+-- the net below. EAX goes back as findTunnelTarget's own answer; EBX, ESI and EDI are kept.
+local place_aim = [[
+mov dword [OURS_ADDRESS], 0
+call FIND_TARGET_ADDRESS
+test eax, eax
+je place_done
+cmp dword [RETARGET_ENABLED_ADDRESS], 0
+je place_found
+push ebx
+push esi
+push edi
+mov ecx, [ALG_RESULT_ADDRESS]
+mov [GAME_TILE_ADDRESS], ecx
+mov ecx, [ALG_TARGET_X_ADDRESS]
+mov [GAME_X_ADDRESS], ecx
+mov ecx, [ALG_TARGET_Y_ADDRESS]
+mov [GAME_Y_ADDRESS], ecx
+mov eax, [CURRENT_UNIT_ADDRESS]
+imul eax, eax, 1168
+mov [AIM_UNIT_ADDRESS], eax
 movsx ecx, word [eax+UNIT_OWNER]
-imul ecx, ecx, CLAIM_STRIDE
-add ecx, CLAIMS_ADDRESS
-mov [CLAIMS_SLOT_ADDRESS], ecx
-mov dword [CLAIMS_ACTIVE_ADDRESS], 1
-cmp dword [TOWARDS_ENABLED_ADDRESS], 0
-je reaim_search
-mov [ANCHOR_UNIT_ADDRESS], eax
-call ANCHOR_ADDRESS
-mov eax, [SCALED_ADDRESS]
-cmp dword [ANCHOR_BEST_ADDRESS], -1
-je reaim_search
-movsx edx, word [eax+UNIT_X]
-sub edx, [CAMP_X_ADDRESS]
-imul edx, edx
-mov [ORIGIN_DISTANCE_ADDRESS], edx
-movsx edx, word [eax+UNIT_Y]
-sub edx, [CAMP_Y_ADDRESS]
-imul edx, edx
-add [ORIGIN_DISTANCE_ADDRESS], edx
-mov dword [BIAS_ACTIVE_ADDRESS], 1
-movsx ecx, word [eax+UNIT_OWNER]
-mov [BREACH_OWNER_ADDRESS], ecx
-movsx ecx, word [eax+UNIT_X]
-mov [BREACH_X_ADDRESS], ecx
-movsx ecx, word [eax+UNIT_Y]
-mov [BREACH_Y_ADDRESS], ecx
-call BREACH_ADDRESS
-cmp dword [ARRIVED_ADDRESS], 0
-je reaim_may_join
-mov dword [PINNED_TILE_ADDRESS], 0
-reaim_may_join:
-mov ecx, [SHARED_SLOT_ADDRESS]
-test ecx, ecx
-je reaim_no_mark
-mov ecx, [ecx+16]
-test ecx, ecx
-je reaim_no_mark
-cmp ecx, [ORIGIN_DISTANCE_ADDRESS]
-jae reaim_no_mark
-mov [ORIGIN_DISTANCE_ADDRESS], ecx
-reaim_no_mark:
-reaim_search:
-call RUN_SEARCH_ADDRESS
-cmp dword [ALG_RESULT_ADDRESS], 0
-jne reaim_round_found
-cmp dword [PINNED_TILE_ADDRESS], 0
-je reaim_free_miss
-mov dword [PINNED_TILE_ADDRESS], 0
-jmp reaim_search
-reaim_free_miss:
-cmp dword [BEST_TILE_ADDRESS], 0
-jne reaim_has_target
-cmp dword [CLAIMS_ACTIVE_ADDRESS], 0
-je reaim_unclaimed_too
-mov dword [CLAIMS_ACTIVE_ADDRESS], 0
-jmp reaim_search
-reaim_unclaimed_too:
-cmp dword [BIAS_ACTIVE_ADDRESS], 0
-je reaim_nothing
-mov dword [BIAS_ACTIVE_ADDRESS], 0
-jmp reaim_search
-reaim_round_found:
-call TAKE_RESULT_ADDRESS
-cmp dword [PINNED_TILE_ADDRESS], 0
-je reaim_round_free
-mov dword [PINNED_TILE_ADDRESS], 0
-jmp reaim_has_target
-reaim_round_free:
-cmp dword [BIAS_ACTIVE_ADDRESS], 0
-je reaim_has_target
-cmp dword [DEPTH_LIMIT_ADDRESS], 0
-jne reaim_depth_set
-mov edx, [BEST_TILE_ADDRESS]
-movsx edx, word [edx*2+DISTANCE_MAP_ADDRESS]
-add edx, DEPTH_SLACK
-mov [DEPTH_LIMIT_ADDRESS], edx
-reaim_depth_set:
-call BEST_DISTANCE_ADDRESS
-add dword [ROUNDS_ADDRESS], 1
-mov ecx, [ROUNDS_ADDRESS]
-cmp ecx, SEARCH_ROUNDS
-jae reaim_has_target
-mov eax, [SCALED_ADDRESS]
-jmp reaim_search
-reaim_has_target:
-mov dword [BIAS_ACTIVE_ADDRESS], 0
-mov dword [MIN_ADVANCE_ADDRESS], 0
-mov dword [DEPTH_LIMIT_ADDRESS], 0
-mov dword [PINNED_TILE_ADDRESS], 0
-mov dword [CLAIMS_ACTIVE_ADDRESS], 0
-call CLAIM_ADDRESS
-call RECORD_BREACH_ADDRESS
-mov eax, [SCALED_ADDRESS]
-movzx ecx, word [eax+UNIT_PATH_INDEX]
-mov word [eax+UNIT_PATH_LENGTH], cx
-mov ecx, 1
-cmp dword [ARRIVED_ADDRESS], 0
-je reaim_fill
-cmp dword [COLLAPSE_BEHIND_ADDRESS], 0
-je reaim_fill
-movsx ecx, word [eax+UNIT_OWNER]
-shl ecx, 8
-reaim_fill:
-mov [FILL_FLAGS_ADDRESS], ecx
-mov ecx, [UNIT_ADDRESS]
-mov [FILL_UNIT_ADDRESS], ecx
-call FILL_ADDRESS
+mov [AIM_OWNER_ADDRESS], ecx
+movsx ecx, word [eax+UNIT_SIEGE_TARGET]
+mov [AIM_SIEGE_ADDRESS], ecx
+mov ecx, [RANGE_ADDRESS]
+mov [AIM_RANGE_ADDRESS], ecx
+movsx ecx, word [eax+UNIT_WORKPLACE]
+imul ecx, ecx, BUILDING_STRIDE
+movsx edx, word [ecx+BUILDING_SOME_X]
+mov [AIM_FROM_X_ADDRESS], edx
+movsx edx, word [ecx+BUILDING_SOME_Y]
+mov [AIM_FROM_Y_ADDRESS], edx
+call RECORD_OF_ADDRESS
+mov ecx, [RECORD_ADDRESS]
+mov dword [ecx+4], 0
+mov dword [ecx+8], 0
+xor ebx, ebx
+mov esi, [AIM_OWNER_ADDRESS]
+shl esi, 6
+add esi, LINE_ADDRESS
+mov edi, 4
+place_try:
+mov edx, [esi]
+test edx, edx
+jle place_next
+mov eax, [TICKS_ADDRESS]
+sub eax, [esi+12]
+cmp eax, LINE_LIFETIME
+jbe place_current
+mov dword [esi], 0
+jmp place_next
+place_current:
+call STANDS_ADDRESS
+test eax, eax
+je place_next
+cmp edx, [GAME_TILE_ADDRESS]
+je place_is_line
+mov eax, [esi+4]
+sub eax, [AIM_FROM_X_ADDRESS]
+cdq
+xor eax, edx
+sub eax, edx
+cmp eax, [AIM_RANGE_ADDRESS]
+jg place_next
+mov eax, [esi+8]
+sub eax, [AIM_FROM_Y_ADDRESS]
+cdq
+xor eax, edx
+sub eax, edx
+cmp eax, [AIM_RANGE_ADDRESS]
+jg place_next
+mov edx, [esi]
+mov [AIM_PIN_ADDRESS], edx
+mov dword [AIM_MODE_ADDRESS], 1
+mov ebx, 1
+call LINE_SEARCH_ADDRESS
+test eax, eax
+jne place_joined
+place_next:
+add esi, 16
+sub edi, 1
+jnz place_try
+test ebx, ebx
+je place_start_line
+mov dword [AIM_RANGE_ADDRESS], VANILLA_RANGE
+call LINE_SEARCH_ADDRESS
+place_start_line:
+call NEW_LINE_ADDRESS
+mov dword [REPORT_ADDRESS+20], 2
+jmp place_report
+place_joined:
+mov dword [OURS_ADDRESS], 1
+mov dword [REPORT_ADDRESS+20], 1
+jmp place_mine
+place_is_line:
+mov dword [REPORT_ADDRESS+20], 3
+place_mine:
+mov ecx, [RECORD_ADDRESS]
+mov [ecx+8], esi
+mov eax, [TICKS_ADDRESS]
+mov [esi+12], eax
+place_report:
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je place_quiet
+mov eax, [CURRENT_UNIT_ADDRESS]
+mov [REPORT_ADDRESS], eax
+mov eax, [ALG_RESULT_ADDRESS]
+mov [REPORT_ADDRESS+4], eax
+mov dword [REPORT_ADDRESS+8], 0
+mov eax, [GAME_TILE_ADDRESS]
+mov [REPORT_ADDRESS+12], eax
+mov eax, [RECORD_ADDRESS]
+mov eax, [eax+8]
+sub eax, LINE_ADDRESS
+shr eax, 4
+mov [REPORT_ADDRESS+16], eax
+mov dword [REPORT_ADDRESS+28], 40
+call REPORT_PAD_ADDRESS
+place_quiet:
+pop edi
+pop esi
+pop ebx
+place_found:
+mov eax, 1
+place_done:
+jmp RETURN_ADDRESS
+]]
+
+-- The net under that. The game traces the tunnel's path the moment it has its target, and
+-- if the trace fails it tears the entrance down on the spot. The search and the tracer do
+-- not always agree, so when the target was the line - a choice the unmodified game would
+-- not have made - and the trace fails, the game's own answer is searched for again from
+-- the same spot and traced instead. Only when that fails too does the game give up, which
+-- is exactly when the unmodified game would have.
+--
+-- Hooked on the test straight after the trace, with EAX its result. The unit is already
+-- standing at the entrance, which is where the search starts.
+local place_net = [[
+test eax, eax
+jne net_laid
+cmp dword [OURS_ADDRESS], 0
+je net_give_up
+mov dword [OURS_ADDRESS], 0
+mov dword [AIM_RANGE_ADDRESS], VANILLA_RANGE
+call LINE_SEARCH_ADDRESS
 push 2
-push dword [BEST_Y_ADDRESS]
-push dword [BEST_X_ADDRESS]
-push dword [UNIT_ADDRESS]
+push dword [GAME_Y_ADDRESS]
+push dword [GAME_X_ADDRESS]
+push dword [CURRENT_UNIT_ADDRESS]
 mov ecx, UNITS_STATE_ADDRESS
 call SET_DESTINATION_ADDRESS
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je net_quiet
+push eax
+mov [REPORT_ADDRESS+12], eax
+mov eax, [CURRENT_UNIT_ADDRESS]
+mov [REPORT_ADDRESS], eax
+mov eax, [GAME_TILE_ADDRESS]
+mov [REPORT_ADDRESS+4], eax
+mov dword [REPORT_ADDRESS+28], 45
+call REPORT_PAD_ADDRESS
+pop eax
+net_quiet:
 test eax, eax
-je reaim_nothing
+jne net_laid
+net_give_up:
+jmp GIVE_UP_ADDRESS
+net_laid:
+jmp LAID_ADDRESS
+]]
+
+-- Sending a tunnel on from where it stands, once it has arrived on empty ground. Tried in
+-- this order, each a single run of the search from the tunneler's own tile:
+--
+--   1  its line, when the line still stands somewhere other than here and is no further
+--      off than the search range in either direction
+--   2  the nearest fortification inside the cone towards the enemy's campfire
+--   3  the nearest fortification of all - nothing stands between here and the campfire
+--      within reach, so the way in is widened instead
+--
+-- Then the line moves on to whatever was chosen if what it pointed at is gone - or, for a
+-- tunnel that has no line, a line is started - and the tunnel is extended to it
+-- (extend_plan). Each tunnel may be sent on only so many times.
+--
+-- EAX comes back 1 when the tunnel is on its way somewhere new and 0 when it should
+-- collapse where it is. REDIRECT_HOW says which of the three it was (1-3) or why nothing
+-- came of it (4 used up, 5 nothing in reach, 6 the path would not lay or the plan is
+-- full). EBX, ESI and EDI are kept.
+local redirect = [[
+push ebx
+push esi
+push edi
+mov esi, [CURRENT_UNIT_ADDRESS]
+imul esi, esi, 1168
+mov [AIM_UNIT_ADDRESS], esi
+call RECORD_OF_ADDRESS
+mov dword [REDIRECT_HOW_ADDRESS], 4
+mov ecx, [RECORD_ADDRESS]
+mov edx, [ecx+4]
+cmp edx, [MAX_ADDRESS]
+jae redirect_none
+movsx ecx, word [esi+UNIT_OWNER]
+mov [AIM_OWNER_ADDRESS], ecx
+movsx ecx, word [esi+UNIT_SIEGE_TARGET]
+mov [AIM_SIEGE_ADDRESS], ecx
+mov ecx, [RANGE_ADDRESS]
+mov [AIM_RANGE_ADDRESS], ecx
+movsx ecx, word [esi+UNIT_X]
+mov [AIM_FROM_X_ADDRESS], ecx
+movsx ecx, word [esi+UNIT_Y]
+mov [AIM_FROM_Y_ADDRESS], ecx
+mov edi, [esi+UNIT_TILE]
+mov ecx, [RECORD_ADDRESS]
+mov ebx, [ecx+8]
+test ebx, ebx
+je redirect_cone
+mov eax, [TICKS_ADDRESS]
+sub eax, [ebx+12]
+cmp eax, LINE_LIFETIME
+jbe redirect_line_current
+mov dword [ecx+8], 0
+jmp redirect_cone
+redirect_line_current:
+mov edx, [ebx]
+cmp edx, edi
+je redirect_cone
+call STANDS_ADDRESS
+test eax, eax
+je redirect_cone
+mov eax, [ebx+4]
+sub eax, [AIM_FROM_X_ADDRESS]
+cdq
+xor eax, edx
+sub eax, edx
+cmp eax, [AIM_RANGE_ADDRESS]
+jg redirect_cone
+mov eax, [ebx+8]
+sub eax, [AIM_FROM_Y_ADDRESS]
+cdq
+xor eax, edx
+sub eax, edx
+cmp eax, [AIM_RANGE_ADDRESS]
+jg redirect_cone
+mov edx, [ebx]
+mov [AIM_PIN_ADDRESS], edx
+mov dword [AIM_MODE_ADDRESS], 1
+call LINE_SEARCH_ADDRESS
+mov dword [REDIRECT_HOW_ADDRESS], 1
+test eax, eax
+jne redirect_go
+redirect_cone:
+mov [ANCHOR_UNIT_ADDRESS], esi
+call ANCHOR_ADDRESS
+test eax, eax
+je redirect_widen
+mov eax, [CAMP_X_ADDRESS]
+sub eax, [AIM_FROM_X_ADDRESS]
+mov ecx, [CAMP_Y_ADDRESS]
+sub ecx, [AIM_FROM_Y_ADDRESS]
+mov edx, eax
+test edx, edx
+jge redirect_abs_x
+neg edx
+redirect_abs_x:
+mov ebx, ecx
+test ebx, ebx
+jge redirect_abs_y
+neg ebx
+redirect_abs_y:
+cmp edx, ebx
+jge redirect_longest
+mov edx, ebx
+redirect_longest:
+test edx, edx
+je redirect_widen
+mov ebx, edx
+imul eax, eax, 64
+cdq
+idiv ebx
+mov [AIM_DIR_X_ADDRESS], eax
+mov eax, ecx
+imul eax, eax, 64
+cdq
+idiv ebx
+mov [AIM_DIR_Y_ADDRESS], eax
+imul eax, eax
+mov ecx, [AIM_DIR_X_ADDRESS]
+imul ecx, ecx
+add eax, ecx
+mov [AIM_DIR_LENGTH_ADDRESS], eax
+mov dword [AIM_MODE_ADDRESS], 2
+call LINE_SEARCH_ADDRESS
+mov dword [REDIRECT_HOW_ADDRESS], 2
+test eax, eax
+jne redirect_go
+redirect_widen:
+mov dword [AIM_MODE_ADDRESS], 0
+call LINE_SEARCH_ADDRESS
+mov dword [REDIRECT_HOW_ADDRESS], 3
+test eax, eax
+jne redirect_go
+mov dword [REDIRECT_HOW_ADDRESS], 5
+jmp redirect_none
+redirect_go:
+mov ecx, [RECORD_ADDRESS]
+mov ebx, [ecx+8]
+test ebx, ebx
+jne redirect_have_line
+call NEW_LINE_ADDRESS
+jmp redirect_extend
+redirect_have_line:
+mov edx, [ebx]
+call STANDS_ADDRESS
+test eax, eax
+jne redirect_line_used
+mov edx, [ALG_RESULT_ADDRESS]
+mov [ebx], edx
+mov edx, [ALG_TARGET_X_ADDRESS]
+mov [ebx+4], edx
+mov edx, [ALG_TARGET_Y_ADDRESS]
+mov [ebx+8], edx
+redirect_line_used:
+mov edx, [TICKS_ADDRESS]
+mov [ebx+12], edx
+redirect_extend:
+call EXTEND_ADDRESS
+test eax, eax
+jne redirect_extended
+mov dword [REDIRECT_HOW_ADDRESS], 6
+jmp redirect_none
+redirect_extended:
 mov ecx, [RECORD_ADDRESS]
 add dword [ecx+4], 1
 mov eax, 1
-ret
-reaim_nothing:
-mov dword [BIAS_ACTIVE_ADDRESS], 0
-mov dword [MIN_ADVANCE_ADDRESS], 0
-mov dword [DEPTH_LIMIT_ADDRESS], 0
-mov dword [PINNED_TILE_ADDRESS], 0
-mov dword [CLAIMS_ACTIVE_ADDRESS], 0
+jmp redirect_out
+redirect_none:
+mov dword [AIM_MODE_ADDRESS], 0
 xor eax, eax
+redirect_out:
+pop edi
+pop esi
+pop ebx
+ret
+]]
+
+-- Laying the new leg while keeping the tunnel one piece. The game's own trace,
+-- setDestinationForUnit(unit, x, y, 2), always writes a fresh plan starting where the unit
+-- stands: plan index 0, the ladder exit and the previous tile moved up to here. The game's
+-- collapse walks a tunnel from that ladder exit along the plan, lowering the ground the dig
+-- raised and doing its damage as it goes, so a plan started afresh here would leave every
+-- tile dug before it raised for ever and undamaged.
+--
+-- So what has been dug is saved first - its steps, the ladder exit, the previous tile -
+-- the trace is laid, its steps are moved up behind the saved ones (last first, so nothing
+-- is overwritten before it has been read), the saved ones go back in front, and the plan
+-- index is left at the join, where the unit is standing. A plan holds 800 steps; if the
+-- tunnel would not fit, or the trace fails, everything is put back exactly as it was,
+-- including the "arrived" status, and EAX comes back 0 so the tunnel collapses there.
+--
+-- Steps are four bits each, two to a byte, the even step in the low half - the way the
+-- game's own mover reads them. EAX 1 on success. EBX, ESI and EDI are kept.
+local extend_plan = [[
+push ebx
+push esi
+push edi
+mov esi, [AIM_UNIT_ADDRESS]
+movzx edi, word [esi+UNIT_PATH_INDEX]
+movzx eax, word [esi+UNIT_LADDER_X]
+mov [SAVE_LADDER_X_ADDRESS], eax
+movzx eax, word [esi+UNIT_LADDER_Y]
+mov [SAVE_LADDER_Y_ADDRESS], eax
+mov eax, [esi+UNIT_PREVIOUS_TILE]
+mov [SAVE_PREVIOUS_ADDRESS], eax
+lea ecx, [edi+1]
+shr ecx, 1
+xor edx, edx
+extend_save:
+cmp edx, ecx
+jae extend_saved
+mov al, [esi+edx+UNIT_PATH_PLAN]
+mov [edx+PLAN_BUFFER_ADDRESS], al
+add edx, 1
+jmp extend_save
+extend_saved:
+push 2
+push dword [ALG_TARGET_Y_ADDRESS]
+push dword [ALG_TARGET_X_ADDRESS]
+push dword [CURRENT_UNIT_ADDRESS]
+mov ecx, UNITS_STATE_ADDRESS
+call SET_DESTINATION_ADDRESS
+test eax, eax
+je extend_put_back
+movzx ebx, word [esi+UNIT_PATH_LENGTH]
+lea eax, [ebx+edi]
+cmp eax, PLAN_STEPS
+ja extend_put_back
+mov ecx, ebx
+extend_move:
+test ecx, ecx
+je extend_moved
+sub ecx, 1
+mov eax, ecx
+shr eax, 1
+movzx edx, byte [esi+eax+UNIT_PATH_PLAN]
+test ecx, 1
+je extend_move_low
+shr edx, 4
+extend_move_low:
+and edx, 15
+lea eax, [ecx+edi]
+call extend_put
+jmp extend_move
+extend_moved:
+xor ecx, ecx
+extend_restore:
+cmp ecx, edi
+jae extend_restored
+mov eax, ecx
+shr eax, 1
+movzx edx, byte [eax+PLAN_BUFFER_ADDRESS]
+test ecx, 1
+je extend_restore_low
+shr edx, 4
+extend_restore_low:
+and edx, 15
+mov eax, ecx
+call extend_put
+add ecx, 1
+jmp extend_restore
+extend_restored:
+lea eax, [ebx+edi]
+mov [esi+UNIT_PATH_LENGTH], ax
+mov [esi+UNIT_PATH_INDEX], di
+call extend_ladder
+mov eax, 1
+jmp extend_out
+extend_put_back:
+lea ecx, [edi+1]
+shr ecx, 1
+xor edx, edx
+extend_unsave:
+cmp edx, ecx
+jae extend_unsaved
+mov al, [edx+PLAN_BUFFER_ADDRESS]
+mov [esi+edx+UNIT_PATH_PLAN], al
+add edx, 1
+jmp extend_unsave
+extend_unsaved:
+mov [esi+UNIT_PATH_LENGTH], di
+mov [esi+UNIT_PATH_INDEX], di
+mov word [esi+UNIT_MOVE_STATUS], 0
+call extend_ladder
+xor eax, eax
+extend_out:
+pop edi
+pop esi
+pop ebx
+ret
+extend_ladder:
+mov eax, [SAVE_LADDER_X_ADDRESS]
+mov [esi+UNIT_LADDER_X], ax
+mov eax, [SAVE_LADDER_Y_ADDRESS]
+mov [esi+UNIT_LADDER_Y], ax
+mov eax, [SAVE_PREVIOUS_ADDRESS]
+mov [esi+UNIT_PREVIOUS_TILE], eax
+ret
+extend_put:
+push ecx
+mov ecx, eax
+shr ecx, 1
+test eax, 1
+movzx eax, byte [esi+ecx+UNIT_PATH_PLAN]
+je extend_put_low
+and eax, 15
+shl edx, 4
+or eax, edx
+jmp extend_put_done
+extend_put_low:
+and eax, 240
+or eax, edx
+extend_put_done:
+mov [esi+ecx+UNIT_PATH_PLAN], al
+pop ecx
 ret
 ]]
 
 ---------------------------------------------------------------------------------------
 -- A tunnel reaching the end of its tunnel
 ---------------------------------------------------------------------------------------
--- Hooked in UpdateTunneler where the dig has reached its destination and the game is about
--- to switch the tunneler into its collapse. Two things happen here.
+-- Hooked in UpdateTunneler where hasUnitReachedDestination has just said yes and the game
+-- is about to switch the tunneler into its collapse. Two things happen here.
 --
--- If something is standing on the tile - a wall, a gate, a tower, any building - the
--- collapse goes ahead as usual, and this is the moment a build denial is recorded, because
--- it is the last moment the target is certainly still there: the collapse's own damage
--- ticks can take a weak wall down before the destroying tick. A second collapse at the same
--- breach does not take a second zone, it adds its time to the one already standing there.
+-- If a fortification is standing on the tile - a wall, a gate, a tower, any building -
+-- the collapse goes ahead exactly as the game runs it, and this is the moment a build
+-- denial is recorded, because it is the last moment the target is certainly still there:
+-- the collapse's own damage ticks can take a weak wall down before the destroying tick. A
+-- second collapse at the same breach does not take a second zone, it adds its time to the
+-- one already standing there.
 --
--- If the tile is empty - the wall was taken while this tunnel was still digging - the tunnel
--- is sent at another target from where it stands and the function returns without
--- collapsing anything, so the tunneler digs straight on.
+-- If the tile is empty - another tunnel took the target first - the tunnel is sent on
+-- (redirect) and the function returns through its own tail without switching state, so
+-- the tunneler digs straight on. If there is nowhere to send it, the game collapses it
+-- where it stands, as it always would have.
+--
+-- Only one tunnel is sent on in any one tick. Sending one on runs the game's target search
+-- up to three times, and each run is anything from fifty thousand instructions to well
+-- over a million when the search has to spread to the edge of its range - so a group of
+-- tunnels that arrive on the same breach together, handled in one tick, is a hitch the
+-- player sees. The others wait: returning through the tail without switching state leaves
+-- a tunneler exactly where it is, in state 3 with nowhere left to go, and the game brings
+-- it straight back here on the next tick. Nothing about it changes in the meantime but the
+-- digging animation's counter.
 local arrival = [[
-mov eax, [CURRENT_UNIT_ADDRESS]
-mov ecx, eax
-and ecx, 7
-shr eax, 3
-mov dl, 1
-shl dl, cl
-not dl
-and byte [eax+PENDING_ADDRESS], dl
 mov eax, [CURRENT_UNIT_ADDRESS]
 imul eax, eax, 1168
 mov ecx, [eax+UNIT_TILE]
@@ -367,31 +928,48 @@ test dx, dx
 jnz arrived_on_something
 cmp dword [RETARGET_ENABLED_ADDRESS], 0
 je arrive_quiet
-mov edx, [CURRENT_UNIT_ADDRESS]
-mov [REAIM_UNIT_ADDRESS], edx
-mov dword [REAIM_ARRIVED_ADDRESS], 1
-call REAIM_ADDRESS
-cmp eax, 2
-je arrive_used_up
-test eax, eax
-je arrive_found_nothing
-mov dword [REPORT_ADDRESS+28], 7
+mov ecx, [TICKS_ADDRESS]
+cmp ecx, [LAST_REDIRECT_ADDRESS]
+je arrive_wait
+mov [LAST_REDIRECT_ADDRESS], ecx
+call REDIRECT_ADDRESS
 cmp dword [DIAGNOSTICS_ADDRESS], 0
-je dig_on
+je arrive_redirect_said
+push eax
+mov ecx, 43
+test eax, eax
+je arrive_redirect_code
+mov ecx, 42
+arrive_redirect_code:
+mov [REPORT_ADDRESS+28], ecx
+mov ecx, [CURRENT_UNIT_ADDRESS]
+mov [REPORT_ADDRESS], ecx
+mov ecx, [ALG_RESULT_ADDRESS]
+mov [REPORT_ADDRESS+4], ecx
+mov dword [REPORT_ADDRESS+8], 0
+mov ecx, [REDIRECT_HOW_ADDRESS]
+mov [REPORT_ADDRESS+12], ecx
+mov ecx, [RECORD_ADDRESS]
+mov edx, [ecx+4]
+mov [REPORT_ADDRESS+20], edx
+mov ecx, [ecx+8]
+test ecx, ecx
+je arrive_no_line
+mov ecx, [ecx]
+arrive_no_line:
+mov [REPORT_ADDRESS+16], ecx
 call REPORT_PAD_ADDRESS
-dig_on:
+pop eax
+arrive_redirect_said:
+test eax, eax
+je arrive_quiet
+arrive_wait:
 jmp TAIL_ADDRESS
-arrive_used_up:
-mov dword [REPORT_ADDRESS+28], 6
-jmp arrive_report
-arrive_found_nothing:
-mov dword [REPORT_ADDRESS+28], 9
-jmp arrive_report
 arrived_on_something:
 cmp dword [DENIAL_ENABLED_ADDRESS], 0
-je arrive_quiet
+je arrive_on_it
 cmp dword [DURATION_ADDRESS], 0
-jle arrive_quiet
+jle arrive_on_it
 push ebx
 mov ebx, [CURRENT_UNIT_ADDRESS]
 imul ebx, ebx, 1168
@@ -473,6 +1051,9 @@ mov [ecx+12], edx
 mov [REPORT_ADDRESS+32], edx
 mov dword [REPORT_ADDRESS+28], 12
 pop ebx
+jmp arrive_report
+arrive_on_it:
+mov dword [REPORT_ADDRESS+28], 41
 arrive_report:
 cmp dword [DIAGNOSTICS_ADDRESS], 0
 je arrive_quiet
@@ -483,142 +1064,7 @@ jmp RETURN_ADDRESS
 ]]
 
 ---------------------------------------------------------------------------------------
--- ... and every other tunnel of that player, the moment one collapses
----------------------------------------------------------------------------------------
--- Hooked at the end of the collapse, once the building that stood over the tunnel has been
--- destroyed. Every other tunneler of the same player digging towards that same spot has
--- just lost its target, and this is where they hear about it: each is sent at another
--- target from where it is, instead of digging on to a wall that is no longer there and
--- collapsing under nothing.
---
--- The scan is the game's own: unit slots 1 up to the live unit count, skipping everything
--- that is not a living tunneler of that player in its digging state. It runs once per
--- collapse, so walking the slots costs nothing.
-local collapse_scan = [[
-pushad
-cmp dword [RETARGET_ENABLED_ADDRESS], 0
-je scan_done
-mov eax, [CURRENT_UNIT_ADDRESS]
-imul eax, eax, 1168
-movsx ebp, word [eax+UNIT_OWNER]
-movsx esi, word [eax+UNIT_X]
-movsx edi, word [eax+UNIT_Y]
-mov dword [REAIM_COUNT_ADDRESS], 0
-mov ebx, 1
-scan_loop:
-mov eax, [UNIT_COUNT_ADDRESS]
-cmp ebx, eax
-jge scan_report
-mov eax, ebx
-imul eax, eax, 1168
-cmp word [eax+UNIT_LOGICAL_STATE], LOGICAL_ALIVE
-jne scan_next
-cmp word [eax+UNIT_DYING], 0
-jne scan_next
-cmp word [eax+UNIT_TYPE], TUNNELER_TYPE
-jne scan_next
-cmp word [eax+UNIT_STATE], DIGGING_STATE
-jne scan_next
-movsx edx, word [eax+UNIT_OWNER]
-cmp edx, ebp
-jne scan_next
-mov edx, [eax+UNIT_DEST_TILE]
-test dword [edx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
-jnz scan_next
-cmp word [edx*2+BUILDING_TILE_ADDRESS], 0
-jne scan_next
-mov ecx, ebx
-mov eax, ebx
-shr eax, 3
-and ecx, 7
-mov edx, 1
-shl edx, cl
-or byte [eax+PENDING_ADDRESS], dl
-add dword [REAIM_COUNT_ADDRESS], 1
-scan_next:
-add ebx, 1
-jmp scan_loop
-scan_report:
-cmp dword [DIAGNOSTICS_ADDRESS], 0
-je scan_done
-cmp dword [REAIM_COUNT_ADDRESS], 0
-je scan_done
-mov [REPORT_ADDRESS], ebp
-mov [REPORT_ADDRESS+20], esi
-mov [REPORT_ADDRESS+24], edi
-mov eax, [REAIM_COUNT_ADDRESS]
-mov [REPORT_ADDRESS+32], eax
-mov dword [REPORT_ADDRESS+28], 8
-call REPORT_PAD_ADDRESS
-scan_done:
-mov eax, [CURRENT_UNIT_ADDRESS]
-imul eax, eax, 1168
-mov [ANCHOR_UNIT_ADDRESS], eax
-call ANCHOR_ADDRESS
-cmp dword [ANCHOR_BEST_ADDRESS], -1
-je scan_no_mark
-mov eax, [CURRENT_UNIT_ADDRESS]
-imul eax, eax, 1168
-movsx ecx, word [eax+UNIT_OWNER]
-shl ecx, 5
-add ecx, SHARED_ADDRESS
-movsx edx, word [eax+UNIT_X]
-sub edx, [CAMP_X_ADDRESS]
-imul edx, edx
-mov [SCRATCH_ADDRESS], edx
-movsx edx, word [eax+UNIT_Y]
-sub edx, [CAMP_Y_ADDRESS]
-imul edx, edx
-add edx, [SCRATCH_ADDRESS]
-cmp dword [ecx+16], 0
-je scan_set_mark
-cmp edx, [ecx+16]
-jae scan_no_mark
-scan_set_mark:
-mov [ecx+16], edx
-mov eax, [TICKS_ADDRESS]
-mov [ecx+28], eax
-mov eax, ebp
-imul eax, eax, TRAIL_STRIDE
-add eax, TRAIL_ADDRESS
-mov ecx, [eax]
-cmp ecx, TRAIL_COUNT
-jb scan_trail_room
-xor ecx, ecx
-scan_trail_room:
-imul edx, ecx, TRAIL_ENTRY
-lea edx, [eax+edx+4]
-add ecx, 1
-mov [eax], ecx
-mov eax, [CURRENT_UNIT_ADDRESS]
-imul eax, eax, 1168
-mov eax, [eax+UNIT_TILE]
-mov [edx], eax
-mov [edx+4], esi
-mov [edx+8], edi
-cmp dword [DIAGNOSTICS_ADDRESS], 0
-je scan_no_mark
-mov [REPORT_ADDRESS], ebp
-mov [REPORT_ADDRESS+4], eax
-mov [REPORT_ADDRESS+20], esi
-mov [REPORT_ADDRESS+24], edi
-mov eax, [CURRENT_UNIT_ADDRESS]
-imul eax, eax, 1168
-movsx eax, word [eax+UNIT_OWNER]
-shl eax, 5
-add eax, SHARED_ADDRESS
-mov eax, [eax+16]
-mov [REPORT_ADDRESS+32], eax
-mov [REPORT_ADDRESS+36], ecx
-mov dword [REPORT_ADDRESS+28], 14
-call REPORT_PAD_ADDRESS
-scan_no_mark:
-popad
-mov eax, [CURRENT_UNIT_ADDRESS]
-jmp RETURN_ADDRESS
-]]
----------------------------------------------------------------------------------------
--- What a tunnel is allowed to aim at
+-- What a tunnel is allowed to aim at, and what it may pass beneath
 ---------------------------------------------------------------------------------------
 -- Hooked into the game's tunnel target search, at the test that decides which tiles the
 -- search may spread into. In the unmodified game a tile with a building on it is only
@@ -633,25 +1079,35 @@ jmp RETURN_ADDRESS
 --
 -- EDX holds the building type here and is the search's scratch register; everything else
 -- the loop is using is left alone.
--- Hooked where the placement handler has decided it cannot build and is about to put the
--- reason up in the bottom left corner. The game looks its message up as text group 0x4D
--- entry <reason code>, so when the refusal was this module's own denial zone - and from
--- this very tick, never a stale one - the entry number is swapped for the one the module
--- wrote its own line into. Everything else about the refusal is untouched, including the
--- reason code itself, so the lord still says what he always says.
---
--- EAX carries the entry number and is meant to be changed here; ECX is loaded with the
--- display's address two instructions later, so it is free.
-local placement_message = [[
-cmp dword [MINE_ADDRESS], 0
-je message_vanilla
-mov ecx, [TICKS_ADDRESS]
-cmp ecx, [MINE_TICK_ADDRESS]
-jne message_vanilla
-mov eax, MESSAGE_ENTRY
-message_vanilla:
-push 6000
-jmp RETURN_ADDRESS
+-- Whether the search may spread past a tile with a building on it. With tunnels allowed
+-- under the town the answer is yes for everything except a keep: a tunnel works its way
+-- round one rather than under it, so the three keep types are refused even then. EDX is the
+-- building's type and is dead after this test; ECX, EAX and EBX belong to the search's own
+-- neighbour loop and are left alone.
+local tunnel_targets = [[
+cmp dword [UNDER_ENABLED_ADDRESS], 0
+je targets_by_type
+sub edx, KEEP_FIRST_TYPE
+cmp edx, KEEP_TYPE_SPAN
+jbe targets_skip
+jmp targets_allow
+targets_by_type:
+cmp dword [ENABLED_ADDRESS], 0
+je targets_vanilla
+cmp edx, TYPE_LIMIT
+ja targets_skip
+mov edx, [edx*4+GATE_OR_TOWER_ADDRESS]
+test edx, edx
+jne targets_allow
+jmp targets_skip
+targets_vanilla:
+add edx, -74
+cmp edx, 2
+ja targets_skip
+targets_allow:
+jmp ALLOW_ADDRESS
+targets_skip:
+jmp SKIP_ADDRESS
 ]]
 
 -- ... and the same list again, where the search decides a tile it has reached IS the
@@ -667,6 +1123,28 @@ jmp RETURN_ADDRESS
 --
 -- EAX holds the building id on entry and the game wants it multiplied out by the building
 -- size, which is the instruction this replaces; EDX is free here.
+local tunnel_accept = [[
+imul eax, eax, BUILDING_STRIDE
+movsx edx, word [eax+BUILDING_TYPE_ADDRESS]
+cmp dword [ENABLED_ADDRESS], 0
+je accept_vanilla
+cmp edx, TYPE_LIMIT
+ja accept_spread_on
+cmp dword [edx*4+GATE_OR_TOWER_ADDRESS], 0
+je accept_spread_on
+jmp RETURN_ADDRESS
+accept_vanilla:
+add edx, -74
+cmp edx, 2
+ja accept_spread_on
+jmp RETURN_ADDRESS
+accept_spread_on:
+jmp SPREAD_ADDRESS
+]]
+
+---------------------------------------------------------------------------------------
+-- The collapse
+---------------------------------------------------------------------------------------
 -- Stairs and crenellations, damaged the way the game damages a wall.
 --
 -- The game's own damage routine sorts the tile it is handed before it does anything. A
@@ -778,9 +1256,6 @@ mov word [eax+UNIT_PATH_LENGTH], 0
 jmp RETURN_ADDRESS
 ]]
 
----------------------------------------------------------------------------------------
--- A tunnel falling in
----------------------------------------------------------------------------------------
 -- The game brings a whole tunnel down in the one frame the tunneler reaches its target:
 -- every tile damaged and every tile's ground lowered at once. That is a visible stutter on
 -- a long tunnel, and it looks like nothing in particular. These three scripts take the
@@ -790,438 +1265,8 @@ jmp RETURN_ADDRESS
 -- The first walks a tunneler's path plan and writes each tile into a queue: where it is,
 -- and who is bringing it down. Nothing else happens here, so a collapse costs no more than
 -- a few dozen writes.
--- Which camp a tunnel is working towards. A tunneler sent out with an attack wave carries
--- the player it was sent against, and that player's campground - where their peasants
--- gather - is the answer. A tunneler the player dug in by hand carries nobody: the game
--- reads that as "any enemy will do" and aims at whatever wall is nearest, and the old
--- lookup here gave up on it entirely, which is why those tunnels converged on nothing.
--- So when there is no player named, every player who is neither us nor an ally is
--- considered and the nearest of their camps taken. A player with no campground - razed,
--- or a map that never gave them one - is measured by their keep instead.
---
--- In: the scaled unit, at ANCHOR_UNIT. Out: EAX 1 with the camp written into CAMP_X and
--- CAMP_Y, or EAX 0 if there is nothing to aim at.
--- The game paths the tunneler to its target the moment the aim is taken, and if that path
--- cannot be laid it does not try anything else: it destroys the tunnel entrance on the spot
--- (the "give up" call three instructions along). The search and the path finder do not always
--- agree - the search spreads through tiles the path finder will not tunnel through - so a
--- target this module picked could cost the player the entrance where the game's own nearest
--- one would have worked.
---
--- So when the path will not lay and the target was one of ours, the frame is abandoned through
--- the game's own "nothing to do this tick" exit - the same one it takes when its search finds
--- nothing at all, which leaves the tunneler and its entrance exactly as they were. The tunnel
--- is noted, and the next time the game aims that tunneler this module keeps out of it, so the
--- game's own choice is used and the tunnel gets under way. Nothing is redirected mid-frame and
--- no entrance is lost that the unmodified game would have kept. A path the game itself could
--- not lay is still the game's own business, and it gives up exactly as it always did.
-local path_check = [[
-test eax, eax
-jne path_laid
-cmp dword [OURS_ADDRESS], 0
-je path_give_up
-mov dword [OURS_ADDRESS], 0
-mov eax, [CURRENT_UNIT_ADDRESS]
-add eax, 1
-mov [SKIP_UNIT_ADDRESS], eax
-cmp dword [DIAGNOSTICS_ADDRESS], 0
-je path_wait
-mov eax, [CURRENT_UNIT_ADDRESS]
-mov [REPORT_ADDRESS], eax
-mov eax, [ALG_RESULT_ADDRESS]
-mov [REPORT_ADDRESS+4], eax
-mov dword [REPORT_ADDRESS+28], 31
-call REPORT_PAD_ADDRESS
-path_wait:
-jmp NOTHING_TODAY_ADDRESS
-path_laid:
-jmp RETURN_ADDRESS
-path_give_up:
-jmp GIVE_UP_ADDRESS
-]]
-
--- The breach a player's tunnels are working at, looked up for whichever tunnel is being
--- aimed. Hand it the player and the spot the digging starts from; it answers by writing
--- down the slot (so the caller can record a new breach in it) and, when the breach is worth
--- joining, the tile to search for and nothing else.
---
--- Beside the breach itself each player keeps a mark: how close to their enemy's camp their
--- tunnels have already got. Every aim has to beat that mark, so once the outer wall is open
--- the next tunnel looks past it rather than taking the next piece of the same wall sideways,
--- and the breaches work their way in towards the camp. The mark only ever moves inwards, it
--- is set when a tunnel actually collapses on something rather than when one is merely aimed,
--- and it is dropped along with the breach when that is given up. When nothing beats the mark
--- the aim falls back to the nearest target as always, so a tunnel is never left with nothing
--- to do.
---
--- A breach is worth joining while something still stands on it, while it is not older than
--- its life, and while it is close by. "Close" is its own short figure, not the range the
--- search may reach: a tunnel will happily dig eighty tiles to find a target, but it should
--- never be dragged eighty tiles sideways to join somebody else's breach when there is a
--- castle wall in front of it. A breach further off than this belongs to the tunnels over
--- there; this one digs at whatever it finds for itself.
---
--- What "close by" is measured from is **where the other tunnel started**, kept in the slot
--- beside the breach, not the breach tile: tunnels dug side by side should arrive together
--- however far off the wall they picked is. Measured to the tile instead, a group of
--- tunnelers dug in at a safe distance - the usual thing, well outside the towers - would
--- each quietly go their own way as soon as the wall was further off than the reach, which
--- is exactly the siege the joining is for. The tile is still tried as well, so a tunnel
--- that starts somewhere else but right beside the breach joins it as it always did.
--- The age test also throws away a breach left over from an earlier match, since the tick
--- counter starts again and the subtraction runs wide.
--- How many times this tunnel has already been turned aside. The count lives in a small
--- ring of records kept by unit id - a tunneler that dies frees its slot to whoever takes it
--- next - and this finds or starts the one for the tunnel being re-aimed. EAX comes back 0
--- when the tunnel has used up its allowance and may not be turned aside again.
-local find_record = [[
-mov eax, [SCALED_ADDRESS]
-mov edx, [eax+UNIT_UID]
-mov ecx, RECORDS_ADDRESS
-record_look:
-cmp dword [ecx], edx
-je record_have
-add ecx, 8
-cmp ecx, RECORDS_END_ADDRESS
-jb record_look
-mov ecx, [RING_CURSOR_ADDRESS]
-mov [ecx], edx
-mov dword [ecx+4], 0
-add dword [RING_CURSOR_ADDRESS], 8
-mov edx, [RING_CURSOR_ADDRESS]
-cmp edx, RECORDS_END_ADDRESS
-jb record_have
-mov dword [RING_CURSOR_ADDRESS], RECORDS_ADDRESS
-record_have:
-mov [RECORD_ADDRESS], ecx
-mov edx, [ecx+4]
-cmp edx, [MAX_RETARGETS_ADDRESS]
-jb record_room_left
-xor eax, eax
-ret
-record_room_left:
-mov eax, 1
-ret
-]]
-
-local clear_trail = [[
-mov edx, [BREACH_OWNER_ADDRESS]
-imul edx, edx, TRAIL_STRIDE
-add edx, TRAIL_ADDRESS
-mov dword [edx], 0
-add edx, 4
-mov eax, TRAIL_COUNT
-clear_look:
-mov dword [edx], 0
-add edx, TRAIL_ENTRY
-sub eax, 1
-jnz clear_look
-mov edx, [BREACH_OWNER_ADDRESS]
-imul edx, edx, CLAIM_STRIDE
-add edx, CLAIMS_ADDRESS
-mov dword [edx], 0
-mov eax, CLAIM_COUNT
-clear_claim:
-add edx, 4
-mov dword [edx], 0
-sub eax, 1
-jnz clear_claim
-ret
-]]
-
--- This target is now spoken for: the player's tunnels keep a short ring of what they are
--- digging at, and a later search steps over anything in it. Written at the end of an aim,
--- read by the accept filter above. The cursor runs 1..CLAIM_COUNT so it doubles as the
--- entry's own offset.
--- Three short routines both aims call rather than carry twice. UCP assembles each script
--- in a fixed 64,000 byte buffer and the two aims had grown to the edge of it, so anything
--- they both do lives here. All three touch ECX and EDX only, which both callers treat as
--- scratch across them.
---
--- What the search just answered becomes the best target so far.
-local take_result = [[
-mov ecx, [ALG_RESULT_ADDRESS]
-mov [BEST_TILE_ADDRESS], ecx
-mov ecx, [ALG_TARGET_X_ADDRESS]
-mov [BEST_X_ADDRESS], ecx
-mov ecx, [ALG_TARGET_Y_ADDRESS]
-mov [BEST_Y_ADDRESS], ecx
-ret
-]]
-
--- ... and how far that is from the enemy's camp, which the next round has to beat.
-local best_distance = [[
-mov ecx, [BEST_X_ADDRESS]
-sub ecx, [CAMP_X_ADDRESS]
-imul ecx, ecx
-mov edx, [BEST_Y_ADDRESS]
-sub edx, [CAMP_Y_ADDRESS]
-imul edx, edx
-add ecx, edx
-mov [ORIGIN_DISTANCE_ADDRESS], ecx
-ret
-]]
-
--- The breach this player's tunnels are to work at, written down when none is standing,
--- along with where this tunnel started so the others can tell how near to it they are.
-local record_breach = [[
-mov ecx, [SHARED_SLOT_ADDRESS]
-test ecx, ecx
-je record_breach_done
-cmp dword [ecx], 0
-jne record_breach_done
-mov edx, [BEST_TILE_ADDRESS]
-mov [ecx], edx
-mov edx, [BEST_X_ADDRESS]
-mov [ecx+4], edx
-mov edx, [BEST_Y_ADDRESS]
-mov [ecx+8], edx
-mov edx, [TICKS_ADDRESS]
-mov [ecx+12], edx
-mov edx, [BREACH_X_ADDRESS]
-mov [ecx+20], edx
-mov edx, [BREACH_Y_ADDRESS]
-mov [ecx+24], edx
-record_breach_done:
-ret
-]]
-
--- How far a round of the module's own narrowing needs to spread, which is not the search
--- range the setting gives. Once the first answer has set a depth limit, the accept filter
--- refuses anything deeper than it anyway, so spreading to the full eighty tiles is work
--- thrown away - and it is thrown away once per round, per tunnel, and every tunnel that
--- was working at a breach re-aims the moment it falls. That burst is what shows as a
--- stutter. A wall fifteen tiles out now spreads to twenty-seven rather than eighty.
---
--- The cap only applies while the module's own depth filter is up: a pinned round has to
--- reach its one tile wherever it is, and a round with the filter down is the fallback that
--- must be allowed to find anything at all.
--- One round of the game's own target search, for whichever aim is running: the unit it is
--- for and the spot it spreads from are in the module's own words, so both aims share this
--- rather than carrying the call twice.
-local run_search = [[
-call PICK_RANGE_ADDRESS
-mov ecx, [SEARCH_UNIT_ADDRESS]
-push dword [ORIGIN_Y_ADDRESS]
-push dword [ORIGIN_X_ADDRESS]
-push dword [SEARCH_RANGE_ADDRESS]
-movsx edx, word [ecx+UNIT_SIEGE_TARGET]
-push edx
-movsx edx, word [ecx+UNIT_OWNER]
-push edx
-mov ecx, PATH_STATE_ADDRESS
-call SEARCH_ADDRESS
-ret
-]]
-
-local pick_range = [[
-mov ecx, [RANGE_ADDRESS]
-cmp dword [BIAS_ACTIVE_ADDRESS], 0
-je range_done
-cmp dword [PINNED_TILE_ADDRESS], 0
-jne range_done
-mov edx, [DEPTH_LIMIT_ADDRESS]
-test edx, edx
-je range_done
-cmp edx, ecx
-jae range_done
-mov ecx, edx
-range_done:
-mov [SEARCH_RANGE_ADDRESS], ecx
-ret
-]]
-
-local claim_target = [[
-mov ecx, [CLAIMS_SLOT_ADDRESS]
-test ecx, ecx
-je claim_done
-mov edx, [ecx]
-add edx, 1
-cmp edx, CLAIM_COUNT
-jbe claim_room
-mov edx, 1
-claim_room:
-mov [ecx], edx
-mov eax, [BEST_TILE_ADDRESS]
-mov [ecx+edx*4], eax
-claim_done:
-ret
-]]
-
-local find_breach = [[
-mov ecx, [BREACH_OWNER_ADDRESS]
-shl ecx, 5
-add ecx, SHARED_ADDRESS
-mov [SHARED_SLOT_ADDRESS], ecx
-mov dword [PINNED_TILE_ADDRESS], 0
-cmp dword [ecx+16], 0
-je breach_line_held
-mov eax, [TICKS_ADDRESS]
-sub eax, [ecx+28]
-cmp eax, TRAIL_LIFETIME
-jbe breach_line_held
-mov dword [ecx+16], 0
-mov dword [ecx+28], 0
-call CLEAR_TRAIL_ADDRESS
-breach_line_held:
-mov edx, [ecx]
-test edx, edx
-jle breach_done
-mov eax, [TICKS_ADDRESS]
-sub eax, [ecx+12]
-cmp eax, BREACH_LIFETIME
-ja breach_stale
-test dword [edx*4+TILE_FLAGS_ADDRESS], 256
-jnz breach_stands
-cmp word [edx*2+BUILDING_TILE_ADDRESS], 0
-jne breach_stands
-breach_open:
-mov dword [ecx], 0
-mov dword [ecx+20], 0
-mov dword [ecx+24], 0
-jmp breach_done
-breach_stale:
-mov dword [ecx], 0
-mov dword [ecx+16], 0
-mov dword [ecx+20], 0
-mov dword [ecx+24], 0
-mov dword [ecx+28], 0
-call CLEAR_TRAIL_ADDRESS
-jmp breach_done
-breach_stands:
-mov [PIN_SCRATCH_ADDRESS], edx
-mov eax, [BREACH_X_ADDRESS]
-sub eax, [ecx+20]
-imul eax, eax
-mov edx, eax
-mov eax, [BREACH_Y_ADDRESS]
-sub eax, [ecx+24]
-imul eax, eax
-add eax, edx
-cmp eax, [BREACH_REACH_ADDRESS]
-jbe breach_join
-mov eax, [BREACH_X_ADDRESS]
-sub eax, [ecx+4]
-imul eax, eax
-mov edx, eax
-mov eax, [BREACH_Y_ADDRESS]
-sub eax, [ecx+8]
-imul eax, eax
-add eax, edx
-cmp eax, [BREACH_REACH_ADDRESS]
-jbe breach_join
-push ebx
-mov edx, [BREACH_OWNER_ADDRESS]
-imul edx, edx, TRAIL_STRIDE
-add edx, TRAIL_ADDRESS
-add edx, 4
-mov ecx, TRAIL_COUNT
-breach_trail:
-cmp dword [edx], 0
-jle breach_trail_next
-mov eax, [BREACH_X_ADDRESS]
-sub eax, [edx+4]
-imul eax, eax
-mov ebx, eax
-mov eax, [BREACH_Y_ADDRESS]
-sub eax, [edx+8]
-imul eax, eax
-add eax, ebx
-cmp eax, [BREACH_REACH_ADDRESS]
-jbe breach_trail_hit
-breach_trail_next:
-add edx, TRAIL_ENTRY
-sub ecx, 1
-jnz breach_trail
-pop ebx
-jmp breach_done
-breach_trail_hit:
-pop ebx
-breach_join:
-mov edx, [PIN_SCRATCH_ADDRESS]
-mov [PINNED_TILE_ADDRESS], edx
-breach_done:
-ret
-]]
-
-local find_anchor = [[
-mov dword [ANCHOR_BEST_ADDRESS], -1
-mov eax, [ANCHOR_UNIT_ADDRESS]
-movsx ecx, word [eax+UNIT_SIEGE_TARGET]
-test ecx, ecx
-jle anchor_every_player
-mov [ANCHOR_FROM_ADDRESS], ecx
-mov [ANCHOR_TO_ADDRESS], ecx
-jmp anchor_loop
-anchor_every_player:
-mov dword [ANCHOR_FROM_ADDRESS], 1
-mov dword [ANCHOR_TO_ADDRESS], PLAYER_COUNT
-anchor_loop:
-mov ecx, [ANCHOR_FROM_ADDRESS]
-mov eax, [ANCHOR_UNIT_ADDRESS]
-movsx edx, word [eax+UNIT_OWNER]
-cmp edx, ecx
-je anchor_next
-mov edx, [edx*4+TEAMS_ADDRESS]
-test edx, edx
-je anchor_enemy
-cmp edx, [ecx*4+TEAMS_ADDRESS]
-je anchor_next
-anchor_enemy:
-imul ecx, ecx, PLAYER_STRIDE
-mov edx, [ecx+CAMP_IDS_ADDRESS]
-test edx, edx
-jg anchor_found
-mov edx, [ecx+KEEP_IDS_ADDRESS]
-test edx, edx
-jle anchor_next
-anchor_found:
-imul edx, edx, BUILDING_STRIDE
-movsx ecx, word [edx+BUILDING_X]
-mov [ANCHOR_X_ADDRESS], ecx
-movsx ecx, word [edx+BUILDING_Y]
-mov [ANCHOR_Y_ADDRESS], ecx
-mov eax, [ANCHOR_UNIT_ADDRESS]
-movsx edx, word [eax+UNIT_X]
-sub edx, [ANCHOR_X_ADDRESS]
-imul edx, edx
-mov ecx, edx
-movsx edx, word [eax+UNIT_Y]
-sub edx, [ANCHOR_Y_ADDRESS]
-imul edx, edx
-add ecx, edx
-cmp dword [ANCHOR_BEST_ADDRESS], -1
-je anchor_take
-cmp ecx, [ANCHOR_BEST_ADDRESS]
-jae anchor_next
-anchor_take:
-mov [ANCHOR_BEST_ADDRESS], ecx
-mov ecx, [ANCHOR_X_ADDRESS]
-mov [CAMP_X_ADDRESS], ecx
-mov ecx, [ANCHOR_Y_ADDRESS]
-mov [CAMP_Y_ADDRESS], ecx
-anchor_next:
-mov ecx, [ANCHOR_FROM_ADDRESS]
-add ecx, 1
-mov [ANCHOR_FROM_ADDRESS], ecx
-cmp ecx, [ANCHOR_TO_ADDRESS]
-jle anchor_loop
-cmp dword [ANCHOR_BEST_ADDRESS], -1
-je anchor_nothing
-mov eax, 1
-ret
-anchor_nothing:
-xor eax, eax
-ret
-]]
-
--- ... and what stands in for it on a game whose keep and campground tables were not found.
-local no_anchor = [[
-mov dword [ANCHOR_BEST_ADDRESS], -1
-xor eax, eax
-ret
-]]
-
+-- The plan it walks is the whole tunnel from its entrance, however many times the tunnel was
+-- sent on along the way - extend_plan keeps it so.
 local queue_fill = [[
 mov eax, [FILL_UNIT_ADDRESS]
 imul eax, eax, 1168
@@ -1445,7 +1490,101 @@ movsx ebp, word [RNG_ADDRESS]
 jmp RETURN_ADDRESS
 ]]
 
+---------------------------------------------------------------------------------------
+-- The enemy's campfire
+---------------------------------------------------------------------------------------
+-- Which camp a tunnel is working towards. A tunneler sent out with an attack wave carries
+-- the player it was sent against, and that player's campground - where their peasants
+-- gather - is the answer. A tunneler the player dug in by hand carries nobody: the game
+-- reads that as "any enemy will do" and aims at whatever wall is nearest, and the old
+-- lookup here gave up on it entirely, which is why those tunnels converged on nothing.
+-- So when there is no player named, every player who is neither us nor an ally is
+-- considered and the nearest of their camps taken. A player with no campground - razed,
+-- or a map that never gave them one - is measured by their keep instead.
+--
+-- In: the scaled unit, at ANCHOR_UNIT. Out: EAX 1 with the camp written into CAMP_X and
+-- CAMP_Y, or EAX 0 if there is nothing to aim at.
+local find_anchor = [[
+mov dword [ANCHOR_BEST_ADDRESS], -1
+mov eax, [ANCHOR_UNIT_ADDRESS]
+movsx ecx, word [eax+UNIT_SIEGE_TARGET]
+test ecx, ecx
+jle anchor_every_player
+mov [ANCHOR_FROM_ADDRESS], ecx
+mov [ANCHOR_TO_ADDRESS], ecx
+jmp anchor_loop
+anchor_every_player:
+mov dword [ANCHOR_FROM_ADDRESS], 1
+mov dword [ANCHOR_TO_ADDRESS], PLAYER_COUNT
+anchor_loop:
+mov ecx, [ANCHOR_FROM_ADDRESS]
+mov eax, [ANCHOR_UNIT_ADDRESS]
+movsx edx, word [eax+UNIT_OWNER]
+cmp edx, ecx
+je anchor_next
+mov edx, [edx*4+TEAMS_ADDRESS]
+test edx, edx
+je anchor_enemy
+cmp edx, [ecx*4+TEAMS_ADDRESS]
+je anchor_next
+anchor_enemy:
+imul ecx, ecx, PLAYER_STRIDE
+mov edx, [ecx+CAMP_IDS_ADDRESS]
+test edx, edx
+jg anchor_found
+mov edx, [ecx+KEEP_IDS_ADDRESS]
+test edx, edx
+jle anchor_next
+anchor_found:
+imul edx, edx, BUILDING_STRIDE
+movsx ecx, word [edx+BUILDING_X]
+mov [ANCHOR_X_ADDRESS], ecx
+movsx ecx, word [edx+BUILDING_Y]
+mov [ANCHOR_Y_ADDRESS], ecx
+mov eax, [ANCHOR_UNIT_ADDRESS]
+movsx edx, word [eax+UNIT_X]
+sub edx, [ANCHOR_X_ADDRESS]
+imul edx, edx
+mov ecx, edx
+movsx edx, word [eax+UNIT_Y]
+sub edx, [ANCHOR_Y_ADDRESS]
+imul edx, edx
+add ecx, edx
+cmp dword [ANCHOR_BEST_ADDRESS], -1
+je anchor_take
+cmp ecx, [ANCHOR_BEST_ADDRESS]
+jae anchor_next
+anchor_take:
+mov [ANCHOR_BEST_ADDRESS], ecx
+mov ecx, [ANCHOR_X_ADDRESS]
+mov [CAMP_X_ADDRESS], ecx
+mov ecx, [ANCHOR_Y_ADDRESS]
+mov [CAMP_Y_ADDRESS], ecx
+anchor_next:
+mov ecx, [ANCHOR_FROM_ADDRESS]
+add ecx, 1
+mov [ANCHOR_FROM_ADDRESS], ecx
+cmp ecx, [ANCHOR_TO_ADDRESS]
+jle anchor_loop
+cmp dword [ANCHOR_BEST_ADDRESS], -1
+je anchor_nothing
+mov eax, 1
+ret
+anchor_nothing:
+xor eax, eax
+ret
+]]
 
+-- ... and what stands in for it on a game whose keep and campground tables were not found.
+local no_anchor = [[
+mov dword [ANCHOR_BEST_ADDRESS], -1
+xor eax, eax
+ret
+]]
+
+---------------------------------------------------------------------------------------
+-- A tunneler at work
+---------------------------------------------------------------------------------------
 -- The game's own "is this unit worth aiming at" test, which every unit's update asks
 -- before it shoots at, charges at or runs from somebody. It says no for the states a
 -- citizen is in when it is inside a building; this says no as well for a tunneler that is
@@ -1476,295 +1615,6 @@ target_vanilla:
 jmp RETURN_ADDRESS
 ]]
 
--- Two figures bracket what a re-aimed tunnel may take, and both are counted in tiles of
--- digging, which is what the search's own distance map holds. The depth limit is the
--- ceiling: not deeper than the first answer plus a little room to look along the wall face.
--- The advance is the floor, and it is the one that makes a tunnel go somewhere.
---
--- Without a floor the only inward test is "closer to the enemy camp than where I stand",
--- which the very next tile of the wall the tunnel has just come up under satisfies - and
--- the search stops at the first tile it will take, so that is what it gets. The tunnel then
--- digs one tile, arrives, finds nothing worth collapsing on, turns again, and spends its
--- whole allowance of turns creeping along the wall it already broke. Every one of those
--- turns runs the search several times over, and every tunnel of that player is doing it at
--- once, which is what a player sees as a lag spike and as tunnels that all collapse in the
--- same place having damaged nothing.
---
--- The floor is only up while the module's own narrowing runs: a pinned round has to reach
--- its one tile wherever that is, and the fallback round with the narrowing down must be
--- free to take anything at all rather than leave a tunnel with no target.
---
--- Where the search decides the tile it has reached is the target - the one place walls,
--- gates and towers all come through. With the module looking for something towards the
--- enemy's keep, a target is only taken when it is closer to that keep than the tunneler is
--- standing now; anything else is left behind and the search spreads on past it, so a tunnel
--- works its way inwards instead of wandering along the wall it is already at. The flag is
--- only up while the module's own search runs.
---
--- EBP is the tile, EDI its y and EDX its x, which is what the three stores this replaces
--- are about; EAX and ECX are dead here either way.
-local accept_towards = [[
-cmp dword [PINNED_TILE_ADDRESS], 0
-je accept_free
-cmp ebp, [PINNED_TILE_ADDRESS]
-je accept_take_it
-jmp accept_spread_past
-accept_free:
-cmp dword [BIAS_ACTIVE_ADDRESS], 0
-je accept_take_it
-cmp dword [CLAIMS_ACTIVE_ADDRESS], 0
-je accept_unclaimed
-mov eax, [CLAIMS_SLOT_ADDRESS]
-test eax, eax
-je accept_unclaimed
-mov ecx, CLAIM_COUNT
-accept_claim:
-add eax, 4
-cmp [eax], ebp
-je accept_spread_past
-sub ecx, 1
-jnz accept_claim
-accept_unclaimed:
-movsx ecx, word [ebp*2+DISTANCE_MAP_ADDRESS]
-cmp ecx, [MIN_ADVANCE_ADDRESS]
-jl accept_spread_past
-mov eax, [DEPTH_LIMIT_ADDRESS]
-test eax, eax
-je accept_near_enough
-cmp ecx, eax
-jg accept_spread_past
-accept_near_enough:
-mov eax, edx
-sub eax, [CAMP_X_ADDRESS]
-imul eax, eax
-mov ecx, edi
-sub ecx, [CAMP_Y_ADDRESS]
-imul ecx, ecx
-add eax, ecx
-cmp eax, [ORIGIN_DISTANCE_ADDRESS]
-jge accept_spread_past
-accept_take_it:
-mov [esi+RESULT_TILE], ebp
-mov [esi+RESULT_Y], edi
-mov [esi+RESULT_X], edx
-jmp RETURN_ADDRESS
-accept_spread_past:
-jmp SPREAD_ADDRESS
-]]
-
--- Both aims work the same way past this point. The narrowing on its own walks the target
--- towards the camp round after round, and with tunnels allowed under the town that walk goes
--- straight through the wall and ends at the keep - which is the one thing a breach must not
--- be. So the first answer sets a depth: the tunnelling distance the search itself measured to
--- it, plus a few tiles of room to look along the wall face. Later rounds may move the target
--- sideways within that band but never deeper in.
---
--- The other half is that the player's tunnels have to agree. Each keeps its own slot - the
--- tile the player is breaching - and a tunnel that finds one already set searches for that
--- exact tile and nothing else. Reach it and they all dig at one piece of wall and open one
--- road in; fail to reach it (too far, no way through) and the tunnel quietly falls back to
--- its own narrowing without disturbing the others. The slot is cleared when nothing stands
--- on that tile any more, so the next tunnel to look picks the next piece and the rest follow
--- it in turn.
-
--- The game's own first aim, taken the moment a tunneler has dug itself in. It calls its
--- target search once and digs at whatever it reaches first, which on a long wall is
--- whichever piece happens to be nearest. This lets that call happen - it is what works out
--- where the tunnel starts and winds the entrance's own counter on - and then, if it found
--- something, runs the search again from the same spot with the module's filter up, each
--- round demanding something closer to the enemy's campground than the round before. What
--- the game reads afterwards is the last answer, so the tunnel starts out aimed at the piece
--- of wall nearest their camp instead of the nearest one to itself.
-local initial_aim = [[
-call FIND_TARGET_ADDRESS
-test eax, eax
-je initial_done
-mov dword [SHARED_SLOT_ADDRESS], 0
-mov dword [PINNED_TILE_ADDRESS], 0
-mov dword [DEPTH_LIMIT_ADDRESS], 0
-mov dword [MIN_ADVANCE_ADDRESS], 0
-mov dword [OURS_ADDRESS], 0
-mov ecx, [ALG_RESULT_ADDRESS]
-mov [GAME_TILE_ADDRESS], ecx
-mov ecx, [CURRENT_UNIT_ADDRESS]
-add ecx, 1
-cmp ecx, [SKIP_UNIT_ADDRESS]
-jne initial_our_turn
-mov dword [SKIP_UNIT_ADDRESS], 0
-jmp initial_found
-initial_our_turn:
-call TAKE_RESULT_ADDRESS
-cmp dword [TOWARDS_ENABLED_ADDRESS], 0
-je initial_done
-mov ecx, [CURRENT_UNIT_ADDRESS]
-imul ecx, ecx, 1168
-movsx edx, word [ecx+UNIT_WORKPLACE]
-test edx, edx
-jle initial_found
-imul edx, edx, BUILDING_STRIDE
-movsx eax, word [edx+BUILDING_SOME_X]
-mov [ORIGIN_X_ADDRESS], eax
-movsx eax, word [edx+BUILDING_SOME_Y]
-mov [ORIGIN_Y_ADDRESS], eax
-mov [INITIAL_UNIT_ADDRESS], ecx
-mov [ANCHOR_UNIT_ADDRESS], ecx
-call ANCHOR_ADDRESS
-test eax, eax
-je initial_found
-call BEST_DISTANCE_ADDRESS
-mov dword [ROUNDS_ADDRESS], 0
-mov dword [BIAS_ACTIVE_ADDRESS], 1
-mov ecx, [BEST_TILE_ADDRESS]
-movsx ecx, word [ecx*2+DISTANCE_MAP_ADDRESS]
-add ecx, DEPTH_SLACK
-mov [DEPTH_LIMIT_ADDRESS], ecx
-mov ecx, [INITIAL_UNIT_ADDRESS]
-movsx ecx, word [ecx+UNIT_OWNER]
-mov [BREACH_OWNER_ADDRESS], ecx
-imul ecx, ecx, CLAIM_STRIDE
-add ecx, CLAIMS_ADDRESS
-mov [CLAIMS_SLOT_ADDRESS], ecx
-mov dword [CLAIMS_ACTIVE_ADDRESS], 1
-mov ecx, [BREACH_OWNER_ADDRESS]
-mov ecx, [ORIGIN_X_ADDRESS]
-mov [BREACH_X_ADDRESS], ecx
-mov ecx, [ORIGIN_Y_ADDRESS]
-mov [BREACH_Y_ADDRESS], ecx
-call BREACH_ADDRESS
-mov ecx, [SHARED_SLOT_ADDRESS]
-test ecx, ecx
-je initial_round
-mov ecx, [ecx+16]
-test ecx, ecx
-je initial_round
-cmp ecx, [ORIGIN_DISTANCE_ADDRESS]
-jae initial_round
-mov [ORIGIN_DISTANCE_ADDRESS], ecx
-initial_round:
-call RUN_SEARCH_ADDRESS
-cmp dword [ALG_RESULT_ADDRESS], 0
-je initial_miss
-call TAKE_RESULT_ADDRESS
-cmp dword [PINNED_TILE_ADDRESS], 0
-je initial_free
-mov dword [PINNED_TILE_ADDRESS], 0
-jmp initial_stop
-initial_miss:
-cmp dword [PINNED_TILE_ADDRESS], 0
-je initial_miss_free
-mov dword [PINNED_TILE_ADDRESS], 0
-jmp initial_round
-initial_miss_free:
-cmp dword [CLAIMS_ACTIVE_ADDRESS], 0
-je initial_stop
-mov dword [CLAIMS_ACTIVE_ADDRESS], 0
-jmp initial_round
-initial_free:
-call BEST_DISTANCE_ADDRESS
-add dword [ROUNDS_ADDRESS], 1
-mov ecx, [ROUNDS_ADDRESS]
-cmp ecx, SEARCH_ROUNDS
-jb initial_round
-initial_stop:
-mov dword [BIAS_ACTIVE_ADDRESS], 0
-mov dword [DEPTH_LIMIT_ADDRESS], 0
-mov dword [PINNED_TILE_ADDRESS], 0
-mov dword [CLAIMS_ACTIVE_ADDRESS], 0
-call CLAIM_ADDRESS
-call RECORD_BREACH_ADDRESS
-mov ecx, [BEST_TILE_ADDRESS]
-cmp ecx, [GAME_TILE_ADDRESS]
-je initial_write
-mov dword [OURS_ADDRESS], 1
-initial_write:
-cmp dword [DIAGNOSTICS_ADDRESS], 0
-je initial_quiet
-mov ecx, [CURRENT_UNIT_ADDRESS]
-mov [REPORT_ADDRESS], ecx
-mov ecx, [BEST_TILE_ADDRESS]
-mov [REPORT_ADDRESS+4], ecx
-mov ecx, [GAME_TILE_ADDRESS]
-mov [REPORT_ADDRESS+12], ecx
-mov ecx, [SHARED_SLOT_ADDRESS]
-test ecx, ecx
-je initial_no_slot_said
-mov ecx, [ecx]
-initial_no_slot_said:
-mov [REPORT_ADDRESS+16], ecx
-mov ecx, [ROUNDS_ADDRESS]
-mov [REPORT_ADDRESS+20], ecx
-mov ecx, [DEPTH_LIMIT_ADDRESS]
-mov [REPORT_ADDRESS+24], ecx
-mov dword [REPORT_ADDRESS+28], 30
-call REPORT_PAD_ADDRESS
-initial_quiet:
-mov ecx, [BEST_TILE_ADDRESS]
-mov [ALG_RESULT_ADDRESS], ecx
-mov ecx, [BEST_X_ADDRESS]
-mov [ALG_TARGET_X_ADDRESS], ecx
-mov ecx, [BEST_Y_ADDRESS]
-mov [ALG_TARGET_Y_ADDRESS], ecx
-mov eax, 1
-jmp initial_done
-initial_found:
-mov eax, 1
-initial_done:
-jmp RETURN_ADDRESS
-]]
-
-local tunnel_accept = [[
-imul eax, eax, BUILDING_STRIDE
-movsx edx, word [eax+BUILDING_TYPE_ADDRESS]
-cmp dword [ENABLED_ADDRESS], 0
-je accept_vanilla
-cmp edx, TYPE_LIMIT
-ja accept_spread_on
-cmp dword [edx*4+GATE_OR_TOWER_ADDRESS], 0
-je accept_spread_on
-jmp RETURN_ADDRESS
-accept_vanilla:
-add edx, -74
-cmp edx, 2
-ja accept_spread_on
-jmp RETURN_ADDRESS
-accept_spread_on:
-jmp SPREAD_ADDRESS
-]]
-
--- Whether the search may spread past a tile with a building on it. With tunnels allowed
--- under the town the answer is yes for everything except a keep: a tunnel works its way
--- round one rather than under it, so the three keep types are refused even then. EDX is the
--- building's type and is dead after this test; ECX, EAX and EBX belong to the search's own
--- neighbour loop and are left alone.
-local tunnel_targets = [[
-cmp dword [UNDER_ENABLED_ADDRESS], 0
-je targets_by_type
-sub edx, KEEP_FIRST_TYPE
-cmp edx, KEEP_TYPE_SPAN
-jbe targets_skip
-jmp targets_allow
-targets_by_type:
-cmp dword [ENABLED_ADDRESS], 0
-je targets_vanilla
-cmp edx, TYPE_LIMIT
-ja targets_skip
-mov edx, [edx*4+GATE_OR_TOWER_ADDRESS]
-test edx, edx
-jne targets_allow
-jmp targets_skip
-targets_vanilla:
-add edx, -74
-cmp edx, 2
-ja targets_skip
-targets_allow:
-jmp ALLOW_ADDRESS
-targets_skip:
-jmp SKIP_ADDRESS
-]]
-
----------------------------------------------------------------------------------------
--- Stances
----------------------------------------------------------------------------------------
 -- Hooked into the first instruction of UpdateTunneler. The stance search
 -- (findNearestEnemyAndHeadTowardsIt) only looks at a unit's tribe stance when the unit
 -- has its "standing about, free to react" flag set, and every soldier's update function
@@ -1780,58 +1630,9 @@ jmp SKIP_ADDRESS
 -- each of its points. It is not set while the tunneler walks to a tunnel it has been told
 -- to dig, or while it is underground, so a stance never cancels a dig order either.
 --
--- The block at the top of it is the other half of the re-aim. A tunnel whose target has
--- gone carries a mark - one bit per unit - and this is where the mark is acted on, one
--- tunneler a tick so the search is never run twice in the same frame.
---
--- A tunneler that is standing about is turned there and then. One that is in the middle of
--- a dig is not: it keeps the mark and digs on to where its target stood, and the arrival
--- takes its new target from that spot. That is the whole point of it. Turning a tunneler
--- underground makes it fill in everything it has dug and start again from where it happens
--- to be standing, which leaves the wall it had already broken and the wall it breaks next
--- with a stretch of untouched castle between them. Finishing the leg first puts the two
--- end to end, and a player's tunnels carve one line inwards instead of a scatter of holes.
--- The four states it waits for are the digging ones: 3 and 4 sinking the entrance, 8 and 9
--- underground.
---
 -- Runs before the function's own prologue, so ECX must survive; only EAX and EDX are used.
 local stance = [[
 push ecx
-mov eax, [CURRENT_UNIT_ADDRESS]
-mov ecx, eax
-and ecx, 7
-shr eax, 3
-mov dl, 1
-shl dl, cl
-test byte [eax+PENDING_ADDRESS], dl
-je pending_none
-cmp dword [FINISH_LEG_ADDRESS], 0
-je pending_turn
-mov eax, [CURRENT_UNIT_ADDRESS]
-imul eax, eax, 1168
-movzx eax, word [eax+UNIT_STATE]
-cmp eax, 3
-je pending_none
-cmp eax, 4
-je pending_none
-cmp eax, 8
-je pending_none
-cmp eax, 9
-je pending_none
-mov eax, [CURRENT_UNIT_ADDRESS]
-shr eax, 3
-pending_turn:
-mov ecx, [TICKS_ADDRESS]
-cmp ecx, [LAST_REAIM_TICK_ADDRESS]
-je pending_none
-mov [LAST_REAIM_TICK_ADDRESS], ecx
-not dl
-and byte [eax+PENDING_ADDRESS], dl
-mov ecx, [CURRENT_UNIT_ADDRESS]
-mov [REAIM_UNIT_ADDRESS], ecx
-mov dword [REAIM_ARRIVED_ADDRESS], 0
-call REAIM_ADDRESS
-pending_none:
 cmp dword [HIDE_ENABLED_ADDRESS], 0
 je hide_done
 mov eax, [CURRENT_UNIT_ADDRESS]
@@ -1933,31 +1734,26 @@ jmp RETURN_ADDRESS
 return {
   denial_check = denial_check,
   placement_message = placement_message,
+  aim_filter = aim_filter,
+  line_search = line_search,
+  stands = stands,
+  record_of = record_of,
+  new_line = new_line,
+  place_aim = place_aim,
+  place_net = place_net,
+  redirect = redirect,
+  extend_plan = extend_plan,
   arrival = arrival,
-  reaim = reaim,
-  collapse_scan = collapse_scan,
   tunnel_targets = tunnel_targets,
   tunnel_accept = tunnel_accept,
-  collapse_target = collapse_target,
   damage_family = damage_family,
-  not_a_target = not_a_target,
-  accept_towards = accept_towards,
-  initial_aim = initial_aim,
-  find_anchor = find_anchor,
-  find_breach = find_breach,
-  clear_trail = clear_trail,
-  claim_target = claim_target,
-  pick_range = pick_range,
-  run_search = run_search,
-  take_result = take_result,
-  best_distance = best_distance,
-  record_breach = record_breach,
-  find_record = find_record,
-  path_check = path_check,
-  no_anchor = no_anchor,
+  collapse_target = collapse_target,
   queue_fill = queue_fill,
   queue_step = queue_step,
   queue_tick = queue_tick,
+  find_anchor = find_anchor,
+  no_anchor = no_anchor,
+  not_a_target = not_a_target,
   stance = stance,
   render_tunnel_button = render_tunnel_button,
   tunnel_button_click = tunnel_button_click,
