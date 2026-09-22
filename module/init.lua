@@ -401,6 +401,16 @@ local TRAIL = {
 }
 TRAIL.stride = 4 + TRAIL.count * TRAIL.entry  -- ... behind a cursor, per player
 
+-- And what that player's tunnels are aimed at right now. A tunnel pushing on past a breach
+-- that has been opened must not be sent at a tile one of its fellows is already digging
+-- towards, or the first of them takes it and the rest arrive at bare ground and collapse
+-- having done nothing. Each aim writes its answer here and every later search steps over
+-- what it finds, so the tunnels spread along the line inwards instead of piling onto one
+-- tile. A ring, so it forgets by itself; and a search that can find nothing else is run
+-- again with the list down rather than left with no target at all.
+TRAIL.claims = 8
+TRAIL.claimStride = 4 + TRAIL.claims * 4
+
 local KEEP_FIRST_TYPE = 40
 local KEEP_TYPE_SPAN = 2
 
@@ -570,9 +580,14 @@ C.FAMILY_DAMAGE = 0x2C4                       -- the damage running now is this 
 C.FAMILY_READY = 0x2C8                        -- ... and the widening that lets them is in
 C.FINISH_LEG = 0x2CC                          -- a tunnel under way digs its leg out before
                                               -- it is turned towards anything new
+C.CLAIMS_SLOT = 0x2D8                         -- the claims of the player being aimed for
+C.CLAIMS_ACTIVE = 0x2DC                       -- ... and whether a search is stepping over
+                                              -- them, which is only while the module's own
+                                              -- search runs
+C.SEARCH_RANGE = 0x2E0                        -- how far this round of the search may reach
 C.GAME_TILE = 0x2AC                           -- what the game's own aim answered, so the
                                               -- module can tell its own target from it
-C.QUEUE = 0x2D0
+C.QUEUE = 0x2E8
 C.PENDING = 0xE4                  -- one bit per unit: this tunnel wants a target
 C.PENDING_SIZE = 320
 C.ZONES = C.QUEUE + QUEUE_MAX * 16
@@ -583,7 +598,8 @@ C.SHARED = C.RECORDS + RECORD_COUNT * RECORD_SIZE   -- per player: the breach ti
                                                    -- that was, and where the tunnel that
                                                    -- set it started
 C.TRAIL = C.SHARED + (PLAYER_COUNT + 1) * 32       -- ... and the spots their collapses
-C.SIZE = C.TRAIL + (PLAYER_COUNT + 1) * TRAIL.stride    -- have taken, in order
+C.CLAIMS = C.TRAIL + (PLAYER_COUNT + 1) * TRAIL.stride  -- have taken, in order, and the
+C.SIZE = C.CLAIMS + (PLAYER_COUNT + 1) * TRAIL.claimStride  -- tiles they are digging at now
 
 ---------------------------------------------------------------------------------------
 -- Defaults
@@ -975,6 +991,16 @@ return {
       TRAIL_STRIDE = TRAIL.stride,
       TRAIL_COUNT = TRAIL.count,
       TRAIL_ENTRY = TRAIL.entry,
+      CLAIMS_ADDRESS = control + C.CLAIMS,
+      CLAIM_STRIDE = TRAIL.claimStride,
+      CLAIM_COUNT = TRAIL.claims,
+    })
+
+    -- Writing down what an aim settled on, so the next search steps over it.
+    local claim = core.allocateAssembly(templates.claim_target, {
+      CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
+      BEST_TILE_ADDRESS = control + C.BEST_TILE,
+      CLAIM_COUNT = TRAIL.claims,
     })
 
     -- Which piece of wall this player's tunnels are already working at.
@@ -1132,7 +1158,46 @@ return {
       end
 
       -- The one routine that changes a tunnel's aim. Both hooks below call it.
+      -- The three short routines both aims call rather than carry twice; see the note
+      -- above them in templates.lua for why.
+      local takeResult = core.allocateAssembly(templates.take_result, {
+        ALG_RESULT_ADDRESS = readAddress(finder + FIND_RESULT_OPERAND),
+        ALG_TARGET_X_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_X_OPERAND),
+        ALG_TARGET_Y_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_Y_OPERAND),
+        BEST_TILE_ADDRESS = control + C.BEST_TILE,
+        BEST_X_ADDRESS = control + C.BEST_X,
+        BEST_Y_ADDRESS = control + C.BEST_Y,
+      })
+      local bestDistance = core.allocateAssembly(templates.best_distance, {
+        BEST_X_ADDRESS = control + C.BEST_X,
+        BEST_Y_ADDRESS = control + C.BEST_Y,
+        CAMP_X_ADDRESS = control + C.CAMP_X,
+        CAMP_Y_ADDRESS = control + C.CAMP_Y,
+        ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,
+      })
+      local pickRange = core.allocateAssembly(templates.pick_range, {
+        RANGE_ADDRESS = control + C.RETARGET_RANGE,
+        BIAS_ACTIVE_ADDRESS = control + C.BIAS_ACTIVE,
+        PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
+        DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
+        SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
+      })
+      local recordBreach = core.allocateAssembly(templates.record_breach, {
+        SHARED_SLOT_ADDRESS = control + C.SHARED_SLOT,
+        BEST_TILE_ADDRESS = control + C.BEST_TILE,
+        BEST_X_ADDRESS = control + C.BEST_X,
+        BEST_Y_ADDRESS = control + C.BEST_Y,
+        BREACH_X_ADDRESS = control + C.BREACH_X,
+        BREACH_Y_ADDRESS = control + C.BREACH_Y,
+        TICKS_ADDRESS = ticks,
+      })
+
       reaim = core.allocateAssembly(templates.reaim, {
+        TAKE_RESULT_ADDRESS = takeResult,
+        BEST_DISTANCE_ADDRESS = bestDistance,
+        RECORD_BREACH_ADDRESS = recordBreach,
+        PICK_RANGE_ADDRESS = pickRange,
+        SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
         UNIT_ADDRESS = control + C.REAIM_UNIT,
         ARRIVED_ADDRESS = control + C.REAIM_ARRIVED,
         RECORD_ADDRESS = control + C.REAIM_RECORD,
@@ -1157,16 +1222,17 @@ return {
         PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
         DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
         SHARED_SLOT_ADDRESS = control + C.SHARED_SLOT,
+        CLAIMS_ADDRESS = control + C.CLAIMS,
+        CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
+        CLAIMS_ACTIVE_ADDRESS = control + C.CLAIMS_ACTIVE,
+        CLAIM_STRIDE = TRAIL.claimStride,
+        CLAIM_ADDRESS = claim,
         SCALED_ADDRESS = control + C.SCALED_UNIT,
         FIND_RECORD_ADDRESS = record,
-        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-        REPORT_ADDRESS = report,
-        REPORT_PAD_ADDRESS = reportPad,
         BREACH_ADDRESS = breach,
         BREACH_OWNER_ADDRESS = control + C.BREACH_OWNER,
         BREACH_X_ADDRESS = control + C.BREACH_X,
         BREACH_Y_ADDRESS = control + C.BREACH_Y,
-        TICKS_ADDRESS = ticks or 0,
         DEPTH_SLACK = DEPTH_SLACK,
         DISTANCE_MAP_ADDRESS = search ~= nil
           and readAddress(search + SEARCH_DISTANCE_OPERAND) or 0,
@@ -1178,8 +1244,6 @@ return {
         UNIT_SIEGE_TARGET = (unitBase + UNIT_SIEGE_TARGET) & 0xFFFFFFFF,
         PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
         ALG_RESULT_ADDRESS = readAddress(finder + FIND_RESULT_OPERAND),
-        ALG_TARGET_X_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_X_OPERAND),
-        ALG_TARGET_Y_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_Y_OPERAND),
         SEARCH_ADDRESS = search,
         SET_DESTINATION_ADDRESS = callTarget(tunneler + TUNNELER_SET_DESTINATION_CALL),
         UNITS_STATE_ADDRESS = unitsState,
@@ -1221,6 +1285,11 @@ return {
       -- tunnel starts out aimed at the piece of wall nearest the enemy's camp.
       if keepIds ~= nil or campIds ~= nil then
         local firstAim = core.allocateAssembly(templates.initial_aim, {
+          TAKE_RESULT_ADDRESS = takeResult,
+          BEST_DISTANCE_ADDRESS = bestDistance,
+          RECORD_BREACH_ADDRESS = recordBreach,
+          PICK_RANGE_ADDRESS = pickRange,
+          SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
           FIND_TARGET_ADDRESS = finder,
           SEARCH_ADDRESS = search,
           PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
@@ -1231,8 +1300,6 @@ return {
           TOWARDS_ENABLED_ADDRESS = control + C.TOWARDS,
           BIAS_ACTIVE_ADDRESS = control + C.BIAS_ACTIVE,
           ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,
-          CAMP_X_ADDRESS = control + C.CAMP_X,
-          CAMP_Y_ADDRESS = control + C.CAMP_Y,
           BEST_TILE_ADDRESS = control + C.BEST_TILE,
           ROUNDS_ADDRESS = control + C.ROUNDS,
           INITIAL_UNIT_ADDRESS = control + C.INITIAL_UNIT,
@@ -1250,6 +1317,11 @@ return {
           PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
           DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
           SHARED_SLOT_ADDRESS = control + C.SHARED_SLOT,
+          CLAIMS_ADDRESS = control + C.CLAIMS,
+          CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
+          CLAIMS_ACTIVE_ADDRESS = control + C.CLAIMS_ACTIVE,
+          CLAIM_STRIDE = TRAIL.claimStride,
+          CLAIM_ADDRESS = claim,
           OURS_ADDRESS = control + C.OURS,
           GAME_TILE_ADDRESS = control + C.GAME_TILE,
           SKIP_UNIT_ADDRESS = control + C.SKIP_UNIT,
@@ -1260,7 +1332,6 @@ return {
           BREACH_OWNER_ADDRESS = control + C.BREACH_OWNER,
           BREACH_X_ADDRESS = control + C.BREACH_X,
           BREACH_Y_ADDRESS = control + C.BREACH_Y,
-          TICKS_ADDRESS = ticks or 0,
           DEPTH_SLACK = DEPTH_SLACK,
           DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
           BUILDING_STRIDE = SEARCH_STRIDE,
@@ -1452,6 +1523,9 @@ return {
           local towards = core.allocateAssembly(templates.accept_towards, {
             BIAS_ACTIVE_ADDRESS = control + C.BIAS_ACTIVE,
             PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
+            CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
+            CLAIMS_ACTIVE_ADDRESS = control + C.CLAIMS_ACTIVE,
+            CLAIM_COUNT = TRAIL.claims,
             DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
             DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
             ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,

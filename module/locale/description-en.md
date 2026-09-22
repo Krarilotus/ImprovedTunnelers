@@ -20,9 +20,12 @@ is in front of it rather than being dragged across the map.
 close to the enemy's camp you have got, and the next tunnel has to beat it. The first breach
 opens the outer wall; the tunnels still digging arrive at that spot, find it already open, and
 take their next target from there, so they carry straight on through the hole rather than
-starting again somewhere else. A tunnel dug later, anywhere along the line, joins whatever the
-line is working at now. The line advances - around the keep, never under it - towards the
-campfire, and is forgotten only after five minutes with nothing taken.
+starting again somewhere else. Once a tunnel has reached the front it is not sent back at it -
+it picks the next thing further in, and never one of your own tunnels is already digging at, so
+each of them brings its own piece down instead of the first one taking the spot and the rest
+arriving at bare ground. A tunnel dug later, anywhere along the line, joins whatever the line is
+working at now. The line advances - around the keep, never under it - towards the campfire, and
+is forgotten only after five minutes with nothing taken.
 
 **A collapse damages, it does not delete.** What the tunnel comes up under takes a damage
 figure you set, through the game's own damage. At the default nothing survives, as before; turn

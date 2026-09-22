@@ -115,6 +115,10 @@ retarget_towards_tooltip: |
   joins whatever the line is working at now, however far ahead that has moved. The mark only
   moves inwards, it is set when a tunnel actually brings something down, and the whole line
   is forgotten after five minutes with nothing taken, so a stalled assault starts afresh.
+  A tunnel that has already reached the front is not sent back at it - it takes the next thing
+  further in, and steps over anything this player's other tunnels are already digging at, so
+  each of them brings its own piece down rather than the first one taking the spot and the rest
+  arriving at bare ground with nothing left to collapse on.
   A tunnel dug by hand is sent against nobody in particular, and then the nearest camp that is
   not ours and not an ally's is the one it works towards. Off means the nearest target in any
   direction, which is what the game does.

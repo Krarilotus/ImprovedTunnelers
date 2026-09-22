@@ -190,6 +190,11 @@ mov dword [BIAS_ACTIVE_ADDRESS], 0
 mov dword [DEPTH_LIMIT_ADDRESS], 0
 mov dword [PINNED_TILE_ADDRESS], 0
 mov dword [SHARED_SLOT_ADDRESS], 0
+movsx ecx, word [eax+UNIT_OWNER]
+imul ecx, ecx, CLAIM_STRIDE
+add ecx, CLAIMS_ADDRESS
+mov [CLAIMS_SLOT_ADDRESS], ecx
+mov dword [CLAIMS_ACTIVE_ADDRESS], 1
 cmp dword [TOWARDS_ENABLED_ADDRESS], 0
 je reaim_search
 mov [ANCHOR_UNIT_ADDRESS], eax
@@ -213,6 +218,10 @@ mov [BREACH_X_ADDRESS], ecx
 movsx ecx, word [eax+UNIT_Y]
 mov [BREACH_Y_ADDRESS], ecx
 call BREACH_ADDRESS
+cmp dword [ARRIVED_ADDRESS], 0
+je reaim_may_join
+mov dword [PINNED_TILE_ADDRESS], 0
+reaim_may_join:
 mov ecx, [SHARED_SLOT_ADDRESS]
 test ecx, ecx
 je reaim_no_mark
@@ -225,11 +234,12 @@ mov [ORIGIN_DISTANCE_ADDRESS], ecx
 reaim_no_mark:
 mov eax, [SCALED_ADDRESS]
 reaim_search:
+call PICK_RANGE_ADDRESS
 movsx ecx, word [eax+UNIT_Y]
 push ecx
 movsx ecx, word [eax+UNIT_X]
 push ecx
-push dword [RANGE_ADDRESS]
+push dword [SEARCH_RANGE_ADDRESS]
 movsx ecx, word [eax+UNIT_SIEGE_TARGET]
 push ecx
 movsx ecx, word [eax+UNIT_OWNER]
@@ -246,18 +256,19 @@ jmp reaim_search
 reaim_free_miss:
 cmp dword [BEST_TILE_ADDRESS], 0
 jne reaim_has_target
+cmp dword [CLAIMS_ACTIVE_ADDRESS], 0
+je reaim_unclaimed_too
+mov dword [CLAIMS_ACTIVE_ADDRESS], 0
+mov eax, [SCALED_ADDRESS]
+jmp reaim_search
+reaim_unclaimed_too:
 cmp dword [BIAS_ACTIVE_ADDRESS], 0
 je reaim_nothing
 mov dword [BIAS_ACTIVE_ADDRESS], 0
 mov eax, [SCALED_ADDRESS]
 jmp reaim_search
 reaim_round_found:
-mov ecx, [ALG_RESULT_ADDRESS]
-mov [BEST_TILE_ADDRESS], ecx
-mov ecx, [ALG_TARGET_X_ADDRESS]
-mov [BEST_X_ADDRESS], ecx
-mov ecx, [ALG_TARGET_Y_ADDRESS]
-mov [BEST_Y_ADDRESS], ecx
+call TAKE_RESULT_ADDRESS
 cmp dword [PINNED_TILE_ADDRESS], 0
 je reaim_round_free
 mov dword [PINNED_TILE_ADDRESS], 0
@@ -272,14 +283,7 @@ movsx edx, word [edx*2+DISTANCE_MAP_ADDRESS]
 add edx, DEPTH_SLACK
 mov [DEPTH_LIMIT_ADDRESS], edx
 reaim_depth_set:
-mov ecx, [BEST_X_ADDRESS]
-sub ecx, [CAMP_X_ADDRESS]
-imul ecx, ecx
-mov edx, [BEST_Y_ADDRESS]
-sub edx, [CAMP_Y_ADDRESS]
-imul edx, edx
-add ecx, edx
-mov [ORIGIN_DISTANCE_ADDRESS], ecx
+call BEST_DISTANCE_ADDRESS
 add dword [ROUNDS_ADDRESS], 1
 mov ecx, [ROUNDS_ADDRESS]
 cmp ecx, SEARCH_ROUNDS
@@ -290,24 +294,9 @@ reaim_has_target:
 mov dword [BIAS_ACTIVE_ADDRESS], 0
 mov dword [DEPTH_LIMIT_ADDRESS], 0
 mov dword [PINNED_TILE_ADDRESS], 0
-mov ecx, [SHARED_SLOT_ADDRESS]
-test ecx, ecx
-je reaim_told_nobody
-cmp dword [ecx], 0
-jne reaim_told_nobody
-mov edx, [BEST_TILE_ADDRESS]
-mov [ecx], edx
-mov edx, [BEST_X_ADDRESS]
-mov [ecx+4], edx
-mov edx, [BEST_Y_ADDRESS]
-mov [ecx+8], edx
-mov edx, [TICKS_ADDRESS]
-mov [ecx+12], edx
-mov edx, [BREACH_X_ADDRESS]
-mov [ecx+20], edx
-mov edx, [BREACH_Y_ADDRESS]
-mov [ecx+24], edx
-reaim_told_nobody:
+mov dword [CLAIMS_ACTIVE_ADDRESS], 0
+call CLAIM_ADDRESS
+call RECORD_BREACH_ADDRESS
 mov eax, [SCALED_ADDRESS]
 movzx ecx, word [eax+UNIT_PATH_INDEX]
 mov word [eax+UNIT_PATH_LENGTH], cx
@@ -339,6 +328,7 @@ reaim_nothing:
 mov dword [BIAS_ACTIVE_ADDRESS], 0
 mov dword [DEPTH_LIMIT_ADDRESS], 0
 mov dword [PINNED_TILE_ADDRESS], 0
+mov dword [CLAIMS_ACTIVE_ADDRESS], 0
 xor eax, eax
 ret
 ]]
@@ -932,6 +922,117 @@ mov dword [edx], 0
 add edx, TRAIL_ENTRY
 sub eax, 1
 jnz clear_look
+mov edx, [BREACH_OWNER_ADDRESS]
+imul edx, edx, CLAIM_STRIDE
+add edx, CLAIMS_ADDRESS
+mov dword [edx], 0
+mov eax, CLAIM_COUNT
+clear_claim:
+add edx, 4
+mov dword [edx], 0
+sub eax, 1
+jnz clear_claim
+ret
+]]
+
+-- This target is now spoken for: the player's tunnels keep a short ring of what they are
+-- digging at, and a later search steps over anything in it. Written at the end of an aim,
+-- read by the accept filter above. The cursor runs 1..CLAIM_COUNT so it doubles as the
+-- entry's own offset.
+-- Three short routines both aims call rather than carry twice. UCP assembles each script
+-- in a fixed 64,000 byte buffer and the two aims had grown to the edge of it, so anything
+-- they both do lives here. All three touch ECX and EDX only, which both callers treat as
+-- scratch across them.
+--
+-- What the search just answered becomes the best target so far.
+local take_result = [[
+mov ecx, [ALG_RESULT_ADDRESS]
+mov [BEST_TILE_ADDRESS], ecx
+mov ecx, [ALG_TARGET_X_ADDRESS]
+mov [BEST_X_ADDRESS], ecx
+mov ecx, [ALG_TARGET_Y_ADDRESS]
+mov [BEST_Y_ADDRESS], ecx
+ret
+]]
+
+-- ... and how far that is from the enemy's camp, which the next round has to beat.
+local best_distance = [[
+mov ecx, [BEST_X_ADDRESS]
+sub ecx, [CAMP_X_ADDRESS]
+imul ecx, ecx
+mov edx, [BEST_Y_ADDRESS]
+sub edx, [CAMP_Y_ADDRESS]
+imul edx, edx
+add ecx, edx
+mov [ORIGIN_DISTANCE_ADDRESS], ecx
+ret
+]]
+
+-- The breach this player's tunnels are to work at, written down when none is standing,
+-- along with where this tunnel started so the others can tell how near to it they are.
+local record_breach = [[
+mov ecx, [SHARED_SLOT_ADDRESS]
+test ecx, ecx
+je record_breach_done
+cmp dword [ecx], 0
+jne record_breach_done
+mov edx, [BEST_TILE_ADDRESS]
+mov [ecx], edx
+mov edx, [BEST_X_ADDRESS]
+mov [ecx+4], edx
+mov edx, [BEST_Y_ADDRESS]
+mov [ecx+8], edx
+mov edx, [TICKS_ADDRESS]
+mov [ecx+12], edx
+mov edx, [BREACH_X_ADDRESS]
+mov [ecx+20], edx
+mov edx, [BREACH_Y_ADDRESS]
+mov [ecx+24], edx
+record_breach_done:
+ret
+]]
+
+-- How far a round of the module's own narrowing needs to spread, which is not the search
+-- range the setting gives. Once the first answer has set a depth limit, the accept filter
+-- refuses anything deeper than it anyway, so spreading to the full eighty tiles is work
+-- thrown away - and it is thrown away once per round, per tunnel, and every tunnel that
+-- was working at a breach re-aims the moment it falls. That burst is what shows as a
+-- stutter. A wall fifteen tiles out now spreads to twenty-seven rather than eighty.
+--
+-- The cap only applies while the module's own depth filter is up: a pinned round has to
+-- reach its one tile wherever it is, and a round with the filter down is the fallback that
+-- must be allowed to find anything at all.
+local pick_range = [[
+mov ecx, [RANGE_ADDRESS]
+cmp dword [BIAS_ACTIVE_ADDRESS], 0
+je range_done
+cmp dword [PINNED_TILE_ADDRESS], 0
+jne range_done
+mov edx, [DEPTH_LIMIT_ADDRESS]
+test edx, edx
+je range_done
+cmp edx, ecx
+jae range_done
+mov ecx, edx
+range_done:
+mov [SEARCH_RANGE_ADDRESS], ecx
+ret
+]]
+
+local claim_target = [[
+mov ecx, [CLAIMS_SLOT_ADDRESS]
+test ecx, ecx
+je claim_done
+mov edx, [ecx]
+add edx, 1
+cmp edx, CLAIM_COUNT
+jbe claim_room
+mov edx, 1
+claim_room:
+mov [ecx], edx
+mov eax, [BEST_TILE_ADDRESS]
+mov [ecx+edx*4], eax
+claim_done:
 ret
 ]]
 
@@ -1381,6 +1482,19 @@ jmp accept_spread_past
 accept_free:
 cmp dword [BIAS_ACTIVE_ADDRESS], 0
 je accept_take_it
+cmp dword [CLAIMS_ACTIVE_ADDRESS], 0
+je accept_unclaimed
+mov eax, [CLAIMS_SLOT_ADDRESS]
+test eax, eax
+je accept_unclaimed
+mov ecx, CLAIM_COUNT
+accept_claim:
+add eax, 4
+cmp [eax], ebp
+je accept_spread_past
+sub ecx, 1
+jnz accept_claim
+accept_unclaimed:
 mov eax, [DEPTH_LIMIT_ADDRESS]
 test eax, eax
 je accept_near_enough
@@ -1446,12 +1560,7 @@ jne initial_our_turn
 mov dword [SKIP_UNIT_ADDRESS], 0
 jmp initial_found
 initial_our_turn:
-mov ecx, [ALG_RESULT_ADDRESS]
-mov [BEST_TILE_ADDRESS], ecx
-mov ecx, [ALG_TARGET_X_ADDRESS]
-mov [BEST_X_ADDRESS], ecx
-mov ecx, [ALG_TARGET_Y_ADDRESS]
-mov [BEST_Y_ADDRESS], ecx
+call TAKE_RESULT_ADDRESS
 cmp dword [TOWARDS_ENABLED_ADDRESS], 0
 je initial_done
 mov ecx, [CURRENT_UNIT_ADDRESS]
@@ -1469,14 +1578,7 @@ mov [ANCHOR_UNIT_ADDRESS], ecx
 call ANCHOR_ADDRESS
 test eax, eax
 je initial_found
-mov ecx, [BEST_X_ADDRESS]
-sub ecx, [CAMP_X_ADDRESS]
-imul ecx, ecx
-mov edx, [BEST_Y_ADDRESS]
-sub edx, [CAMP_Y_ADDRESS]
-imul edx, edx
-add ecx, edx
-mov [ORIGIN_DISTANCE_ADDRESS], ecx
+call BEST_DISTANCE_ADDRESS
 mov dword [ROUNDS_ADDRESS], 0
 mov dword [BIAS_ACTIVE_ADDRESS], 1
 mov ecx, [BEST_TILE_ADDRESS]
@@ -1486,6 +1588,11 @@ mov [DEPTH_LIMIT_ADDRESS], ecx
 mov ecx, [INITIAL_UNIT_ADDRESS]
 movsx ecx, word [ecx+UNIT_OWNER]
 mov [BREACH_OWNER_ADDRESS], ecx
+imul ecx, ecx, CLAIM_STRIDE
+add ecx, CLAIMS_ADDRESS
+mov [CLAIMS_SLOT_ADDRESS], ecx
+mov dword [CLAIMS_ACTIVE_ADDRESS], 1
+mov ecx, [BREACH_OWNER_ADDRESS]
 mov ecx, [ORIGIN_X_ADDRESS]
 mov [BREACH_X_ADDRESS], ecx
 mov ecx, [ORIGIN_Y_ADDRESS]
@@ -1501,10 +1608,11 @@ cmp ecx, [ORIGIN_DISTANCE_ADDRESS]
 jae initial_round
 mov [ORIGIN_DISTANCE_ADDRESS], ecx
 initial_round:
+call PICK_RANGE_ADDRESS
 mov ecx, [INITIAL_UNIT_ADDRESS]
 push dword [ORIGIN_Y_ADDRESS]
 push dword [ORIGIN_X_ADDRESS]
-push dword [RANGE_ADDRESS]
+push dword [SEARCH_RANGE_ADDRESS]
 movsx edx, word [ecx+UNIT_SIEGE_TARGET]
 push edx
 movsx edx, word [ecx+UNIT_OWNER]
@@ -1513,30 +1621,23 @@ mov ecx, PATH_STATE_ADDRESS
 call SEARCH_ADDRESS
 cmp dword [ALG_RESULT_ADDRESS], 0
 je initial_miss
-mov ecx, [ALG_RESULT_ADDRESS]
-mov [BEST_TILE_ADDRESS], ecx
-mov ecx, [ALG_TARGET_X_ADDRESS]
-mov [BEST_X_ADDRESS], ecx
-mov ecx, [ALG_TARGET_Y_ADDRESS]
-mov [BEST_Y_ADDRESS], ecx
+call TAKE_RESULT_ADDRESS
 cmp dword [PINNED_TILE_ADDRESS], 0
 je initial_free
 mov dword [PINNED_TILE_ADDRESS], 0
 jmp initial_stop
 initial_miss:
 cmp dword [PINNED_TILE_ADDRESS], 0
-je initial_stop
+je initial_miss_free
 mov dword [PINNED_TILE_ADDRESS], 0
 jmp initial_round
+initial_miss_free:
+cmp dword [CLAIMS_ACTIVE_ADDRESS], 0
+je initial_stop
+mov dword [CLAIMS_ACTIVE_ADDRESS], 0
+jmp initial_round
 initial_free:
-mov ecx, [BEST_X_ADDRESS]
-sub ecx, [CAMP_X_ADDRESS]
-imul ecx, ecx
-mov edx, [BEST_Y_ADDRESS]
-sub edx, [CAMP_Y_ADDRESS]
-imul edx, edx
-add ecx, edx
-mov [ORIGIN_DISTANCE_ADDRESS], ecx
+call BEST_DISTANCE_ADDRESS
 add dword [ROUNDS_ADDRESS], 1
 mov ecx, [ROUNDS_ADDRESS]
 cmp ecx, SEARCH_ROUNDS
@@ -1545,24 +1646,9 @@ initial_stop:
 mov dword [BIAS_ACTIVE_ADDRESS], 0
 mov dword [DEPTH_LIMIT_ADDRESS], 0
 mov dword [PINNED_TILE_ADDRESS], 0
-mov ecx, [SHARED_SLOT_ADDRESS]
-test ecx, ecx
-je initial_told_nobody
-cmp dword [ecx], 0
-jne initial_told_nobody
-mov edx, [BEST_TILE_ADDRESS]
-mov [ecx], edx
-mov edx, [BEST_X_ADDRESS]
-mov [ecx+4], edx
-mov edx, [BEST_Y_ADDRESS]
-mov [ecx+8], edx
-mov edx, [TICKS_ADDRESS]
-mov [ecx+12], edx
-mov edx, [BREACH_X_ADDRESS]
-mov [ecx+20], edx
-mov edx, [BREACH_Y_ADDRESS]
-mov [ecx+24], edx
-initial_told_nobody:
+mov dword [CLAIMS_ACTIVE_ADDRESS], 0
+call CLAIM_ADDRESS
+call RECORD_BREACH_ADDRESS
 mov ecx, [BEST_TILE_ADDRESS]
 cmp ecx, [GAME_TILE_ADDRESS]
 je initial_write
@@ -1837,6 +1923,11 @@ return {
   find_anchor = find_anchor,
   find_breach = find_breach,
   clear_trail = clear_trail,
+  claim_target = claim_target,
+  pick_range = pick_range,
+  take_result = take_result,
+  best_distance = best_distance,
+  record_breach = record_breach,
   find_record = find_record,
   path_check = path_check,
   no_anchor = no_anchor,

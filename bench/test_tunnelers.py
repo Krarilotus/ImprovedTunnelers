@@ -91,11 +91,14 @@ class Fixture:
         self.step_flags = self.control + 0x254
         self.queue_count = self.control + 0x270
         self.speed = self.control + 0x274
-        self.queue = self.control + 0x2D0
+        self.queue = self.control + 0x2E8
+        self.claims_slot = self.control + 0x2D8
+        self.claims_active = self.control + 0x2DC
+        self.search_range = self.control + 0x2E0
         self.pending = self.control + 0xE4
         self.origin_x = self.control + 0x224
         self.origin_y = self.control + 0x228
-        self.zones = self.control + 0x2D0 + 512 * 16
+        self.zones = self.control + 0x2E8 + 512 * 16
         self.finish_leg = self.control + 0x2CC
         self.family_damage = self.control + 0x2C4
         self.family_ready = self.control + 0x2C8
@@ -105,6 +108,8 @@ class Fixture:
         self.shared = self.zones + 32 * 16 + 32 * 8
         self.trail = self.shared + 9 * 32           # the spots a player's line has taken
         self.trail_stride = 4 + 8 * 12
+        self.claims = self.trail + 9 * (4 + 8 * 12)  # ... and what it is digging at now
+        self.claim_stride = 4 + 8 * 4
         self.records = self.zones + 32 * 16
         self.retarget_range = self.control + 0x0C
         self.retarget_max = self.control + 0x10
@@ -724,6 +729,16 @@ def scenario(extreme):
     slot = f.shared + 32 * 1                                # the tunneler belongs to player 1
     asked = []
     plain = h.cpu.hooks[f.alg_find]
+    reaim_fn = f.module_routine(f.tunneler + 0x7E6)         # the routine the arrival calls
+
+    def joins(uid, x=100, y=100, arrived=0):
+        """Re-aim this tunneler, saying whether it has reached the front. The arrival hook
+        only ever calls this with 'yes'; the pending mark calls it with 'no'."""
+        asked.clear()
+        f.set_unit(unit, uid=uid, owner=1, x=x, y=y, siege=2)
+        h.put32(f.reaim_unit, unit)
+        h.put32(f.reaim_arrived, arrived)
+        h.run(reaim_fn)
 
     def watched(cpu):
         asked.append(h.u32(f.pinned))                       # what the search was told to find
@@ -737,18 +752,14 @@ def scenario(extreme):
     h.put32(slot, 0)
     h.put32(slot + 4, 0)
     h.put32(slot + 8, 0)
-    asked.clear()
-    f.set_unit(unit, uid=1250, owner=1, x=100, y=100, siege=2)
-    h.run(arrived, until=tail)
+    joins(1250, x=100, y=100)
     check('the first tunnel to look writes down where the breach will be',
           (h.u32(slot), h.u32(slot + 4), h.u32(slot + 8)), (breach, 95, 92))
     check('  and it looked for itself, with nothing pinned', asked and asked[0], 0)
 
     h.put32(f.tile_flags + 4 * breach, 0x100)               # the wall there still stands
     h.put16(f.building_tiles + 2 * breach, 0)
-    asked.clear()
-    f.set_unit(unit, uid=1251)
-    h.run(arrived, until=tail)
+    joins(1251)
     check('the next tunnel is sent at that same tile', asked[0], breach)
     check('  and once it has it, it asks no further', len(asked), 1)
     check('  and the breach is left as it was',
@@ -756,9 +767,7 @@ def scenario(extreme):
 
     h.put32(f.tile_flags + 4 * breach, 0)                   # ... until it comes down
     h.put16(f.building_tiles + 2 * breach, 0)
-    asked.clear()
-    f.set_unit(unit, uid=1252)
-    h.run(arrived, until=tail)
+    joins(1252)
     check('with nothing standing there the breach is given up', asked[0], 0)
     check('  and the next target takes its place', h.u32(slot), breach)
 
@@ -773,9 +782,7 @@ def scenario(extreme):
             h.put32(f.alg_result, breach)
         plain(cpu)
     h.cpu.hooks[f.alg_find] = unreachable
-    asked.clear()
-    f.set_unit(unit, uid=1253)
-    h.run(arrived, until=tail)
+    joins(1253)
     check('a tunnel that cannot reach the breach looks for itself instead',
           (asked[0], asked[1]), (4242, 0))
     check('  and leaves the breach standing for the others', h.u32(slot), 4242)
@@ -798,9 +805,7 @@ def scenario(extreme):
         h.put32(slot + 12, h.u32(f.ticks))
         h.put32(slot + 20, ox)
         h.put32(slot + 24, oy)
-        asked.clear()
-        f.set_unit(unit, uid=uid, owner=1, x=100, y=100, siege=2)
-        h.run(arrived, until=tail)
+        joins(uid)
         h.put32(f.tile_flags + 4 * tile, 0)
         return asked[0], tile
 
@@ -839,9 +844,7 @@ def scenario(extreme):
     h.put32(slot + 12, h.u32(f.ticks))
     h.put32(slot + 20, 320)
     h.put32(slot + 24, 300)
-    asked.clear()
-    f.set_unit(unit, uid=1260, owner=1, x=100, y=100, siege=2)
-    h.run(arrived, until=tail)
+    joins(1260, x=100, y=100)
     check('a breach on the far side of the map is left to the tunnels near it',
           asked[0], 0)
     check('  and it still stands for them', h.u32(slot), far)
@@ -851,17 +854,13 @@ def scenario(extreme):
     h.put32(slot + 8, 92)
     h.put32(f.tile_flags + 4 * breach, 0x100)
     h.put32(slot + 12, h.u32(f.ticks) - 90 * 40 - 1)        # but nobody has worked at it
-    asked.clear()
-    f.set_unit(unit, uid=1261)
-    h.run(arrived, until=tail)
+    joins(1261)
     check('a breach nobody has worked at for a long while is given up', asked[0], 0)
     check('  and the next target takes its place', h.u32(slot), h.u32(f.alg_result))
 
     h.put32(slot + 12, h.u32(f.ticks) + 5000)               # a match starting over
     h.put32(slot, breach)
-    asked.clear()
-    f.set_unit(unit, uid=1262)
-    h.run(arrived, until=tail)
+    joins(1262)
     check('and a breach from before the clock started again, the same', asked[0], 0)
 
     h.put32(f.tile_flags + 4 * far, 0)
@@ -922,9 +921,7 @@ def scenario(extreme):
     h.put32(slot + 12, h.u32(f.ticks))
     h.put32(slot + 16, 900)
     h.put32(slot + 28, h.u32(f.ticks))
-    asked.clear()
-    f.set_unit(unit, uid=1280, owner=1, x=100, y=100, siege=2)
-    h.run(arrived, until=tail)
+    joins(1280, x=100, y=100)
     check('a breach that has been opened is given up', asked[0], 0)
     check('  but how far in the player has got is kept', h.u32(slot + 16), 900)
     check('  and so is the line', len(spots()), 2)
@@ -933,9 +930,7 @@ def scenario(extreme):
     h.put32(slot + 12, h.u32(f.ticks))
     h.put32(slot + 16, 900)
     h.put32(slot + 28, h.u32(f.ticks) - 300 * 40 - 1)        # a siege that stopped
-    asked.clear()
-    f.set_unit(unit, uid=1281)
-    h.run(arrived, until=tail)
+    joins(1281)
     check('a line nothing has been taken on for a long while is forgotten',
           h.u32(slot + 16), 0)
     check('  and its spots with it', spots(), [])
@@ -956,22 +951,119 @@ def scenario(extreme):
     h.put32(line + 4, 60100)                                 # ... but the line came past here
     h.put32(line + 8, 100)
     h.put32(line + 12, 150)
-    asked.clear()
-    f.set_unit(unit, uid=1282, owner=1, x=100, y=145, siege=2)
-    h.run(arrived, until=tail)
+    joins(1282, x=100, y=145)
     check('a tunnel starting beside a spot on the line is sent at the head of it',
           asked[0], ahead)
 
     h.put32(line + 8, 300)                                   # move that spot far away
     h.put32(line + 12, 300)
-    asked.clear()
-    f.set_unit(unit, uid=1283, owner=1, x=100, y=145, siege=2)
-    h.run(arrived, until=tail)
+    joins(1283, x=100, y=145)
     check('  with no spot near it, it looks for itself', asked[0], 0)
 
     h.put32(f.tile_flags + 4 * ahead, 0)
-    h.put32(f.units_state, was_count)
+
+    # ------------------------------------------------- pushing on past the front
+    # A tunnel that has reached the front is not sent back at it. If it were, the first of
+    # them to get there would take the spot and every other one would arrive at bare ground
+    # and collapse having done nothing - which is what the joining looks like when it is
+    # applied one step too far.
+    print('  and what a tunnel does once it has reached the front')
+    clear_line()
+    front = 160 * 400 + 100
+    h.put32(f.tile_flags + 4 * front, 0x100)
+    h.put16(f.building_tiles + 2 * front, 0)
+    h.put32(slot, front)
+    h.put32(slot + 4, 100)
+    h.put32(slot + 8, 160)
+    h.put32(slot + 12, h.u32(f.ticks))
+    h.put32(slot + 20, 100)
+    h.put32(slot + 24, 150)
+    h.put32(f.alg_result, front)
+    h.put32(f.alg_x, 100)
+    h.put32(f.alg_y, 160)
+
+    joins(1290, x=100, y=150)
+    check('a tunnel still on its way joins the front', asked[0], front)
+
+    joins(1291, x=100, y=150, arrived=1)
+    check('  one that has got there digs on past it instead', asked[0], 0)
+
+    # ... and two of them pushing on do not pick the same tile
+    print('  and that two of them do not take the same tile')
+    claims = f.claims + f.claim_stride * 1
+    for k in range(0, f.claim_stride, 4):
+        h.put32(claims + k, 0)
+    h.put32(slot, 0)
+    stepped = []
+
+    def one_at_a_time(cpu):
+        stepped.append(h.u32(f.claims_active) and h.u32(claims + 4) or 0)
+        plain(cpu)
+
+    h.cpu.hooks[f.alg_find] = one_at_a_time
+    h.put32(f.alg_result, front)
+    joins(1292, x=100, y=150, arrived=1)
+    check('the first one to push on writes down what it took', h.u32(claims + 4), front)
+    check('  and it was not stepping over anything yet', stepped[0], 0)
+
+    stepped.clear()
+    joins(1293, x=100, y=150, arrived=1)
+    check('  and the next one has to step over it', stepped[0], front)
+    check('    with the list up while it searches', h.u32(f.claims_active), 0)
+
+    # a search that can find nothing else is run again with the list down, so a tunnel is
+    # never left with no target because its fellows have taken everything
+    refused = []
+
+    def nothing_unclaimed(cpu):
+        refused.append(h.u32(f.claims_active))
+        h.put32(f.alg_result, 0 if h.u32(f.claims_active) else front)
+        cpu.r['eax'] = 0
+        cpu.eip = cpu.pop()
+        cpu.r['esp'] += 20
+
+    h.cpu.hooks[f.alg_find] = nothing_unclaimed
+    joins(1294, x=100, y=150, arrived=1)
+    check('with nothing unclaimed left, the list comes down again',
+          (refused[0], refused[-1]), (1, 0))
+
+    # ------------------------------------------------- how wide each round spreads
+    # The accept filter refuses anything deeper than the depth limit, so a round that
+    # spreads to the full search range is doing work whose answer would be thrown away -
+    # once per round, per tunnel, and every tunnel re-aims at once when a breach falls.
+    print('  and how far each round of the search spreads')
+    widths = []
+
+    def watch_width(cpu):
+        widths.append(cpu.m.u32(cpu.r['esp'] + 12))          # the range it was handed
+        plain(cpu)
+
+    h.cpu.hooks[f.alg_find] = watch_width
+    h.put32(f.alg_result, front)
+    h.put32(f.tile_flags + 4 * front, 0x100)
+    h.put32(f.depth_limit, 0)
+    widths.clear()
+    joins(1295, x=100, y=150, arrived=1)
+    check('the first round spreads as far as the setting says',
+          widths and widths[0], h.u32(f.retarget_range))
+    check('  and the rounds after it only as deep as the filter would allow',
+          len(widths) > 1 and widths[1] < widths[0], True)
+
+    h.put32(f.retarget_range, 8)                             # ... and never further
+    widths.clear()
+    joins(1296, x=100, y=150, arrived=1)
+    check('  never wider than the setting, whatever the depth',
+          max(widths), 8)
+    h.put32(f.retarget_range, 80)
+
     h.cpu.hooks[f.alg_find] = plain
+    h.put32(f.tile_flags + 4 * front, 0)
+    h.put32(f.depth_limit, 0)
+    for k in range(0, f.claim_stride, 4):
+        h.put32(claims + k, 0)
+    h.put32(f.claims_active, 0)
+    h.put32(f.tile_flags + 4 * front, 0)
+    h.put32(f.units_state, was_count)
     clear_line()
     h.put32(f.alg_result, 1)
 
