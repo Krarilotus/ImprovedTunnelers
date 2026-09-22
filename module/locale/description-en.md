@@ -16,10 +16,13 @@ goes for that same piece - however far out in front of them the wall itself is. 
 holes in six places you get one road in. A tunnel too far off to join sensibly digs at whatever
 is in front of it rather than being dragged across the map.
 
-**And then they work inwards.** Every time a tunnel brings something down, the game remembers
-how close to the enemy's camp you have got, and the next tunnel has to beat it. The first
-breach opens the outer wall, the next has to find something past it, and the line advances -
-around the keep, never under it - towards the campfire.
+**And then they work inwards.** Every spot a collapse takes is kept as a line, along with how
+close to the enemy's camp you have got, and the next tunnel has to beat it. The first breach
+opens the outer wall; the tunnels still digging arrive at that spot, find it already open, and
+take their next target from there, so they carry straight on through the hole rather than
+starting again somewhere else. A tunnel dug later, anywhere along the line, joins whatever the
+line is working at now. The line advances - around the keep, never under it - towards the
+campfire, and is forgotten only after five minutes with nothing taken.
 
 **A collapse damages, it does not delete.** What the tunnel comes up under takes a damage
 figure you set, through the game's own damage. At the default nothing survives, as before; turn

@@ -103,6 +103,8 @@ class Fixture:
         self.depth_limit = self.control + 0x294
         self.shared_slot = self.control + 0x298
         self.shared = self.zones + 32 * 16 + 32 * 8
+        self.trail = self.shared + 9 * 32           # the spots a player's line has taken
+        self.trail_stride = 4 + 8 * 12
         self.records = self.zones + 32 * 16
         self.retarget_range = self.control + 0x0C
         self.retarget_max = self.control + 0x10
@@ -866,6 +868,111 @@ def scenario(extreme):
     h.cpu.hooks[f.alg_find] = plain
     h.put32(slot, 0)
     h.put32(f.tile_flags + 4 * 4242, 0)
+    h.put32(f.alg_result, 1)
+
+    # ------------------------------------------------- the line a player is carving
+    print('  and the line of spots their tunnels have taken')
+    line = f.trail + f.trail_stride * 1                      # the tunneler belongs to player 1
+    collapsed = f.tunneler + 0x954
+
+    def clear_line():
+        for k in range(0, f.trail_stride, 4):
+            h.put32(line + k, 0)
+        for k in range(0, 32, 4):
+            h.put32(slot + k, 0)
+
+    def spots():
+        return [(h.u32(line + 4 + 12 * i), h.u32(line + 8 + 12 * i),
+                 h.u32(line + 12 + 12 * i)) for i in range(8) if h.u32(line + 4 + 12 * i)]
+
+    def collapse_at(x, y, u=19):
+        h.put32(f.current_unit, u)
+        f.set_unit(u, owner=1, siege=2, x=x, y=y, tile=y * 400 + x, uid=9000 + y,
+                   state=3, alive=2, kind=5, dying=0, dest_tile=y * 400 + x)
+        h.run(collapsed, until=collapsed + 5)
+
+    was_count = h.u32(f.units_state)
+    h.put32(f.units_state, 1)                                # nothing else to scan over
+    clear_line()
+
+    collapse_at(100, 150)
+    check('a collapse puts the spot it took on the line', spots(), [(60100, 100, 150)])
+    check('  and marks how close to the camp that is', h.u32(slot + 16),
+          200 ** 2 + 160 ** 2)
+    check('  and when', h.u32(slot + 28), h.u32(f.ticks))
+
+    collapse_at(100, 200)                                    # deeper in, towards the camp
+    check('a collapse further in joins it', spots(),
+          [(60100, 100, 150), (80100, 100, 200)])
+    check('  and the mark moves in with it', h.u32(slot + 16), 200 ** 2 + 110 ** 2)
+
+    deep = h.u32(slot + 16)
+    collapse_at(100, 120)                                    # ... one behind the line
+    check('a collapse behind the line is not on it', len(spots()), 2)
+    check('  and the mark does not move back out', h.u32(slot + 16), deep)
+
+    h.cpu.hooks[f.alg_find] = watched
+    h.put32(f.alg_result, 1)
+
+    # the mark is the player's, not the breach's: it has to outlive the wall coming down,
+    # or every tunnel after the first breach goes back to taking the nearest wall
+    h.put32(slot, 4242)                                      # a breach with nothing left on it
+    h.put32(f.tile_flags + 4 * 4242, 0)
+    h.put16(f.building_tiles + 2 * 4242, 0)
+    h.put32(slot + 12, h.u32(f.ticks))
+    h.put32(slot + 16, 900)
+    h.put32(slot + 28, h.u32(f.ticks))
+    asked.clear()
+    f.set_unit(unit, uid=1280, owner=1, x=100, y=100, siege=2)
+    h.run(arrived, until=tail)
+    check('a breach that has been opened is given up', asked[0], 0)
+    check('  but how far in the player has got is kept', h.u32(slot + 16), 900)
+    check('  and so is the line', len(spots()), 2)
+
+    h.put32(slot, 4242)
+    h.put32(slot + 12, h.u32(f.ticks))
+    h.put32(slot + 16, 900)
+    h.put32(slot + 28, h.u32(f.ticks) - 300 * 40 - 1)        # a siege that stopped
+    asked.clear()
+    f.set_unit(unit, uid=1281)
+    h.run(arrived, until=tail)
+    check('a line nothing has been taken on for a long while is forgotten',
+          h.u32(slot + 16), 0)
+    check('  and its spots with it', spots(), [])
+
+    # and the spots are guides: a tunnel that starts beside one of them joins whatever the
+    # line is working at now, however far ahead that has moved
+    clear_line()
+    ahead = 220 * 400 + 100
+    h.put32(f.tile_flags + 4 * ahead, 0x100)
+    h.put16(f.building_tiles + 2 * ahead, 0)
+    h.put32(slot, ahead)
+    h.put32(slot + 4, 100)
+    h.put32(slot + 8, 220)
+    h.put32(slot + 12, h.u32(f.ticks))
+    h.put32(slot + 20, 100)                                  # dug from deep inside already
+    h.put32(slot + 24, 200)
+    h.put32(line, 1)
+    h.put32(line + 4, 60100)                                 # ... but the line came past here
+    h.put32(line + 8, 100)
+    h.put32(line + 12, 150)
+    asked.clear()
+    f.set_unit(unit, uid=1282, owner=1, x=100, y=145, siege=2)
+    h.run(arrived, until=tail)
+    check('a tunnel starting beside a spot on the line is sent at the head of it',
+          asked[0], ahead)
+
+    h.put32(line + 8, 300)                                   # move that spot far away
+    h.put32(line + 12, 300)
+    asked.clear()
+    f.set_unit(unit, uid=1283, owner=1, x=100, y=145, siege=2)
+    h.run(arrived, until=tail)
+    check('  with no spot near it, it looks for itself', asked[0], 0)
+
+    h.put32(f.tile_flags + 4 * ahead, 0)
+    h.put32(f.units_state, was_count)
+    h.cpu.hooks[f.alg_find] = plain
+    clear_line()
     h.put32(f.alg_result, 1)
 
     h.put32(f.towards, 0)

@@ -592,6 +592,42 @@ cmp edx, [ecx+16]
 jae scan_no_mark
 scan_set_mark:
 mov [ecx+16], edx
+mov eax, [TICKS_ADDRESS]
+mov [ecx+28], eax
+mov eax, ebp
+imul eax, eax, TRAIL_STRIDE
+add eax, TRAIL_ADDRESS
+mov ecx, [eax]
+cmp ecx, TRAIL_COUNT
+jb scan_trail_room
+xor ecx, ecx
+scan_trail_room:
+imul edx, ecx, TRAIL_ENTRY
+lea edx, [eax+edx+4]
+add ecx, 1
+mov [eax], ecx
+mov eax, [CURRENT_UNIT_ADDRESS]
+imul eax, eax, 1168
+mov eax, [eax+UNIT_TILE]
+mov [edx], eax
+mov [edx+4], esi
+mov [edx+8], edi
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je scan_no_mark
+mov [REPORT_ADDRESS], ebp
+mov [REPORT_ADDRESS+4], eax
+mov [REPORT_ADDRESS+20], esi
+mov [REPORT_ADDRESS+24], edi
+mov eax, [CURRENT_UNIT_ADDRESS]
+imul eax, eax, 1168
+movsx eax, word [eax+UNIT_OWNER]
+shl eax, 5
+add eax, SHARED_ADDRESS
+mov eax, [eax+16]
+mov [REPORT_ADDRESS+32], eax
+mov [REPORT_ADDRESS+36], ecx
+mov dword [REPORT_ADDRESS+28], 14
+call REPORT_PAD_ADDRESS
 scan_no_mark:
 popad
 mov eax, [CURRENT_UNIT_ADDRESS]
@@ -884,28 +920,60 @@ mov eax, 1
 ret
 ]]
 
+local clear_trail = [[
+mov edx, [BREACH_OWNER_ADDRESS]
+imul edx, edx, TRAIL_STRIDE
+add edx, TRAIL_ADDRESS
+mov dword [edx], 0
+add edx, 4
+mov eax, TRAIL_COUNT
+clear_look:
+mov dword [edx], 0
+add edx, TRAIL_ENTRY
+sub eax, 1
+jnz clear_look
+ret
+]]
+
 local find_breach = [[
 mov ecx, [BREACH_OWNER_ADDRESS]
 shl ecx, 5
 add ecx, SHARED_ADDRESS
 mov [SHARED_SLOT_ADDRESS], ecx
 mov dword [PINNED_TILE_ADDRESS], 0
+cmp dword [ecx+16], 0
+je breach_line_held
+mov eax, [TICKS_ADDRESS]
+sub eax, [ecx+28]
+cmp eax, TRAIL_LIFETIME
+jbe breach_line_held
+mov dword [ecx+16], 0
+mov dword [ecx+28], 0
+call CLEAR_TRAIL_ADDRESS
+breach_line_held:
 mov edx, [ecx]
 test edx, edx
 jle breach_done
 mov eax, [TICKS_ADDRESS]
 sub eax, [ecx+12]
 cmp eax, BREACH_LIFETIME
-ja breach_gone
+ja breach_stale
 test dword [edx*4+TILE_FLAGS_ADDRESS], 256
 jnz breach_stands
 cmp word [edx*2+BUILDING_TILE_ADDRESS], 0
 jne breach_stands
-breach_gone:
+breach_open:
+mov dword [ecx], 0
+mov dword [ecx+20], 0
+mov dword [ecx+24], 0
+jmp breach_done
+breach_stale:
 mov dword [ecx], 0
 mov dword [ecx+16], 0
 mov dword [ecx+20], 0
 mov dword [ecx+24], 0
+mov dword [ecx+28], 0
+call CLEAR_TRAIL_ADDRESS
 jmp breach_done
 breach_stands:
 mov [PIN_SCRATCH_ADDRESS], edx
@@ -928,7 +996,34 @@ sub eax, [ecx+8]
 imul eax, eax
 add eax, edx
 cmp eax, [BREACH_REACH_ADDRESS]
-ja breach_done
+jbe breach_join
+push ebx
+mov edx, [BREACH_OWNER_ADDRESS]
+imul edx, edx, TRAIL_STRIDE
+add edx, TRAIL_ADDRESS
+add edx, 4
+mov ecx, TRAIL_COUNT
+breach_trail:
+cmp dword [edx], 0
+jle breach_trail_next
+mov eax, [BREACH_X_ADDRESS]
+sub eax, [edx+4]
+imul eax, eax
+mov ebx, eax
+mov eax, [BREACH_Y_ADDRESS]
+sub eax, [edx+8]
+imul eax, eax
+add eax, ebx
+cmp eax, [BREACH_REACH_ADDRESS]
+jbe breach_trail_hit
+breach_trail_next:
+add edx, TRAIL_ENTRY
+sub ecx, 1
+jnz breach_trail
+pop ebx
+jmp breach_done
+breach_trail_hit:
+pop ebx
 breach_join:
 mov edx, [PIN_SCRATCH_ADDRESS]
 mov [PINNED_TILE_ADDRESS], edx
@@ -1741,6 +1836,7 @@ return {
   initial_aim = initial_aim,
   find_anchor = find_anchor,
   find_breach = find_breach,
+  clear_trail = clear_trail,
   find_record = find_record,
   path_check = path_check,
   no_anchor = no_anchor,

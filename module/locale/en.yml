@@ -104,12 +104,17 @@ retarget_towards_tooltip: |
   a scatter of holes; how near is the setting below. A tunnel further off digs at whatever it
   finds in front of itself rather than being dragged across the map, and one that cannot reach
   the breach does the same.
-  Each breach also leaves a mark - how close to the camp that player's tunnels have got - and
-  every aim after it has to beat that mark. That is what drives the breaches inwards towards
-  the camp instead of widening the same stretch of wall sideways: the first opens the outer
-  wall, the next has to find something past it, and so on, round the keep rather than under it.
-  The mark only moves inwards, it is set when a tunnel actually brings something down, and it
-  is forgotten after a minute and a half without a breach so a stalled assault starts afresh.
+  Every spot a collapse takes joins a line that player is carving, and with it a mark - how
+  close to the enemy camp their tunnels have got. Every aim after it has to beat that mark.
+  That is what drives the breaches inwards towards the camp instead of widening the same
+  stretch of wall sideways: the first opens the outer wall, the next has to find something
+  past it, and so on, round the keep rather than under it. The line outlives any one breach
+  on purpose - a breach lasts only until it is open, and the whole point is that the tunnels
+  after it know how far in the ones before them got, so they aim through the hole rather than
+  taking a fresh bite of the outer wall. A tunnel that starts beside any spot on the line
+  joins whatever the line is working at now, however far ahead that has moved. The mark only
+  moves inwards, it is set when a tunnel actually brings something down, and the whole line
+  is forgotten after five minutes with nothing taken, so a stalled assault starts afresh.
   A tunnel dug by hand is sent against nobody in particular, and then the nearest camp that is
   not ours and not an ally's is the one it works towards. Off means the nearest target in any
   direction, which is what the game does.

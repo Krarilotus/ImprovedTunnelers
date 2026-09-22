@@ -386,6 +386,21 @@ local DEFAULT_BREACH_REACH = 40
 -- match, since the tick counter starts again and the subtraction goes wide.
 local BREACH_LIFETIME_SECONDS = 90
 
+-- The line a player's tunnels are carving: the spots their collapses have taken, in the
+-- order they were taken, and how long the line is remembered for. The line outlives any
+-- one breach on purpose - a breach lasts only until it is open, and the whole point is
+-- that the next tunnel knows how far in the ones before it got. It is only forgotten
+-- after this long with no collapse at all, which is a siege that has stalled, or a match
+-- that has started over.
+-- One table rather than four names: the module's main chunk is close to Lua's ceiling of
+-- two hundred locals.
+local TRAIL = {
+  count = 8,                                  -- spots kept
+  entry = 12,                                 -- tile, x, y
+  lifetimeSeconds = 300,
+}
+TRAIL.stride = 4 + TRAIL.count * TRAIL.entry  -- ... behind a cursor, per player
+
 local KEEP_FIRST_TYPE = 40
 local KEEP_TYPE_SPAN = 2
 
@@ -563,9 +578,12 @@ C.PENDING_SIZE = 320
 C.ZONES = C.QUEUE + QUEUE_MAX * 16
 C.RECORDS = C.ZONES + ZONE_COUNT * ZONE_SIZE
 C.SHARED = C.RECORDS + RECORD_COUNT * RECORD_SIZE   -- per player: the breach tile, its x
-C.SIZE = C.SHARED + (PLAYER_COUNT + 1) * 32        -- and y, the tick it was set, how close
-                                                   -- to the camp they have got, and where
-                                                   -- the tunnel that set it started
+                                                   -- and y, the tick it was set, how close
+                                                   -- to the camp they have got and when
+                                                   -- that was, and where the tunnel that
+                                                   -- set it started
+C.TRAIL = C.SHARED + (PLAYER_COUNT + 1) * 32       -- ... and the spots their collapses
+C.SIZE = C.TRAIL + (PLAYER_COUNT + 1) * TRAIL.stride    -- have taken, in order
 
 ---------------------------------------------------------------------------------------
 -- Defaults
@@ -600,6 +618,8 @@ local REPORT_WORDS = {
   [11] = "tunnel collapsed but every denial slot is in use",
   [12] = "tunnel collapsed on something, denial laid",
   [13] = "tunnel collapsed where a denial already stood, its time added on",
+  [14] = "the breach line moved on (tile and b/c = the spot taken, f = how far in it is, "
+      .. "g = spots on the line)",
   [30] = "tunnel aimed (tile = ours, b = the game's own, c = the player's breach)",
   [31] = "the path would not lay; the entrance kept, the game aims this one next tick",
   [20] = "building attempt near a denial, not refused",
@@ -947,6 +967,16 @@ return {
       UNIT_UID = (unitBase + UNIT_UID) & 0xFFFFFFFF,
     })
 
+    -- Forgetting the line a player was carving, when nothing has been taken for long
+    -- enough that the siege has plainly stopped - or the match has started over.
+    local clearTrail = core.allocateAssembly(templates.clear_trail, {
+      BREACH_OWNER_ADDRESS = control + C.BREACH_OWNER,
+      TRAIL_ADDRESS = control + C.TRAIL,
+      TRAIL_STRIDE = TRAIL.stride,
+      TRAIL_COUNT = TRAIL.count,
+      TRAIL_ENTRY = TRAIL.entry,
+    })
+
     -- Which piece of wall this player's tunnels are already working at.
     local breach = core.allocateAssembly(templates.find_breach, {
       BREACH_OWNER_ADDRESS = control + C.BREACH_OWNER,
@@ -957,6 +987,12 @@ return {
       PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
       PIN_SCRATCH_ADDRESS = control + C.PIN_SCRATCH,
       BREACH_REACH_ADDRESS = control + C.BREACH_REACH,
+      CLEAR_TRAIL_ADDRESS = clearTrail,
+      TRAIL_ADDRESS = control + C.TRAIL,
+      TRAIL_STRIDE = TRAIL.stride,
+      TRAIL_COUNT = TRAIL.count,
+      TRAIL_ENTRY = TRAIL.entry,
+      TRAIL_LIFETIME = TRAIL.lifetimeSeconds * TICKS_PER_SECOND,
       TICKS_ADDRESS = ticks or 0,
       BREACH_LIFETIME = BREACH_LIFETIME_SECONDS * TICKS_PER_SECOND,
       TILE_FLAGS_ADDRESS = tileFlags or 0,
@@ -1280,6 +1316,12 @@ return {
         CAMP_Y_ADDRESS = control + C.CAMP_Y,
         SCRATCH_ADDRESS = control + C.SCRATCH,
         SHARED_ADDRESS = control + C.SHARED,
+        TRAIL_ADDRESS = control + C.TRAIL,
+        TRAIL_STRIDE = TRAIL.stride,
+        TRAIL_COUNT = TRAIL.count,
+        TRAIL_ENTRY = TRAIL.entry,
+        TICKS_ADDRESS = ticks or 0,
+        UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
         WALL_FAMILY = WALL_FAMILY_FLAGS,
         RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
         DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
