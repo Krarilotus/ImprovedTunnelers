@@ -1,0 +1,131 @@
+denial_group: Building denial after a breach
+denial_group_descr: |
+  When a tunnel brings a wall or a tower down, the ground around the hole is denied to
+  builders for a while, exactly as if an enemy soldier were standing in it: the same
+  circle the game already uses for enemy units, read from the game's own values, so
+  anything the Exe Value Patcher or a balance mod does to those ranges applies here too.
+
+  It stops a breach being sealed the moment it appears. Neither the player nor the AI can
+  drop a wall, a tower, a gatehouse or any other building back into the gap until the
+  denial runs out, and the AI's tile-by-tile wall repair is held off in the same way.
+
+  The denial only goes down when the tunnel really took something away. A tunnel that
+  arrives under bare ground denies nothing.
+
+  Two tunnels through the same breach stack: the second collapse does not lay a second
+  circle, it adds its own time to the one already there, so thirty seconds becomes sixty,
+  then ninety. It takes a tunnel each time, and the circle stays where the first one put
+  it.
+denial_enabled: Deny building around a fresh breach
+denial_enabled_tooltip: Turn the whole denial off and tunnels collapse exactly as they do in the unmodified game.
+denial_message: Say why building is refused
+denial_message_tooltip: |
+  A player who tries to build in a fresh breach is told "The ground is too unstable to build
+  here right now" instead of the game's "enemy units are too close". Needs the Text Resource
+  Modifier module to be on; without it the game's own message is used and this does nothing.
+denial_seconds: Denial time (seconds)
+denial_seconds_tooltip: |
+  How long the ground stays denied, in seconds of game time at normal speed. It is counted
+  in game ticks, so it is the same for everyone in a multiplayer game whatever speed each
+  machine is set to, and a second tunnel through the same breach adds this time again.
+  Default 30.
+
+retarget_group: Digging on to the next wall
+retarget_group_descr: |
+  In the unmodified game a tunnel is aimed once, when the tunneler digs itself in, and it
+  keeps that target whatever happens to it. If another tunnel, a catapult or anything else
+  takes that piece of wall away first, the tunnel arrives under bare earth, collapses into
+  nothing and the tunneler is spent for nothing.
+
+  With this on, a tunnel bends towards another target instead, using the game's own search
+  and its own path finder from wherever the tunneler is at that moment. Nothing is sent back
+  to the entrance and no second tunnel is started: the tunnel simply carries on as one
+  continuous tunnel that turns towards the new wall.
+
+  It happens at two moments. The moment one of your tunnels collapses a wall, every other
+  tunnel of yours that was digging at that same spot is turned aside there and then - they
+  do not waste the rest of their dig on a wall that is already down. And a tunnel that
+  arrives to find its target gone anyway - taken by a catapult, or by fire - looks for
+  another one before it collapses. Only if there is nothing in range does it collapse where
+  it is, exactly as the unmodified game does.
+retarget_enabled: Turn tunnels towards another wall
+retarget_enabled_tooltip: Off means a tunnel keeps digging at a wall that is no longer there and collapses into the empty ground, the way it does in the unmodified game.
+retarget_range: Search range (tiles)
+retarget_range_tooltip: |
+  How far a tunnel being turned aside may look for its next target, counted from where the
+  tunneler is. The game's own first search uses up to 80 tiles, and this leaves it alone.
+  Default 80.
+retarget_max: Times one tunnel may re-aim
+retarget_max_tooltip: |
+  How often a single tunneler may be turned aside before it stops taking new targets and
+  collapses at the end of the tunnel it is on. Keeps one tunneler from digging all day.
+  Default 5.
+retarget_collapse: Collapse the stretch already dug
+retarget_collapse_tooltip: |
+  When a tunnel that has reached its destination turns towards a new target, bring the
+  stretch it has already dug down first, which flattens its mound and damages whatever it
+  ran under - the same thing a finished tunnel does. A tunnel turned aside in mid dig is
+  never collapsed behind, because it has not finished digging it yet.
+
+targets_group: What a tunnel may aim at
+targets_group_descr: |
+  A tunnel can only be aimed at a wall or at one of the three small towers in the
+  unmodified game: the search that picks its target refuses to spread under any other
+  building, so a gatehouse, a square tower or a round tower is never chosen, however
+  invitingly it sits in the wall.
+
+  With this on, the search asks the game's own "is this a gate or a tower" list instead,
+  which covers both gatehouses, the wooden gate and all five towers. They are treated
+  exactly like a wall from then on: the tunnel collapses the building above it when it
+  arrives, and if something else takes that building down first, the tunneler looks for
+  another target the same way.
+
+  Either way a tunnel is only ever aimed at a wall, a gate or a tower. Workshops, houses,
+  farms and the rest are never targets, and a tunnel that is turned aside while it is under
+  the enemy's town digs on past them to the next piece of wall.
+targets_enabled: Tunnels may aim at towers and gates
+targets_enabled_tooltip: Off leaves the target search as the unmodified game has it - walls and the three small towers only.
+
+ui_group: Attack here for tunnelers
+ui_group_descr: |
+  Tunnelers are the only soldiers with no attack-here button: the dig tunnel button sits in
+  that slot instead, so a tunneler can never be told to go and hit a particular building.
+
+  This moves the dig tunnel button one slot to the right, into the empty slot beside it,
+  and puts the ordinary attack-here button back where it belongs. Both buttons keep their
+  own picture, their own help text and their own command, so the dig tunnel button works
+  exactly as it did - it has simply moved over.
+ui_enabled: Move the dig tunnel button and add attack here
+ui_enabled_tooltip: Off leaves the command panel exactly as the game draws it.
+
+stances_group: Stances
+stances_group_descr: |
+  The defensive and aggressive stance buttons are drawn for tunnelers, and setting one does
+  nothing at all: the search that makes a soldier go after a nearby enemy only looks at the
+  stance when the unit has flagged itself as free to react, and the tunneler's own code
+  never sets that flag.
+
+  With this on, a tunneler sets it in the states where it is standing about with nothing of
+  its own to do - idle, waiting, or walking back to its guild - so defensive and aggressive
+  stance make it react like any other soldier, at the ranges the game uses for every unit
+  (the stance range values the Exe Value Patcher lists).
+
+  A tunneler walking to a place you sent it to does not react on the way, so an order to go
+  somewhere is never thrown away halfway for an enemy standing near the route; it reacts the
+  moment it arrives, which is also how a patrol reacts at each of its points. It does not
+  react on its way to dig a tunnel it was ordered to dig, or while it is underground, so no
+  stance can cancel a dig order either.
+stances_enabled: Tunnelers obey defensive and aggressive stance
+stances_enabled_tooltip: Off means the stance buttons keep doing nothing for tunnelers, as in the unmodified game.
+
+diagnostics_group: Diagnostics
+diagnostics_group_descr: |
+  Writes a line to ucp3.log every time a tunnel arrives, every time it goes looking for a
+  new target and finds one or gives up, every time a denial is laid, and - at most once a
+  second - when somebody tries to build near one, saying what the module saw and what it
+  decided.
+
+  It is meant for working out why something did not happen, one match at a time. Leave it
+  off for normal play.
+diagnostics_enabled: Write what the tunneler hooks see to the log
+diagnostics_enabled_tooltip: Off for normal play. On, ucp3.log gets a line per tunnel arrival, per re-aim, per denial laid, and at most one a second for building attempts near a denial.

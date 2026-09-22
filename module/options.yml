@@ -1,0 +1,141 @@
+meta:
+  version: 1.0.0
+options:
+- display: GroupBox
+  category: [Improved Tunnelers]
+  header: '{{denial_group}}'
+  text: '{{denial_group_descr}}'
+  hasHeader: true
+  children:
+  - url: improved-tunnelers.denial.enabled
+    name: improved-tunnelers-denial-enabled
+    text: '{{denial_enabled}}'
+    tooltip: '{{denial_enabled_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.denial.message
+    name: improved-tunnelers-denial-message
+    text: '{{denial_message}}'
+    tooltip: '{{denial_message_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.denial.seconds
+    name: improved-tunnelers-denial-seconds
+    text: '{{denial_seconds}}'
+    tooltip: '{{denial_seconds_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 30
+      min: 1
+      max: 300
+      step: 1
+
+- display: GroupBox
+  category: [Improved Tunnelers]
+  header: '{{retarget_group}}'
+  text: '{{retarget_group_descr}}'
+  hasHeader: true
+  children:
+  - url: improved-tunnelers.retarget.enabled
+    name: improved-tunnelers-retarget-enabled
+    text: '{{retarget_enabled}}'
+    tooltip: '{{retarget_enabled_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.retarget.range
+    name: improved-tunnelers-retarget-range
+    text: '{{retarget_range}}'
+    tooltip: '{{retarget_range_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 80
+      min: 20
+      max: 200
+      step: 10
+  - url: improved-tunnelers.retarget.max
+    name: improved-tunnelers-retarget-max
+    text: '{{retarget_max}}'
+    tooltip: '{{retarget_max_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 5
+      min: 1
+      max: 20
+      step: 1
+  - url: improved-tunnelers.retarget.collapse_behind
+    name: improved-tunnelers-retarget-collapse-behind
+    text: '{{retarget_collapse}}'
+    tooltip: '{{retarget_collapse_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+
+- display: GroupBox
+  category: [Improved Tunnelers]
+  header: '{{targets_group}}'
+  text: '{{targets_group_descr}}'
+  hasHeader: true
+  children:
+  - url: improved-tunnelers.targets.towers_and_gates
+    name: improved-tunnelers-targets-towers-and-gates
+    text: '{{targets_enabled}}'
+    tooltip: '{{targets_enabled_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+
+- display: GroupBox
+  category: [Improved Tunnelers]
+  header: '{{ui_group}}'
+  text: '{{ui_group_descr}}'
+  hasHeader: true
+  children:
+  - url: improved-tunnelers.ui.enabled
+    name: improved-tunnelers-ui-enabled
+    text: '{{ui_enabled}}'
+    tooltip: '{{ui_enabled_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+
+- display: GroupBox
+  category: [Improved Tunnelers]
+  header: '{{stances_group}}'
+  text: '{{stances_group_descr}}'
+  hasHeader: true
+  children:
+  - url: improved-tunnelers.stances.enabled
+    name: improved-tunnelers-stances-enabled
+    text: '{{stances_enabled}}'
+    tooltip: '{{stances_enabled_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+
+- display: GroupBox
+  category: [Improved Tunnelers]
+  header: '{{diagnostics_group}}'
+  text: '{{diagnostics_group_descr}}'
+  hasHeader: true
+  children:
+  - url: improved-tunnelers.diagnostics.enabled
+    name: improved-tunnelers-diagnostics-enabled
+    text: '{{diagnostics_enabled}}'
+    tooltip: '{{diagnostics_enabled_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: false
