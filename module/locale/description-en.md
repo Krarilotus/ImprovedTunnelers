@@ -23,7 +23,9 @@ take their next target from there, so they carry straight on through the hole ra
 starting again somewhere else. Once a tunnel has reached the front it is not sent back at it -
 it picks the next thing further in, and never one of your own tunnels is already digging at, so
 each of them brings its own piece down instead of the first one taking the spot and the rest
-arriving at bare ground. A tunnel dug later, anywhere along the line, joins whatever the line is
+arriving at bare ground. Each turn has to gain real ground too, eight tiles by default, so a
+tunnel goes on to the next fortification rather than creeping along the wall it has just
+broken. A tunnel dug later, anywhere along the line, joins whatever the line is
 working at now. The line advances - around the keep, never under it - towards the campfire, and
 is forgotten only after five minutes with nothing taken.
 
@@ -78,6 +80,7 @@ button; the dig button moves one slot along to make room for it.
 | Search range | How far a tunnel looks for a target | 80 tiles |
 | **Breach reach** | How near a tunnel must have started to join the breach the others are at - the distance between the two tunnels, not to the wall. Higher: they converge from further apart. Lower: each digs at what is in front of it | 40 tiles |
 | Finish before turning | A tunnel already digging finishes its leg before it takes a new target, so the breaches sit end to end | on |
+| Deeper each turn | The least ground a turned tunnel must gain before a target counts | 8 tiles |
 | Times per tunnel | How often one tunnel may be turned aside | 10 |
 | Fill in behind | Collapse the stretch already dug when a tunnel turns aside | on |
 | Aim towards the camp | Drive the breaches inwards towards the enemy's campfire | on |

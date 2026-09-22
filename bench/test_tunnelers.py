@@ -95,6 +95,8 @@ class Fixture:
         self.claims_slot = self.control + 0x2D8
         self.claims_active = self.control + 0x2DC
         self.search_range = self.control + 0x2E0
+        self.advance = self.control + 0xAC
+        self.min_advance = self.control + 0x2E4
         self.pending = self.control + 0xE4
         self.origin_x = self.control + 0x224
         self.origin_y = self.control + 0x228
@@ -988,6 +990,21 @@ def scenario(extreme):
     joins(1291, x=100, y=150, arrived=1)
     check('  one that has got there digs on past it instead', asked[0], 0)
 
+    advances = []
+    plain_find = h.cpu.hooks[f.alg_find]
+
+    def watch_advance(cpu):
+        advances.append(h.u32(f.min_advance))
+        plain_find(cpu)
+
+    h.cpu.hooks[f.alg_find] = watch_advance
+    joins(1297, x=100, y=150, arrived=1)
+    check('  and it has to gain ground to bother turning at all',
+          advances and advances[0], h.u32(f.advance))
+    check('    which is the setting', h.u32(f.advance), 8)
+    h.cpu.hooks[f.alg_find] = plain_find
+    check('  and nothing is left demanding it afterwards', h.u32(f.min_advance), 0)
+
     # ... and two of them pushing on do not pick the same tile
     print('  and that two of them do not take the same tile')
     claims = f.claims + f.claim_stride * 1
@@ -1405,6 +1422,32 @@ def scenario(extreme):
     check('one that would take the tunnel deeper than the cap is passed by',
           reaches(250, 250), 'passed')
     h.put32(f.depth_limit, 0)
+
+    # ... and the floor under it: the next tile of the wall the tunnel has just broken is
+    # closer to the camp than the tunneller is standing, so without a floor that is what
+    # every turn takes, a tile at a time, until the tunnel has no turns left
+    h.put32(f.min_advance, 8)
+    h.put16(f.distance_map + 2 * 40000, 1)
+    check('a target one tile further in is not worth turning for',
+          reaches(250, 250), 'passed')
+    h.put16(f.distance_map + 2 * 40000, 7)
+    check('  nor one just short of the advance', reaches(250, 250), 'passed')
+    h.put16(f.distance_map + 2 * 40000, 8)
+    check('  one that gains the whole advance is taken', reaches(250, 250), 'taken')
+    h.put16(f.distance_map + 2 * 40000, 30)
+    check('  and one deeper still', reaches(250, 250), 'taken')
+    h.put32(f.depth_limit, 20)
+    check('  but never past the cap', reaches(250, 250), 'passed')
+    h.put32(f.depth_limit, 0)
+    h.put32(f.bias, 0)
+    check('with the narrowing down the floor is down too', reaches(250, 250), 'taken')
+    h.put32(f.bias, 1)
+    h.put32(f.pinned, 40000)
+    h.put16(f.distance_map + 2 * 40000, 1)
+    check('and a pinned tile is taken however near it is', reaches(250, 250), 'taken')
+    h.put32(f.pinned, 0)
+    h.put32(f.min_advance, 0)
+    h.put16(f.distance_map + 2 * 40000, 30)
 
     h.put32(f.pinned, 40000)
     check('a pinned breach is taken wherever it lies', reaches(80, 80), 'taken')

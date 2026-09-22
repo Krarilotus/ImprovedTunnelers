@@ -63,6 +63,17 @@ retarget_breach_reach_tooltip: |
   wall, so this is deliberately shorter than the search range above. It also saves work: a
   tunnel that joins a breach asks the game's search once instead of several times over.
   Default 40.
+retarget_advance: How much deeper each turn digs (tiles)
+retarget_advance_tooltip: |
+  When a tunnel is turned at a breach that is already open, this is the least it must gain
+  before a target counts - measured in tiles of tunnel, from where the tunneller is standing.
+  Without it the only test is "closer to the enemy camp than where I stand", which the very
+  next tile of the wall the tunnel has just come up under passes, so the tunnel creeps along
+  that wall a tile at a time and uses up its whole allowance of turns doing it, collapsing
+  a few tiles from the last breach with nothing to show for it. Eight is past the wall face
+  and the towers on it, and short enough that the next ring of a castle is still in reach.
+  Higher and each hit lands deeper in but a tunnel more often finds nothing and stops;
+  0 turns it off. Default 8.
 retarget_range: Search range (tiles)
 retarget_range_tooltip: |
   How far a tunnel being turned aside may look for its next target, counted from where the

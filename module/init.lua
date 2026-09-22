@@ -436,6 +436,14 @@ local TUNNEL_DAMAGE = 5
 -- search uses 20, then 40, then 80, and that is left alone.
 local DEFAULT_SEARCH_RANGE = 80
 
+-- ... and how much ground it has to gain to be worth turning for, also in tiles of digging.
+-- The inward test on its own is only "closer to the enemy camp than where I stand", which
+-- the next tile of the wall the tunnel has just broken satisfies, so without this a turned
+-- tunnel creeps along that wall a tile at a time and spends its whole allowance of turns
+-- doing it. Eight tiles is far enough to be past the wall face and the towers on it, and
+-- short enough that the next ring of a castle is still in reach.
+local DEFAULT_ADVANCE = 8
+
 -- How close two collapses have to be to count as the same breach, so the second one adds
 -- its time to the first zone instead of taking a second one; and how close a tunnel's
 -- destination has to be to a collapse for that tunnel to count as aimed at the same spot.
@@ -522,6 +530,7 @@ C.ORIGIN_DISTANCE = 0x9C
 C.CAMP_X = 0xA0
 C.CAMP_Y = 0xA4
 C.UNDER_BUILDINGS = 0xA8          -- a tunnel may pass beneath the town
+C.ADVANCE = 0xAC                  -- how much ground a turned tunnel has to gain, in tiles
 C.BEST_TILE = 0xB0                -- the best target a search has turned up
 C.BEST_X = 0xB4
 C.BEST_Y = 0xB8
@@ -585,6 +594,8 @@ C.CLAIMS_ACTIVE = 0x2DC                       -- ... and whether a search is ste
                                               -- them, which is only while the module's own
                                               -- search runs
 C.SEARCH_RANGE = 0x2E0                        -- how far this round of the search may reach
+C.MIN_ADVANCE = 0x2E4                         -- ... and how far in it must reach before a
+                                              -- target counts, while the narrowing is up
 C.GAME_TILE = 0x2AC                           -- what the game's own aim answered, so the
                                               -- module can tell its own target from it
 C.QUEUE = 0x2E8
@@ -610,6 +621,7 @@ local DEFAULTS = {
   denial = { enabled = true, seconds = 120, message = true },
   retarget = { enabled = true, range = DEFAULT_SEARCH_RANGE, max = 10,
     collapse_behind = true, towards_camp = true, breach_reach = DEFAULT_BREACH_REACH,
+    advance = DEFAULT_ADVANCE,
     finish_leg = true },
   targets = { towers_and_gates = true, under_buildings = true },
   collapse = { damage = 2500, spread = true, spread_damage = 60, spread_radius = 2,
@@ -766,6 +778,8 @@ return {
     local retargetMax = toInteger(setting(config, "retarget", "max"), DEFAULTS.retarget.max)
     local breachReach = toInteger(setting(config, "retarget", "breach_reach"),
       DEFAULTS.retarget.breach_reach)
+    local advance = toInteger(setting(config, "retarget", "advance"),
+      DEFAULTS.retarget.advance)
     local finishLegOn = setting(config, "retarget", "finish_leg") and true or false
     local collapseBehind = setting(config, "retarget", "collapse_behind") and true or false
     local targetsOn = setting(config, "targets", "towers_and_gates") and true or false
@@ -837,6 +851,7 @@ return {
     writeInteger(control + C.RETARGET_RANGE, retargetRange)
     writeInteger(control + C.RETARGET_MAX, retargetMax)
     writeInteger(control + C.BREACH_REACH, breachReach * breachReach)
+    writeInteger(control + C.ADVANCE, advance)
     writeInteger(control + C.FINISH_LEG, finishLegOn and 1 or 0)
     writeInteger(control + C.UI_ENABLED, uiOn and 1 or 0)
     writeInteger(control + C.STANCE_ENABLED, stancesOn and 1 or 0)
@@ -1175,12 +1190,24 @@ return {
         CAMP_Y_ADDRESS = control + C.CAMP_Y,
         ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,
       })
+      local runSearch                                   -- built once pickRange is in hand
       local pickRange = core.allocateAssembly(templates.pick_range, {
         RANGE_ADDRESS = control + C.RETARGET_RANGE,
         BIAS_ACTIVE_ADDRESS = control + C.BIAS_ACTIVE,
         PINNED_TILE_ADDRESS = control + C.PINNED_TILE,
         DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
         SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
+      })
+      runSearch = core.allocateAssembly(templates.run_search, {
+        PICK_RANGE_ADDRESS = pickRange,
+        SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
+        SEARCH_UNIT_ADDRESS = control + C.INITIAL_UNIT,
+        ORIGIN_X_ADDRESS = control + C.ORIGIN_X,
+        ORIGIN_Y_ADDRESS = control + C.ORIGIN_Y,
+        PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
+        SEARCH_ADDRESS = search,
+        UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
+        UNIT_SIEGE_TARGET = (unitBase + UNIT_SIEGE_TARGET) & 0xFFFFFFFF,
       })
       local recordBreach = core.allocateAssembly(templates.record_breach, {
         SHARED_SLOT_ADDRESS = control + C.SHARED_SLOT,
@@ -1196,12 +1223,15 @@ return {
         TAKE_RESULT_ADDRESS = takeResult,
         BEST_DISTANCE_ADDRESS = bestDistance,
         RECORD_BREACH_ADDRESS = recordBreach,
-        PICK_RANGE_ADDRESS = pickRange,
-        SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
+        RUN_SEARCH_ADDRESS = runSearch,
+        SEARCH_UNIT_ADDRESS = control + C.INITIAL_UNIT,
+        ORIGIN_X_ADDRESS = control + C.ORIGIN_X,
+        ORIGIN_Y_ADDRESS = control + C.ORIGIN_Y,
+        ADVANCE_ADDRESS = control + C.ADVANCE,
+        MIN_ADVANCE_ADDRESS = control + C.MIN_ADVANCE,
         UNIT_ADDRESS = control + C.REAIM_UNIT,
         ARRIVED_ADDRESS = control + C.REAIM_ARRIVED,
         RECORD_ADDRESS = control + C.REAIM_RECORD,
-        RANGE_ADDRESS = control + C.RETARGET_RANGE,
         COLLAPSE_BEHIND_ADDRESS = control + C.COLLAPSE_BEHIND,
         FILL_ADDRESS = queueFill or core.allocateCode({ 0xC3 }),
         FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
@@ -1241,10 +1271,7 @@ return {
         UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
         UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
         UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-        UNIT_SIEGE_TARGET = (unitBase + UNIT_SIEGE_TARGET) & 0xFFFFFFFF,
-        PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
         ALG_RESULT_ADDRESS = readAddress(finder + FIND_RESULT_OPERAND),
-        SEARCH_ADDRESS = search,
         SET_DESTINATION_ADDRESS = callTarget(tunneler + TUNNELER_SET_DESTINATION_CALL),
         UNITS_STATE_ADDRESS = unitsState,
       })
@@ -1288,11 +1315,9 @@ return {
           TAKE_RESULT_ADDRESS = takeResult,
           BEST_DISTANCE_ADDRESS = bestDistance,
           RECORD_BREACH_ADDRESS = recordBreach,
-          PICK_RANGE_ADDRESS = pickRange,
-          SEARCH_RANGE_ADDRESS = control + C.SEARCH_RANGE,
+          RUN_SEARCH_ADDRESS = runSearch,
+          MIN_ADVANCE_ADDRESS = control + C.MIN_ADVANCE,
           FIND_TARGET_ADDRESS = finder,
-          SEARCH_ADDRESS = search,
-          PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
           ALG_RESULT_ADDRESS = readAddress(finder + FIND_RESULT_OPERAND),
           ALG_TARGET_X_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_X_OPERAND),
           ALG_TARGET_Y_ADDRESS = readAddress(tunneler + TUNNELER_ALG_TARGET_Y_OPERAND),
@@ -1310,7 +1335,6 @@ return {
           UNIT_WORKPLACE = (unitBase + UNIT_WORKPLACE) & 0xFFFFFFFF,
           BUILDING_SOME_X = (buildingBase + BUILDING_SOME_X) & 0xFFFFFFFF,
           BUILDING_SOME_Y = (buildingBase + BUILDING_SOME_Y) & 0xFFFFFFFF,
-          RANGE_ADDRESS = control + C.RETARGET_RANGE,
           SEARCH_ROUNDS = SEARCH_ROUNDS,
           ANCHOR_ADDRESS = anchor or anchorStub,
           ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
@@ -1336,7 +1360,6 @@ return {
           DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
           BUILDING_STRIDE = SEARCH_STRIDE,
           UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-          UNIT_SIEGE_TARGET = (unitBase + UNIT_SIEGE_TARGET) & 0xFFFFFFFF,
           RETURN_ADDRESS = tunneler + TUNNELER_FIND_TARGET_CALL + 5,
         })
         remember(tunneler + TUNNELER_FIND_TARGET_CALL, 5)
@@ -1526,6 +1549,7 @@ return {
             CLAIMS_SLOT_ADDRESS = control + C.CLAIMS_SLOT,
             CLAIMS_ACTIVE_ADDRESS = control + C.CLAIMS_ACTIVE,
             CLAIM_COUNT = TRAIL.claims,
+            MIN_ADVANCE_ADDRESS = control + C.MIN_ADVANCE,
             DEPTH_LIMIT_ADDRESS = control + C.DEPTH_LIMIT,
             DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
             ORIGIN_DISTANCE_ADDRESS = control + C.ORIGIN_DISTANCE,

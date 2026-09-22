@@ -190,6 +190,13 @@ mov dword [BIAS_ACTIVE_ADDRESS], 0
 mov dword [DEPTH_LIMIT_ADDRESS], 0
 mov dword [PINNED_TILE_ADDRESS], 0
 mov dword [SHARED_SLOT_ADDRESS], 0
+mov ecx, [ADVANCE_ADDRESS]
+mov [MIN_ADVANCE_ADDRESS], ecx
+mov [SEARCH_UNIT_ADDRESS], eax
+movsx ecx, word [eax+UNIT_X]
+mov [ORIGIN_X_ADDRESS], ecx
+movsx ecx, word [eax+UNIT_Y]
+mov [ORIGIN_Y_ADDRESS], ecx
 movsx ecx, word [eax+UNIT_OWNER]
 imul ecx, ecx, CLAIM_STRIDE
 add ecx, CLAIMS_ADDRESS
@@ -232,26 +239,13 @@ cmp ecx, [ORIGIN_DISTANCE_ADDRESS]
 jae reaim_no_mark
 mov [ORIGIN_DISTANCE_ADDRESS], ecx
 reaim_no_mark:
-mov eax, [SCALED_ADDRESS]
 reaim_search:
-call PICK_RANGE_ADDRESS
-movsx ecx, word [eax+UNIT_Y]
-push ecx
-movsx ecx, word [eax+UNIT_X]
-push ecx
-push dword [SEARCH_RANGE_ADDRESS]
-movsx ecx, word [eax+UNIT_SIEGE_TARGET]
-push ecx
-movsx ecx, word [eax+UNIT_OWNER]
-push ecx
-mov ecx, PATH_STATE_ADDRESS
-call SEARCH_ADDRESS
+call RUN_SEARCH_ADDRESS
 cmp dword [ALG_RESULT_ADDRESS], 0
 jne reaim_round_found
 cmp dword [PINNED_TILE_ADDRESS], 0
 je reaim_free_miss
 mov dword [PINNED_TILE_ADDRESS], 0
-mov eax, [SCALED_ADDRESS]
 jmp reaim_search
 reaim_free_miss:
 cmp dword [BEST_TILE_ADDRESS], 0
@@ -259,13 +253,11 @@ jne reaim_has_target
 cmp dword [CLAIMS_ACTIVE_ADDRESS], 0
 je reaim_unclaimed_too
 mov dword [CLAIMS_ACTIVE_ADDRESS], 0
-mov eax, [SCALED_ADDRESS]
 jmp reaim_search
 reaim_unclaimed_too:
 cmp dword [BIAS_ACTIVE_ADDRESS], 0
 je reaim_nothing
 mov dword [BIAS_ACTIVE_ADDRESS], 0
-mov eax, [SCALED_ADDRESS]
 jmp reaim_search
 reaim_round_found:
 call TAKE_RESULT_ADDRESS
@@ -292,6 +284,7 @@ mov eax, [SCALED_ADDRESS]
 jmp reaim_search
 reaim_has_target:
 mov dword [BIAS_ACTIVE_ADDRESS], 0
+mov dword [MIN_ADVANCE_ADDRESS], 0
 mov dword [DEPTH_LIMIT_ADDRESS], 0
 mov dword [PINNED_TILE_ADDRESS], 0
 mov dword [CLAIMS_ACTIVE_ADDRESS], 0
@@ -326,6 +319,7 @@ mov eax, 1
 ret
 reaim_nothing:
 mov dword [BIAS_ACTIVE_ADDRESS], 0
+mov dword [MIN_ADVANCE_ADDRESS], 0
 mov dword [DEPTH_LIMIT_ADDRESS], 0
 mov dword [PINNED_TILE_ADDRESS], 0
 mov dword [CLAIMS_ACTIVE_ADDRESS], 0
@@ -1002,6 +996,24 @@ ret
 -- The cap only applies while the module's own depth filter is up: a pinned round has to
 -- reach its one tile wherever it is, and a round with the filter down is the fallback that
 -- must be allowed to find anything at all.
+-- One round of the game's own target search, for whichever aim is running: the unit it is
+-- for and the spot it spreads from are in the module's own words, so both aims share this
+-- rather than carrying the call twice.
+local run_search = [[
+call PICK_RANGE_ADDRESS
+mov ecx, [SEARCH_UNIT_ADDRESS]
+push dword [ORIGIN_Y_ADDRESS]
+push dword [ORIGIN_X_ADDRESS]
+push dword [SEARCH_RANGE_ADDRESS]
+movsx edx, word [ecx+UNIT_SIEGE_TARGET]
+push edx
+movsx edx, word [ecx+UNIT_OWNER]
+push edx
+mov ecx, PATH_STATE_ADDRESS
+call SEARCH_ADDRESS
+ret
+]]
+
 local pick_range = [[
 mov ecx, [RANGE_ADDRESS]
 cmp dword [BIAS_ACTIVE_ADDRESS], 0
@@ -1464,6 +1476,24 @@ target_vanilla:
 jmp RETURN_ADDRESS
 ]]
 
+-- Two figures bracket what a re-aimed tunnel may take, and both are counted in tiles of
+-- digging, which is what the search's own distance map holds. The depth limit is the
+-- ceiling: not deeper than the first answer plus a little room to look along the wall face.
+-- The advance is the floor, and it is the one that makes a tunnel go somewhere.
+--
+-- Without a floor the only inward test is "closer to the enemy camp than where I stand",
+-- which the very next tile of the wall the tunnel has just come up under satisfies - and
+-- the search stops at the first tile it will take, so that is what it gets. The tunnel then
+-- digs one tile, arrives, finds nothing worth collapsing on, turns again, and spends its
+-- whole allowance of turns creeping along the wall it already broke. Every one of those
+-- turns runs the search several times over, and every tunnel of that player is doing it at
+-- once, which is what a player sees as a lag spike and as tunnels that all collapse in the
+-- same place having damaged nothing.
+--
+-- The floor is only up while the module's own narrowing runs: a pinned round has to reach
+-- its one tile wherever that is, and the fallback round with the narrowing down must be
+-- free to take anything at all rather than leave a tunnel with no target.
+--
 -- Where the search decides the tile it has reached is the target - the one place walls,
 -- gates and towers all come through. With the module looking for something towards the
 -- enemy's keep, a target is only taken when it is closer to that keep than the tunneler is
@@ -1495,10 +1525,12 @@ je accept_spread_past
 sub ecx, 1
 jnz accept_claim
 accept_unclaimed:
+movsx ecx, word [ebp*2+DISTANCE_MAP_ADDRESS]
+cmp ecx, [MIN_ADVANCE_ADDRESS]
+jl accept_spread_past
 mov eax, [DEPTH_LIMIT_ADDRESS]
 test eax, eax
 je accept_near_enough
-movsx ecx, word [ebp*2+DISTANCE_MAP_ADDRESS]
 cmp ecx, eax
 jg accept_spread_past
 accept_near_enough:
@@ -1550,6 +1582,7 @@ je initial_done
 mov dword [SHARED_SLOT_ADDRESS], 0
 mov dword [PINNED_TILE_ADDRESS], 0
 mov dword [DEPTH_LIMIT_ADDRESS], 0
+mov dword [MIN_ADVANCE_ADDRESS], 0
 mov dword [OURS_ADDRESS], 0
 mov ecx, [ALG_RESULT_ADDRESS]
 mov [GAME_TILE_ADDRESS], ecx
@@ -1608,17 +1641,7 @@ cmp ecx, [ORIGIN_DISTANCE_ADDRESS]
 jae initial_round
 mov [ORIGIN_DISTANCE_ADDRESS], ecx
 initial_round:
-call PICK_RANGE_ADDRESS
-mov ecx, [INITIAL_UNIT_ADDRESS]
-push dword [ORIGIN_Y_ADDRESS]
-push dword [ORIGIN_X_ADDRESS]
-push dword [SEARCH_RANGE_ADDRESS]
-movsx edx, word [ecx+UNIT_SIEGE_TARGET]
-push edx
-movsx edx, word [ecx+UNIT_OWNER]
-push edx
-mov ecx, PATH_STATE_ADDRESS
-call SEARCH_ADDRESS
+call RUN_SEARCH_ADDRESS
 cmp dword [ALG_RESULT_ADDRESS], 0
 je initial_miss
 call TAKE_RESULT_ADDRESS
@@ -1925,6 +1948,7 @@ return {
   clear_trail = clear_trail,
   claim_target = claim_target,
   pick_range = pick_range,
+  run_search = run_search,
   take_result = take_result,
   best_distance = best_distance,
   record_breach = record_breach,
