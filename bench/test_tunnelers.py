@@ -954,6 +954,31 @@ def scenario(extreme):
     check('and one with nowhere to go says that',
           'collapses there' in (dh.logs[before] if len(dh.logs) > before else ''), True)
 
+    # the stopwatch: every tunneller update is timed, and a tick far longer than usual
+    # writes one line saying where its time went
+    sw = d.control + 0x1CC
+    d.set_unit(12, state=3, uid=4323)
+    dh.put32(d.current_unit, 12)
+    dh.put16(d.unit(12) + 0xF6, 2)                          # still on its way
+    marks = dict(ebx=0x44440000, esi=0x55550000, edi=0x66660000, ebp=0x77770000)
+    cpu = dh.run(d.tunneler, regs=dict(marks))
+    check('a timed tunneller update keeps the registers the game expects kept',
+          {k: cpu.r[k] for k in marks}, marks)
+    check('  and is counted, with its time', (dh.u32(sw + 0x20), dh.u32(sw + 0x08) > 0),
+          (1, True))
+    tick_on = d.tick_site + 9
+    dh.run(d.tick_site, until=tick_on)
+    dh.run(d.tick_site, until=tick_on)
+    before = len(dh.logs)
+    dh.run(d.tick_site, until=tick_on)
+    check('an ordinary tick writes nothing', len(dh.logs) - before, 0)
+    dh.cpu.clock_offset = getattr(dh.cpu, 'clock_offset', 0) + 1024 * 60000
+    dh.run(d.tick_site, until=tick_on)
+    slow = dh.logs[before:]
+    check('a tick far longer than usual writes one line', len(slow), 1)
+    check('  saying it was slow', 'slow tick' in (slow[0] if slow else ''), True)
+    check('  and it starts the next one from nothing', dh.u32(sw + 0x08), 0)
+
     # every tile of every wall the AI puts down goes through the build check, so its line
     # is rationed: one a second, however many attempts there are
     dh.put32(d.teams + 4 * 4, 1)
@@ -1117,7 +1142,7 @@ def scenario(extreme):
 
     print(' and the tunnel it queues to fall in behind it')
     f.fill_routine = f.module_routine(f.tunneler + 0x8DD)   # the only one it calls of ours
-    f.step_routine = f.module_routine(f.tick_site)
+    f.step_routine = f.module_routine(f.tick_site, skip=1)   # after the stopwatch report
     h.put32(f.queue_count, 0)
     qunit = 13
     qtile = 100 * 400 + 100

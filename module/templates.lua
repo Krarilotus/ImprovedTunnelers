@@ -1264,6 +1264,59 @@ cross_off:
 jmp NOT_ARRIVED_ADDRESS
 ]]
 
+-- A stopwatch round UpdateTunneler, for the diagnostics. Sits on the function's entry: with
+-- diagnostics off it replays the two instructions it replaced and goes on, as if it were not
+-- there; with them on it calls the whole function as a subroutine and reads the time stamp
+-- counter either side (in units of 1024 cycles), adding what each tunneller's update cost -
+-- its searches, its path, its collapse and the game's damage - to this tick's total, and
+-- keeping the dearest one with the state it started in and REDIRECT_HOW. queue_tick reads
+-- and clears those at the start of every tick, and reports a tick that took far longer
+-- than usual. EAX comes back as the function's own; the rest as the function leaves them.
+local tunneler_timed = [[
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je timed_plain
+push ebx
+rdtsc
+shrd eax, edx, 10
+push eax
+mov eax, [CURRENT_UNIT_ADDRESS]
+imul eax, eax, 1168
+movzx eax, word [eax+UNIT_STATE]
+push eax
+mov dword [REDIRECT_HOW_ADDRESS], 0
+call timed_plain
+pop ecx
+pop ebx
+push eax
+rdtsc
+shrd eax, edx, 10
+sub eax, ebx
+add [SW_TUNNEL_ADDRESS], eax
+add dword [SW_COUNT_ADDRESS], 1
+cmp eax, [SW_MAX_ADDRESS]
+jbe timed_small
+mov [SW_MAX_ADDRESS], eax
+mov [SW_MAX_STATE_ADDRESS], ecx
+mov eax, [CURRENT_UNIT_ADDRESS]
+mov [SW_MAX_UNIT_ADDRESS], eax
+mov eax, [REDIRECT_HOW_ADDRESS]
+mov [SW_MAX_HOW_ADDRESS], eax
+timed_small:
+pop eax
+pop ebx
+ret
+timed_plain:
+jmp BODY_ADDRESS
+]]
+
+-- The two instructions at UpdateTunneler's entry, for the stopwatch to call when nothing
+-- else is hooked there.
+local tunneler_entry = [[
+push ecx
+mov ecx, [FIRST_OPERAND]
+jmp RETURN_ADDRESS
+]]
+
 -- Inside traceAndCommitPathPlan, where the trace has found no way back to the unit. The
 -- game takes that to mean its own maps are stale and rebuilds the path linkage of every
 -- building and the separate-area map of the whole map before it gives up: millions of
@@ -2241,6 +2294,55 @@ ret
 -- it. Hence the pushad - the drain calls the game's own damage, which clobbers freely.
 local queue_tick = [[
 pushad
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je tick_unwatched
+rdtsc
+shrd eax, edx, 10
+mov ebx, eax
+mov ecx, eax
+sub ecx, [SW_LAST_ADDRESS]
+cmp dword [SW_LAST_ADDRESS], 0
+mov [SW_LAST_ADDRESS], ebx
+je tick_watch_reset
+mov eax, [SW_AVERAGE_ADDRESS]
+shl eax, 2
+cmp ecx, eax
+jbe tick_watch_average
+cmp ecx, SW_FLOOR
+jbe tick_watch_average
+mov [REPORT_ADDRESS], ecx
+mov eax, [SW_TUNNEL_ADDRESS]
+mov [REPORT_ADDRESS+4], eax
+mov eax, [SW_QUEUE_ADDRESS]
+mov [REPORT_ADDRESS+8], eax
+mov eax, [SW_MAX_ADDRESS]
+mov [REPORT_ADDRESS+12], eax
+mov eax, [SW_MAX_STATE_ADDRESS]
+mov [REPORT_ADDRESS+16], eax
+mov eax, [SW_MAX_UNIT_ADDRESS]
+mov [REPORT_ADDRESS+20], eax
+mov eax, [SW_MAX_HOW_ADDRESS]
+mov [REPORT_ADDRESS+24], eax
+mov dword [REPORT_ADDRESS+28], 47
+mov eax, [SW_COUNT_ADDRESS]
+mov [REPORT_ADDRESS+32], eax
+mov [REPORT_ADDRESS+36], ebx
+push ecx
+call REPORT_PAD_ADDRESS
+pop ecx
+jmp tick_watch_reset
+tick_watch_average:
+mov eax, ecx
+sub eax, [SW_AVERAGE_ADDRESS]
+sar eax, 4
+add [SW_AVERAGE_ADDRESS], eax
+tick_watch_reset:
+xor eax, eax
+mov [SW_TUNNEL_ADDRESS], eax
+mov [SW_QUEUE_ADDRESS], eax
+mov [SW_MAX_ADDRESS], eax
+mov [SW_COUNT_ADDRESS], eax
+tick_unwatched:
 cmp dword [QUEUE_COUNT_ADDRESS], 0
 je tick_done
 mov eax, [SPEED_ADDRESS]
@@ -2273,6 +2375,13 @@ mov eax, [TICK_LEFT_ADDRESS]
 test eax, eax
 jg tick_next
 tick_done:
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je tick_out
+rdtsc
+shrd eax, edx, 10
+sub eax, [SW_LAST_ADDRESS]
+mov [SW_QUEUE_ADDRESS], eax
+tick_out:
 popad
 push ebx
 push ebp
@@ -2543,6 +2652,8 @@ return {
   quiet_trace = quiet_trace,
   aim_cone = aim_cone,
   crossing = crossing,
+  tunneler_timed = tunneler_timed,
+  tunneler_entry = tunneler_entry,
   extend_plan = extend_plan,
   arrival = arrival,
   tunnel_targets = tunnel_targets,

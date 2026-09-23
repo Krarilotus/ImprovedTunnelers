@@ -329,6 +329,14 @@ class CPU:
             self.cf = self.of = self.r['edx'] != 0
         elif mn == 'cdq':
             self.r['edx'] = MASK if self.r['eax'] >> 31 else 0
+        elif mn == 'rdtsc':                      # the clock is the instruction count
+            t = self.count * 1024 + getattr(self, 'clock_offset', 0)   # 1024 cycles an instruction
+            self.r['eax'], self.r['edx'] = t & MASK, (t >> 32) & MASK
+        elif mn == 'shrd':
+            d, src = self.get(insn, ops[0]), self.get(insn, ops[1])
+            n = self.get(insn, ops[2]) & 31
+            if n:
+                self.set(insn, ops[0], ((d | (src << 32)) >> n) & MASK)
         elif mn == 'idiv':
             d = self.get(insn, ops[0])
             d = d - (1 << 32) if d >> 31 else d

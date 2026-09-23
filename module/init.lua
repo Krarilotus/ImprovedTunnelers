@@ -434,6 +434,7 @@ ROUTE.stepSeconds = 2                         -- how long a half-done retarget i
 ROUTE.refused = 8                             -- targets set aside at a time
 ROUTE.size = ROUTE.pathOffset + ROUTE.pathMax * 4
 -- Where traceAndCommitPathPlan finds no way back and goes on to rebuild the whole map.
+ROUTE.stopwatchFloor = 12000                  -- a tick this long (x1024 cycles) is worth a line
 ROUTE.travelHook = 0x7E0                      -- je: not at its destination yet
 ROUTE.traceFailed = {
   aob = "8B 7C 24 10 83 47 78 01 8B CF C7 87 ? ? ? ? 00 00 00 00 E8",
@@ -585,6 +586,15 @@ C.FOLLOW_FIRST = 0x180            -- the first fortification standing ahead of i
 C.FOLLOW_PICK = 0x184             -- ... and the one it is sent at
 C.REFUSED = 0x188                 -- {tile, until}, the targets set aside
 C.QUIET = 0x1C8                   -- the path being laid is ours: no rebuild if it fails
+C.SW_LAST = 0x1CC                 -- stopwatch: when this tick started (cycles / 1024)
+C.SW_AVERAGE = 0x1D0              -- ... a tick's usual length
+C.SW_TUNNEL = 0x1D4               -- ... spent in UpdateTunneler this tick
+C.SW_QUEUE = 0x1D8                -- ... spent collapsing tunnels from the queue
+C.SW_MAX = 0x1DC                  -- ... the dearest single tunneller update
+C.SW_MAX_STATE = 0x1E0            -- ... the state it started in
+C.SW_MAX_UNIT = 0x1E4
+C.SW_MAX_HOW = 0x1E8              -- ... and REDIRECT_HOW after it
+C.SW_COUNT = 0x1EC                -- ... tunneller updates this tick
 C.FILL_UNIT = 0x22C               -- the tunnel being written into the queue
 C.FILL_FLAGS = 0x230
 C.FILL_TILE = 0x234
@@ -661,6 +671,10 @@ local REPORT_WORDS = {
   [46] = "the game would not lay the path; the target is set aside and tunnels here wait a "
       .. "moment (tile = the target, flags = its flags, c = the line, d = tries, "
       .. "e = where the tunnel stands, f = that tile's flags, g = its plan so far)",
+  [47] = "a slow tick (a = its length, tile = spent in tunneller updates, flags = spent "
+      .. "collapsing tunnels, b = the dearest single tunneller update, c = the state it "
+      .. "started in, d = its unit, e = how it was sent on, f = tunneller updates, g = the "
+      .. "clock; all times in units of 1024 CPU cycles)",
   [44] = "a line laid out its route to the campfire (a = player, tile = the first "
       .. "fortification on it, flags = tiles on its path, b = fortifications on it, "
       .. "c = how far the search reached)",
@@ -1077,6 +1091,19 @@ return {
 
         -- ... and the tick that works through what is queued.
         local tick = core.allocateAssembly(templates.queue_tick, {
+          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+          REPORT_ADDRESS = report,
+          REPORT_PAD_ADDRESS = reportPad,
+          SW_FLOOR = ROUTE.stopwatchFloor,
+          SW_LAST_ADDRESS = control + C.SW_LAST,
+          SW_AVERAGE_ADDRESS = control + C.SW_AVERAGE,
+          SW_TUNNEL_ADDRESS = control + C.SW_TUNNEL,
+          SW_QUEUE_ADDRESS = control + C.SW_QUEUE,
+          SW_MAX_ADDRESS = control + C.SW_MAX,
+          SW_MAX_STATE_ADDRESS = control + C.SW_MAX_STATE,
+          SW_MAX_UNIT_ADDRESS = control + C.SW_MAX_UNIT,
+          SW_MAX_HOW_ADDRESS = control + C.SW_MAX_HOW,
+          SW_COUNT_ADDRESS = control + C.SW_COUNT,
           QUEUE_ADDRESS = queue,
           QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT,
           SPEED_ADDRESS = control + C.SPEED,
@@ -1472,6 +1499,7 @@ return {
       remember(tunneler + TUNNELER_ARRIVED_HOOK, TUNNELER_ARRIVED_HOOK_SIZE)
       writeJump(tunneler + TUNNELER_ARRIVED_HOOK, arrival, TUNNELER_ARRIVED_HOOK_SIZE)
 
+
       -- A path of ours that will not lay must not set off the game's whole-map rebuild.
       local traceFailed = scanOptional(ROUTE.traceFailed.aob, "the path trace's failure branch")
       if traceFailed ~= nil
@@ -1752,6 +1780,36 @@ return {
       stanceReady = true
     end
 
+    if tunneler ~= nil and unitBase ~= nil then
+      -- The stopwatch round every tunneller update, for the diagnostics.
+      -- It calls whatever sits on the entry already - the stance hook, when that is on -
+      -- or else the two instructions it replaces, so it is always the outermost.
+      local body
+      if (readByte(tunneler) & 0xFF) == 0xE9 then
+        body = (tunneler + 5 + readInteger(tunneler + 1)) & 0xFFFFFFFF
+      else
+        body = core.allocateAssembly(templates.tunneler_entry, {
+          FIRST_OPERAND = readAddress(tunneler + 3),
+          RETURN_ADDRESS = tunneler + 7,
+        })
+      end
+      local timed = core.allocateAssembly(templates.tunneler_timed, {
+        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+        CURRENT_UNIT_ADDRESS = currentUnit,
+        UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
+        REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
+        SW_TUNNEL_ADDRESS = control + C.SW_TUNNEL,
+        SW_COUNT_ADDRESS = control + C.SW_COUNT,
+        SW_MAX_ADDRESS = control + C.SW_MAX,
+        SW_MAX_STATE_ADDRESS = control + C.SW_MAX_STATE,
+        SW_MAX_UNIT_ADDRESS = control + C.SW_MAX_UNIT,
+        SW_MAX_HOW_ADDRESS = control + C.SW_MAX_HOW,
+        BODY_ADDRESS = body,
+      })
+      remember(tunneler, 7)
+      writeJump(tunneler, timed, 7)
+    end
+
     ---------------------------------------------------------------------------------
 
     log(INFO, string.format(
@@ -1793,8 +1851,11 @@ return {
       writeInteger(self.control + C.UI_ENABLED, 0)
       writeInteger(self.control + C.STANCE_ENABLED, 0)
     end
-    for _, patch in ipairs(self.patched or {}) do
-      core.writeCodeBytes(patch.address, patch.bytes)
+    -- Newest first: two hooks on one address (the stopwatch over the stance) come off in
+    -- the order they went on, and the game's own bytes are the last thing written back.
+    local patched = self.patched or {}
+    for index = #patched, 1, -1 do
+      core.writeCodeBytes(patched[index].address, patched[index].bytes)
     end
     self.patched = {}
   end,
