@@ -17,18 +17,20 @@ one road in. A tunnel too far off to reach it starts a meeting point of its own,
 siege somewhere else gets one too.
 
 **Then they go on through the hole, one after another.** The first tunnel to get there brings the
-spot down. The next arrives at the hole, finds nothing left to collapse on, and is sent on from
-where it stands to the nearest fortification further in, in the direction of the enemy's
-campfire. That becomes the new meeting point; the tunnel after it goes on through to the next
-one; and so the line works its way in, one hit at a time, round the keep - which no tunnel can
-pass under - towards the campfire. Once nothing stands between the hole and the campfire any
-more, a tunnel takes the nearest fortification instead and widens the way in.
+spot down. The first one to arrive on the rubble after it lays out the route from the hole to the
+enemy's campfire - once - round the keep, which no tunnel can pass under. From then on the
+meeting point is simply the first fortification on that route still standing: every tunnel that
+arrives on the rubble is sent along the route to it, the one that gets there brings it down, and
+the next goes one further. Only when the whole route to the campfire is open do tunnels turn to
+the nearest fortification instead, to widen the way in. Tunnels dug in later join the line where
+its front is now.
 
 **A tunnel that is sent on is still one tunnel.** It carries on from where it stands, and when
 it comes up under its new target it collapses exactly the way it would have at the first one -
 the same damage, and the whole tunnel behind it, back to its entrance, comes down with it.
-Tunnels arriving together are sent on one a tick, so a group reaching the same hole never does
-more than one tunnel's searching in a single frame.
+Laying out the route costs one search, once per siege. Following it costs no search at all:
+the stretch of route ahead is handed straight to the game's own path tracer. Tunnels arriving
+together are still sent on one a tick.
 
 **A collapse damages, it does not delete.** What the tunnel comes up under takes a damage
 figure you set, through the game's own damage. At the default nothing survives, as before; turn

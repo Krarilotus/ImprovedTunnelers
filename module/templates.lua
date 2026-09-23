@@ -198,12 +198,14 @@ jmp RETURN_ADDRESS
 --     point. A player keeps up to four lines.
 --   * A tunnel that arrives on a fortification is left entirely to the game: its own
 --     collapse, its own damage.
---   * A tunnel that arrives on empty ground - another tunnel took its target first - is sent
---     on from where it stands: at its line if the line still stands and is in reach, else at
---     the nearest fortification lying towards the enemy's campfire, else, when nothing
---     stands between it and the campfire, at the nearest fortification of all, which widens
---     the way in. The line follows: when what it pointed at is gone, the next target one of
---     its tunnels is sent at becomes the line.
+--   * The first time a line's target comes down, the line lays out its route to the
+--     enemy's campfire - once, with one run of the search - and from then on the line's
+--     target is simply the first fortification on that route still standing. Every tunnel
+--     that arrives on the rubble is sent at it; each one that gets there brings it down and
+--     the next goes one further. Only when the whole route is open do tunnels turn to the
+--     nearest fortification of all, to widen the way in.
+--   * A tunnel with no line, or a line with no route (no campfire known), is sent at the
+--     nearest fortification lying towards the enemy's campfire, else the nearest of all.
 --   * The keep is never spread into (tunnel_targets below), so every path goes round it.
 --
 -- Sending a tunnel on never replaces the tunnel it has dug. Its path plan is kept whole
@@ -221,6 +223,8 @@ jmp RETURN_ADDRESS
 --   1  take only AIM_PIN, and spread on past anything else
 --   2  take only a tile inside a cone of 45 degrees either side of the line from
 --      AIM_FROM towards the enemy's campfire, and spread on past anything else
+--   3  take nothing at all: the search spreads to the edge of its range, which is how a
+--      line's route to the campfire is measured
 --
 -- The cone test is dot(v, w) > 0 and 2 dot(v, w)^2 >= |v|^2 |w|^2, v being the candidate
 -- less AIM_FROM and w the direction to the camp scaled down to 64 on its longer side, so
@@ -232,10 +236,13 @@ local aim_filter = [[
 mov eax, [AIM_MODE_ADDRESS]
 test eax, eax
 je filter_take
+cmp eax, 2
+je filter_cone
 cmp eax, 1
-jne filter_cone
+jne filter_never
 cmp ebp, [AIM_PIN_ADDRESS]
 je filter_take
+filter_never:
 jmp SPREAD_ADDRESS
 filter_cone:
 push ebx
@@ -367,6 +374,14 @@ sub ecx, 1
 jnz new_down
 mov esi, edi
 new_take:
+mov edx, esi
+sub edx, LINE_ADDRESS
+shr edx, 4
+imul edx, edx, ROUTE_SIZE
+add edx, ROUTES_ADDRESS
+mov dword [edx], 0
+mov dword [edx+4], 0
+mov dword [edx+8], 0
 mov edx, [ALG_RESULT_ADDRESS]
 mov [esi], edx
 mov edx, [ALG_TARGET_X_ADDRESS]
@@ -382,24 +397,474 @@ pop esi
 ret
 ]]
 
+-- One search for a line's own target, from AIM_FROM. A target further away in steps than
+-- the search range can never be reached - the search moves a tile at a time, never
+-- diagonally - so it is not searched for at all. Otherwise the search is let spread only
+-- as far as the target's own distance in steps plus PIN_SLACK, room to go round a keep,
+-- rather than to the full range: when the target cannot be reached after all, that is
+-- the difference between a few hundred thousand instructions and well over a million.
+--
+-- In: EBX the line. Out: EAX the tile found, 0 for none; SEARCHED set when a search ran.
+-- EAX, ECX and EDX.
+local aim_at_line = [[
+mov eax, [ebx+4]
+sub eax, [AIM_FROM_X_ADDRESS]
+cdq
+xor eax, edx
+sub eax, edx
+mov ecx, eax
+mov eax, [ebx+8]
+sub eax, [AIM_FROM_Y_ADDRESS]
+cdq
+xor eax, edx
+sub eax, edx
+add eax, ecx
+cmp eax, [RANGE_ADDRESS]
+jg aim_out_of_reach
+add eax, PIN_SLACK
+cmp eax, [RANGE_ADDRESS]
+jbe aim_range_set
+mov eax, [RANGE_ADDRESS]
+aim_range_set:
+mov [AIM_RANGE_ADDRESS], eax
+mov eax, [ebx]
+mov [AIM_PIN_ADDRESS], eax
+mov dword [AIM_MODE_ADDRESS], 1
+mov dword [SEARCHED_ADDRESS], 1
+call LINE_SEARCH_ADDRESS
+mov ecx, [RANGE_ADDRESS]
+mov [AIM_RANGE_ADDRESS], ecx
+ret
+aim_out_of_reach:
+xor eax, eax
+ret
+]]
+
+-- Where a line's tunnels are to go now. While the line's target stands, that is it. Once
+-- it has come down the line follows its route to the campfire, laying that out first if
+-- it has none yet: the first fortification on the route still standing becomes the line's
+-- target. EDX comes back as that tile, or 0 when there is none - and then ROUTE_CURRENT
+-- says why: its route's state is 1 when the whole route is open, 2 when no route could be
+-- laid out at all.
+--
+-- A route is a 16 byte head {state, fortifications on it, how many are behind us, tiles on
+-- its path}, then ROUTE_ENTRIES fortifications of 12 bytes {tile, x, y, where on the path},
+-- then the path itself, a tile to a dword, breach first. One route to every line, found by
+-- the line's own index. In: EBX the line, AIM_UNIT and AIM_OWNER set. EAX, ECX and EDX.
+local line_front = [[
+push esi
+mov edx, [ebx]
+call STANDS_ADDRESS
+test eax, eax
+jne front_stands
+mov esi, ebx
+sub esi, LINE_ADDRESS
+shr esi, 4
+imul esi, esi, ROUTE_SIZE
+add esi, ROUTES_ADDRESS
+mov [ROUTE_CURRENT_ADDRESS], esi
+cmp dword [esi], 0
+jne front_look
+call ROUTE_BUILD_ADDRESS
+front_look:
+cmp dword [esi], 1
+jne front_none
+mov ecx, [esi+8]
+cmp ecx, [esi+4]
+jae front_none
+lea ecx, [ecx+ecx*2]
+mov edx, [esi+ecx*4+16]
+call STANDS_ADDRESS
+test eax, eax
+jne front_moved
+add dword [esi+8], 1
+jmp front_look
+front_moved:
+mov [ebx], edx
+movzx eax, word [esi+ecx*4+20]
+mov [ebx+4], eax
+movzx eax, word [esi+ecx*4+22]
+mov [ebx+8], eax
+front_stands:
+mov dword [ROUTE_CURRENT_ADDRESS], 0
+mov edx, [ebx]
+pop esi
+ret
+front_none:
+xor edx, edx
+pop esi
+ret
+]]
+
+-- Laying a tunnel's next leg along its line's route without searching for it at all.
+--
+-- The game's trace, setDestinationForUnit(..., 2), walks back from the target to the
+-- tunneller over tiles that carry the number of the search that reached the target and a
+-- distance one or two lower each step - that is all it reads. The route already is such a
+-- walk. So when the tunneller stands on its line's route and the line's target is the next
+-- fortification further along it, the stretch between the two is written into the search's
+-- own maps under a fresh search number - distance 1 where the tunneller stands, rising by
+-- one a tile to the target - exactly as a search would have left it, and the game's trace
+-- lays the path over it as it always does. What that costs is the length of the stretch,
+-- where a search costs the area of everything within the same distance.
+--
+-- The search number is the game's own counter at PathFindingState + 4, moved on by one as
+-- every search moves it; near the top of its range the game clears its flag map when the
+-- counter wraps, so there this simply declines and the search does the job instead. It also
+-- declines when the tunneller is not on the route, or the target is not ahead of it on it.
+--
+-- In: EBX the line, EDI the tile the tunneller stands on. Out: EAX 1 with the game's result
+-- words set to the target, 0 when the search is needed. EAX, ECX and EDX.
+local follow_route = [[
+push esi
+push ebp
+mov esi, ebx
+sub esi, LINE_ADDRESS
+shr esi, 4
+imul esi, esi, ROUTE_SIZE
+add esi, ROUTES_ADDRESS
+xor eax, eax
+cmp dword [esi], 1
+jne follow_out
+mov ecx, [esi+8]
+cmp ecx, [esi+4]
+jae follow_out
+lea ecx, [ecx+ecx*2]
+mov edx, [esi+ecx*4+16]
+cmp edx, [ebx]
+jne follow_out
+mov ebp, [esi+ecx*4+24]
+xor ecx, ecx
+follow_find:
+cmp ecx, [esi+12]
+jae follow_out
+cmp [esi+ecx*4+PATH_OFFSET], edi
+je follow_found
+add ecx, 1
+jmp follow_find
+follow_found:
+cmp ecx, ebp
+jae follow_out
+mov edx, [PATH_STATE_ADDRESS+4]
+add edx, 1
+cmp edx, SEARCH_NUMBER_LIMIT
+jg follow_out
+mov [PATH_STATE_ADDRESS+4], edx
+mov [ROUTE_GEN_ADDRESS], edx
+mov eax, 1
+follow_stamp:
+mov edx, [esi+ecx*4+PATH_OFFSET]
+mov [edx*2+DISTANCE_MAP_ADDRESS], ax
+push eax
+mov eax, [ROUTE_GEN_ADDRESS]
+mov [edx*2+FLAG_MAP_ADDRESS], ax
+pop eax
+add eax, 1
+add ecx, 1
+cmp ecx, ebp
+jbe follow_stamp
+mov ecx, [esi+8]
+lea ecx, [ecx+ecx*2]
+mov edx, [esi+ecx*4+16]
+mov [ALG_RESULT_ADDRESS], edx
+movzx edx, word [esi+ecx*4+20]
+mov [ALG_TARGET_X_ADDRESS], edx
+movzx edx, word [esi+ecx*4+22]
+mov [ALG_TARGET_Y_ADDRESS], edx
+mov eax, 1
+follow_out:
+pop ebp
+pop esi
+ret
+]]
+
+-- Laying out a line's route, once. The search runs from the line's own spot - where its
+-- first target stood, rubble now - taking nothing, so it spreads through walls, gates,
+-- towers and (when tunnels may pass under the town) houses alike until it is a little
+-- further from its start, in steps, than the campfire is: every tile it reaches holds its
+-- distance from the breach in the search's own map. route_walk then reads the route out of
+-- that map. It is the only full spread a line ever costs, and it is paid once.
+--
+-- The state is left at 1 when a route was read out - even an empty one, which means the
+-- way to the campfire is already open - and at 2 when it could not be: no campfire known,
+-- or the search never came near it. In: EBX the line, ESI its route. EAX, ECX and EDX.
+local route_build = [[
+push edi
+mov dword [esi], 2
+mov dword [esi+4], 0
+mov dword [esi+8], 0
+mov dword [esi+12], 0
+mov eax, [AIM_UNIT_ADDRESS]
+mov [ANCHOR_UNIT_ADDRESS], eax
+call ANCHOR_ADDRESS
+test eax, eax
+je build_out
+push dword [AIM_FROM_X_ADDRESS]
+push dword [AIM_FROM_Y_ADDRESS]
+push dword [AIM_RANGE_ADDRESS]
+mov eax, [ebx+4]
+mov [AIM_FROM_X_ADDRESS], eax
+mov eax, [ebx+8]
+mov [AIM_FROM_Y_ADDRESS], eax
+mov eax, [CAMP_X_ADDRESS]
+sub eax, [ebx+4]
+cdq
+xor eax, edx
+sub eax, edx
+mov ecx, eax
+mov eax, [CAMP_Y_ADDRESS]
+sub eax, [ebx+8]
+cdq
+xor eax, edx
+sub eax, edx
+add eax, ecx
+add eax, ROUTE_SLACK
+cmp eax, ROUTE_REACH
+jbe build_range_set
+mov eax, ROUTE_REACH
+build_range_set:
+mov [AIM_RANGE_ADDRESS], eax
+mov [REPORT_ADDRESS+16], eax
+mov dword [AIM_MODE_ADDRESS], 3
+mov dword [SEARCHED_ADDRESS], 1
+call LINE_SEARCH_ADDRESS
+mov eax, [PATH_STATE_ADDRESS+4]
+mov [ROUTE_GEN_ADDRESS], eax
+pop dword [AIM_RANGE_ADDRESS]
+pop dword [AIM_FROM_Y_ADDRESS]
+pop dword [AIM_FROM_X_ADDRESS]
+call ROUTE_WALK_ADDRESS
+test eax, eax
+jl build_out
+mov dword [esi], 1
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je build_out
+mov [REPORT_ADDRESS+12], eax
+mov eax, [AIM_OWNER_ADDRESS]
+mov [REPORT_ADDRESS], eax
+mov eax, [esi+16]
+mov [REPORT_ADDRESS+4], eax
+mov eax, [esi+12]
+mov [REPORT_ADDRESS+8], eax
+mov dword [REPORT_ADDRESS+28], 44
+call REPORT_PAD_ADDRESS
+build_out:
+pop edi
+ret
+]]
+
+-- Reading the route out of the search's map. It ends at the campfire's own tile, or - the
+-- campfire being a building the search may not have been let into - at the tile it did
+-- reach nearest the campfire, looked for within END_RADIUS. From there it walks downhill:
+-- every tile the search reached carries its distance from the start, and each has a
+-- neighbour one nearer, so stepping to that neighbour again and again retraces the
+-- search's own way back to the breach - round the keep, since the search never went under
+-- it. Every tile stepped on is the route's path, and every enemy wall, stair,
+-- crenellation, gate or tower among them a fortification on it. The walk finds them
+-- campfire first; both are written into the route the other way round, breach first, and
+-- only the ROUTE_ENTRIES fortifications nearest the breach are kept, each with its place
+-- on the path.
+--
+-- A tile counts as reached only if the search stamped it this time: the flag map holds
+-- the number of the search that last reached each tile, and PathFindingState + 4 the
+-- number of the latest. In: ESI the route. Out: EAX how many fortifications, or -1 when
+-- the search came nowhere near the campfire. EBX, ESI, EDI and EBP are kept.
+local route_walk = [[
+push ebx
+push ebp
+push edi
+xor edi, edi
+mov dword [ROUTE_BEST_ADDRESS], -1
+mov ebp, -END_RADIUS
+walk_end_row:
+mov ebx, -END_RADIUS
+walk_end_col:
+mov eax, [CAMP_X_ADDRESS]
+add eax, ebx
+cmp eax, 1
+jl walk_end_next
+cmp eax, MAP_LIMIT
+jg walk_end_next
+mov ecx, [CAMP_Y_ADDRESS]
+add ecx, ebp
+cmp ecx, 1
+jl walk_end_next
+cmp ecx, MAP_LIMIT
+jg walk_end_next
+mov [WALK_X_ADDRESS], eax
+mov [WALK_Y_ADDRESS], ecx
+lea edx, [ecx+ecx*2]
+mov edx, [edx*4+ROW_TABLE_ADDRESS]
+add edx, eax
+movsx eax, word [edx*2+FLAG_MAP_ADDRESS]
+cmp eax, [ROUTE_GEN_ADDRESS]
+jne walk_end_next
+mov eax, ebx
+imul eax, eax
+mov ecx, ebp
+imul ecx, ecx
+add eax, ecx
+cmp eax, [ROUTE_BEST_ADDRESS]
+jae walk_end_next
+mov [ROUTE_BEST_ADDRESS], eax
+mov edi, edx
+mov eax, [WALK_X_ADDRESS]
+mov [ROUTE_X_ADDRESS], eax
+mov eax, [WALK_Y_ADDRESS]
+mov [ROUTE_Y_ADDRESS], eax
+walk_end_next:
+add ebx, 1
+cmp ebx, END_RADIUS
+jle walk_end_col
+add ebp, 1
+cmp ebp, END_RADIUS
+jle walk_end_row
+mov eax, -1
+test edi, edi
+je walk_out
+mov dword [ROUTE_FOUND_ADDRESS], 0
+mov dword [PATH_FOUND_ADDRESS], 0
+walk_step:
+movsx ebp, word [edi*2+DISTANCE_MAP_ADDRESS]
+mov ecx, [PATH_FOUND_ADDRESS]
+cmp ecx, PATH_MAX
+jae walk_path_full
+mov [ecx*4+PATH_TEMP_ADDRESS], edi
+add dword [PATH_FOUND_ADDRESS], 1
+walk_path_full:
+test dword [edi*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
+jz walk_building
+movzx eax, byte [edi+WALL_OWNER_ADDRESS]
+and eax, 7
+add eax, 1
+jmp walk_whose
+walk_building:
+movzx eax, word [edi*2+BUILDING_TILE_ADDRESS]
+test eax, eax
+je walk_passed
+imul eax, eax, BUILDING_STRIDE
+movsx ecx, word [eax+BUILDING_TYPE]
+cmp ecx, TYPE_LIMIT
+ja walk_passed
+cmp dword [ecx*4+GATE_OR_TOWER_ADDRESS], 0
+je walk_passed
+movsx eax, word [eax+BUILDING_OWNER]
+walk_whose:
+cmp eax, [AIM_OWNER_ADDRESS]
+je walk_passed
+mov ecx, [eax*4+TEAMS_ADDRESS]
+test ecx, ecx
+je walk_enemy
+mov edx, [AIM_OWNER_ADDRESS]
+cmp ecx, [edx*4+TEAMS_ADDRESS]
+je walk_passed
+walk_enemy:
+mov ecx, [ROUTE_FOUND_ADDRESS]
+cmp ecx, FOUND_MAX
+jae walk_passed
+lea ecx, [ecx+ecx*2]
+mov [ecx*4+ROUTE_TEMP_ADDRESS], edi
+mov eax, [ROUTE_X_ADDRESS]
+mov [ecx*4+ROUTE_TEMP_ADDRESS+4], ax
+mov eax, [ROUTE_Y_ADDRESS]
+mov [ecx*4+ROUTE_TEMP_ADDRESS+6], ax
+mov eax, [PATH_FOUND_ADDRESS]
+sub eax, 1
+mov [ecx*4+ROUTE_TEMP_ADDRESS+8], eax
+add dword [ROUTE_FOUND_ADDRESS], 1
+walk_passed:
+cmp ebp, 1
+jle walk_home
+lea ebx, [ebp-1]
+mov ecx, [ROUTE_Y_ADDRESS]
+shl ecx, 5
+add ecx, DIRECTIONS_ADDRESS
+xor edx, edx
+walk_dir:
+mov eax, [ecx+edx*8]
+add eax, edi
+cmp word [eax*2+DISTANCE_MAP_ADDRESS], bx
+jne walk_other
+push edx
+movsx edx, word [eax*2+FLAG_MAP_ADDRESS]
+cmp edx, [ROUTE_GEN_ADDRESS]
+pop edx
+jne walk_other
+mov edi, eax
+mov eax, edx
+shl eax, 4
+mov ecx, [eax+X_DELTAS_ADDRESS]
+add [ROUTE_X_ADDRESS], ecx
+mov ecx, [eax+Y_DELTAS_ADDRESS]
+add [ROUTE_Y_ADDRESS], ecx
+jmp walk_step
+walk_other:
+add edx, 1
+cmp edx, 4
+jb walk_dir
+walk_home:
+mov ebx, [PATH_FOUND_ADDRESS]
+mov [esi+12], ebx
+xor edx, edx
+walk_path_copy:
+cmp edx, ebx
+jae walk_path_copied
+mov ecx, ebx
+sub ecx, edx
+mov eax, [ecx*4+PATH_TEMP_ADDRESS-4]
+mov [esi+edx*4+PATH_OFFSET], eax
+add edx, 1
+jmp walk_path_copy
+walk_path_copied:
+mov ecx, [ROUTE_FOUND_ADDRESS]
+xor edx, edx
+walk_copy:
+cmp edx, ROUTE_ENTRIES
+jae walk_copied
+test ecx, ecx
+je walk_copied
+sub ecx, 1
+lea ebp, [ecx+ecx*2]
+lea edi, [edx+edx*2]
+mov eax, [ebp*4+ROUTE_TEMP_ADDRESS]
+mov [esi+edi*4+16], eax
+mov eax, [ebp*4+ROUTE_TEMP_ADDRESS+4]
+mov [esi+edi*4+20], eax
+mov eax, ebx
+sub eax, 1
+sub eax, [ebp*4+ROUTE_TEMP_ADDRESS+8]
+mov [esi+edi*4+24], eax
+add edx, 1
+jmp walk_copy
+walk_copied:
+mov [esi+4], edx
+mov eax, edx
+walk_out:
+pop edi
+pop ebp
+pop ebx
+ret
+]]
+
 -- The first target a tunnel is given. Replaces the call to findTunnelTarget in the
 -- tunneler's state 9, which the game makes once a tick - widening its search 20, 20, 40,
 -- 40, 80, 80 tiles - until it finds something. That call still happens, unchanged, and
 -- decides when the tunnel is ready; nothing is done until it has an answer.
 --
--- Then each of the player's lines is tried in turn: one whose target still stands, is not
--- further off than the search range in either direction, and which the search - run from
--- the very spot the game searched from - can actually reach. The first that answers is
--- joined, and the game goes on to trace its path there. If a line's target is the game's
--- own answer it is joined without a search at all. If none answers, the game's own search
--- is run once more at its own full reach, so that its answer and the map the path is
--- traced along are what they were, and that answer starts a new line.
+-- Then each of the player's lines is tried in turn for its front (line_front): the line's
+-- target, or - once that is down - the first fortification standing on its route. The
+-- first front the tunnel can reach (aim_at_line) is joined, and the game goes on to trace
+-- the path there. A front that is the game's own answer is joined without a search at
+-- all. If none answers, the tunnel starts a line of its own with the game's answer.
 --
--- A line nobody has used for LINE_LIFETIME ticks is dropped: the siege it belonged to has
--- stopped, or the game was restarted or loaded - one unsigned comparison catches both, since
--- a clock that went backwards makes the difference wrap to something enormous. A line in
--- use never ages, because every tunnel that joins it or moves it on stamps it afresh. OURS records that the answer is a line rather than the game's own, for
--- the net below. EAX goes back as findTunnelTarget's own answer; EBX, ESI and EDI are kept.
+-- Whenever any search of ours ran and the answer is the game's own after all, the game's
+-- search is run once more at its own full reach, so that its answer and the map the path
+-- is traced along are what they were. A line nobody has used for LINE_LIFETIME ticks is
+-- dropped: the siege it belonged to has stopped, or the game was restarted or loaded - one
+-- unsigned comparison catches both, since a clock that went backwards makes the difference
+-- wrap to something enormous. OURS records that the answer is a line rather than the
+-- game's own, for the net below. EAX goes back as findTunnelTarget's own answer; EBX, ESI
+-- and EDI are kept.
 local place_aim = [[
 mov dword [OURS_ADDRESS], 0
 call FIND_TARGET_ADDRESS
@@ -435,57 +900,35 @@ call RECORD_OF_ADDRESS
 mov ecx, [RECORD_ADDRESS]
 mov dword [ecx+4], 0
 mov dword [ecx+8], 0
-xor ebx, ebx
-mov esi, [AIM_OWNER_ADDRESS]
-shl esi, 6
-add esi, LINE_ADDRESS
+mov dword [SEARCHED_ADDRESS], 0
+mov ebx, [AIM_OWNER_ADDRESS]
+shl ebx, 6
+add ebx, LINE_ADDRESS
 mov edi, 4
 place_try:
-mov edx, [esi]
+mov edx, [ebx]
 test edx, edx
 jle place_next
 mov eax, [TICKS_ADDRESS]
-sub eax, [esi+12]
+sub eax, [ebx+12]
 cmp eax, LINE_LIFETIME
 jbe place_current
-mov dword [esi], 0
+mov dword [ebx], 0
 jmp place_next
 place_current:
-call STANDS_ADDRESS
-test eax, eax
+call LINE_FRONT_ADDRESS
+test edx, edx
 je place_next
 cmp edx, [GAME_TILE_ADDRESS]
 je place_is_line
-mov eax, [esi+4]
-sub eax, [AIM_FROM_X_ADDRESS]
-cdq
-xor eax, edx
-sub eax, edx
-cmp eax, [AIM_RANGE_ADDRESS]
-jg place_next
-mov eax, [esi+8]
-sub eax, [AIM_FROM_Y_ADDRESS]
-cdq
-xor eax, edx
-sub eax, edx
-cmp eax, [AIM_RANGE_ADDRESS]
-jg place_next
-mov edx, [esi]
-mov [AIM_PIN_ADDRESS], edx
-mov dword [AIM_MODE_ADDRESS], 1
-mov ebx, 1
-call LINE_SEARCH_ADDRESS
+call AIM_AT_LINE_ADDRESS
 test eax, eax
 jne place_joined
 place_next:
-add esi, 16
+add ebx, 16
 sub edi, 1
 jnz place_try
-test ebx, ebx
-je place_start_line
-mov dword [AIM_RANGE_ADDRESS], VANILLA_RANGE
-call LINE_SEARCH_ADDRESS
-place_start_line:
+call place_restore
 call NEW_LINE_ADDRESS
 mov dword [REPORT_ADDRESS+20], 2
 jmp place_report
@@ -494,12 +937,13 @@ mov dword [OURS_ADDRESS], 1
 mov dword [REPORT_ADDRESS+20], 1
 jmp place_mine
 place_is_line:
+call place_restore
 mov dword [REPORT_ADDRESS+20], 3
 place_mine:
 mov ecx, [RECORD_ADDRESS]
-mov [ecx+8], esi
+mov [ecx+8], ebx
 mov eax, [TICKS_ADDRESS]
-mov [esi+12], eax
+mov [ebx+12], eax
 place_report:
 cmp dword [DIAGNOSTICS_ADDRESS], 0
 je place_quiet
@@ -525,6 +969,13 @@ place_found:
 mov eax, 1
 place_done:
 jmp RETURN_ADDRESS
+place_restore:
+cmp dword [SEARCHED_ADDRESS], 0
+je place_restored
+mov dword [AIM_RANGE_ADDRESS], VANILLA_RANGE
+call LINE_SEARCH_ADDRESS
+place_restored:
+ret
 ]]
 
 -- The net under that. The game traces the tunnel's path the moment it has its target, and
@@ -570,23 +1021,24 @@ net_laid:
 jmp LAID_ADDRESS
 ]]
 
--- Sending a tunnel on from where it stands, once it has arrived on empty ground. Tried in
--- this order, each a single run of the search from the tunneler's own tile:
+-- Sending a tunnel on from where it stands, once it has arrived on empty ground.
 --
---   1  its line, when the line still stands somewhere other than here and is no further
---      off than the search range in either direction
---   2  the nearest fortification inside the cone towards the enemy's campfire
---   3  the nearest fortification of all - nothing stands between here and the campfire
---      within reach, so the way in is widened instead
+--   1  its line's front (line_front): the line's target while that stands, else the next
+--      fortification standing on the line's route to the campfire - laid along the route
+--      with no search at all when the tunneller stands on it (follow_route), else one short
+--      search, and none at all for a front out of reach
+--   2  with the route open all the way, the nearest fortification of all, to widen it
+--   3  with no line, or a line with no route, the nearest fortification inside the cone
+--      towards the enemy's campfire, then the nearest of all
 --
 -- Then the line moves on to whatever was chosen if what it pointed at is gone - or, for a
 -- tunnel that has no line, a line is started - and the tunnel is extended to it
 -- (extend_plan). Each tunnel may be sent on only so many times.
 --
 -- EAX comes back 1 when the tunnel is on its way somewhere new and 0 when it should
--- collapse where it is. REDIRECT_HOW says which of the three it was (1-3) or why nothing
--- came of it (4 used up, 5 nothing in reach, 6 the path would not lay or the plan is
--- full). EBX, ESI and EDI are kept.
+-- collapse where it is. REDIRECT_HOW says which way it went (7 along its line's route, 1
+-- its line by a search, 2 the cone, 3 widening) or why nothing came of it (4 used up, 5 nothing in reach, 6 the path would
+-- not lay or the plan is full). EBX, ESI and EDI are kept.
 local redirect = [[
 push ebx
 push esi
@@ -622,30 +1074,23 @@ jbe redirect_line_current
 mov dword [ecx+8], 0
 jmp redirect_cone
 redirect_line_current:
-mov edx, [ebx]
-cmp edx, edi
-je redirect_cone
-call STANDS_ADDRESS
+call LINE_FRONT_ADDRESS
+test edx, edx
+jne redirect_front
+mov eax, [ROUTE_CURRENT_ADDRESS]
 test eax, eax
 je redirect_cone
-mov eax, [ebx+4]
-sub eax, [AIM_FROM_X_ADDRESS]
-cdq
-xor eax, edx
-sub eax, edx
-cmp eax, [AIM_RANGE_ADDRESS]
-jg redirect_cone
-mov eax, [ebx+8]
-sub eax, [AIM_FROM_Y_ADDRESS]
-cdq
-xor eax, edx
-sub eax, edx
-cmp eax, [AIM_RANGE_ADDRESS]
-jg redirect_cone
-mov edx, [ebx]
-mov [AIM_PIN_ADDRESS], edx
-mov dword [AIM_MODE_ADDRESS], 1
-call LINE_SEARCH_ADDRESS
+cmp dword [eax], 1
+je redirect_widen
+jmp redirect_cone
+redirect_front:
+cmp edx, edi
+je redirect_cone
+mov dword [REDIRECT_HOW_ADDRESS], 7
+call FOLLOW_ROUTE_ADDRESS
+test eax, eax
+jne redirect_go
+call AIM_AT_LINE_ADDRESS
 mov dword [REDIRECT_HOW_ADDRESS], 1
 test eax, eax
 jne redirect_go
@@ -1738,6 +2183,11 @@ return {
   line_search = line_search,
   stands = stands,
   record_of = record_of,
+  aim_at_line = aim_at_line,
+  follow_route = follow_route,
+  line_front = line_front,
+  route_build = route_build,
+  route_walk = route_walk,
   new_line = new_line,
   place_aim = place_aim,
   place_net = place_net,

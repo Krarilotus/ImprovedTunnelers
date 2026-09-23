@@ -515,7 +515,9 @@ def scenario(extreme):
     check('the next one, whose own answer is another wall, is sent at the line',
           got, (1, A, True))
     check('  by one search, pinned on the line, from where the game searched',
-          asked, [(1, A, h.u32(f.retarget_range), 100, 100)])
+          asked, [(1, A, 10 + 24, 100, 100)])
+    check('    spreading no further than the line is in steps, plus room to go round a keep',
+          asked[0][2] < h.u32(f.retarget_range), True)
     check('  and the line is its line too', h.u32(record_of(12) + 8), f.lines + 64 + 0)
     check('  and the net knows the answer is ours', h.u32(f.ours), 1)
 
@@ -529,7 +531,7 @@ def scenario(extreme):
     got = aim(14, 3004, B)
     check('one that cannot reach the line keeps the game s answer', got, (1, B, True))
     check('  after the game s own search is run again at its own full reach',
-          asked, [(1, A, h.u32(f.retarget_range), 100, 100), (0, 0, 80, 100, 100)])
+          asked, [(1, A, 10 + 24, 100, 100), (0, 0, 80, 100, 100)])
     check('  and starts a line of its own', line(1, 1)[:3], (B, 104, 108))
 
     clear_lines()
@@ -680,7 +682,7 @@ def scenario(extreme):
     got = send_on(unit)
     check('with its line still standing, it is sent at the line', got, (1, 1, True))
     check('  by one pinned search from where it stands',
-          asked, [(1, A, h.u32(f.retarget_range), 130, 100)])
+          asked, [(1, A, 20 + 24, 130, 100)])
     check('  and the path is traced there', traces, [(unit, 110, 100, 2)])
     check('  and it is counted', h.u32(rec + 4), 1)
     check('  and the line, still standing, stays put', line(1, 0)[0], A)

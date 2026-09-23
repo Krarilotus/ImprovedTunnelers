@@ -148,6 +148,94 @@ def a_second_siege_gets_its_own_meeting_point():
     check('the player has two lines', slots, sorted([c.tile(100, 70), c.tile(100, 150)]))
 
 
+@scenario
+def tunnels_follow_the_route_to_the_campfire_and_only_then_widen():
+    # Three walls in a row between the breach and the campfire, and one off to the side.
+    # The first tunnel to arrive on the rubble lays out the route - once - and each tunnel
+    # after it goes one wall further along it; only when the route is open all the way does
+    # a tunnel turn to the wall off to the side.
+    c = Castle(walls=[(108, 100), (118, 100), (128, 100), (108, 112)], camp=(150, 100))
+    a = c.tunneller(11, (100, 100))
+    b = c.tunneller(12, (100, 104))
+    d = c.tunneller(13, (100, 96))
+    for t in (a, b, d):
+        c.dig_in(t)
+    check('all three start out at the same wall', [c.heading(t) for t in (a, b, d)],
+          [(108, 100)] * 3)
+    c.take_down(108, 100)                                  # another tunnel got there first
+    searches = c.watch_searches()
+    c.run([a], lambda: c.heading(a) != (108, 100) or not c.alive(a))
+    check('the first to arrive is sent at the next wall on the way to the campfire',
+          c.heading(a), (118, 100))
+    route = [m for m in searches if m[0] == 3]
+    check('  the route was laid out by one search, from the breach',
+          [(m[2], m[3]) for m in route], [(108, 100)])
+    check('    reaching as far as the campfire is, plus room for the way round the keep',
+          route[0][1], 42 + 40)
+    check('  and the tunnel was laid along it with no search of its own', len(searches), 1)
+    check('    the way the diagnostics would say: along its line s route',
+          c.h.u32(c.f.redirect_how), 7)
+    check('it brings that wall down', (collapsed_where(c, a), c.standing(118, 100)),
+          ((118, 100), False))
+
+    searches.clear()
+    c.run([b], lambda: c.heading(b) != (108, 100) or not c.alive(b))
+    check('the next one goes past it to the wall after', c.heading(b), (128, 100))
+    check('  without a single search - nor the route laid out again', searches, [])
+    index, length, ladder = c.plan(b)
+    check('  its tunnel still one piece from its entrance', ladder, (100, 104))
+    check('  and brings that one down too', (collapsed_where(c, b), c.standing(128, 100)),
+          ((128, 100), False))
+
+    searches.clear()
+    c.run([d], lambda: c.heading(d) != (108, 100) or not c.alive(d))
+    check('with the route open all the way, the last widens the breach instead',
+          c.heading(d), (108, 112))
+    check('  going straight for the nearest wall', [m[0] for m in searches], [0])
+    check('  and brings it down', (collapsed_where(c, d), c.standing(108, 112)),
+          ((108, 112), False))
+    check('nothing is written below the image base', len(c.strays), 0)
+
+
+@scenario
+def a_tunnel_dug_in_later_joins_the_front_of_the_route():
+    # The route is laid out and its first wall already down: a tunnel dug in afterwards is
+    # sent straight at the front of the route, not at the rubble or its own nearest wall.
+    c = Castle(walls=[(108, 100), (118, 100), (128, 100)], camp=(150, 100))
+    a = c.tunneller(11, (100, 100))
+    c.dig_in(a)
+    c.take_down(108, 100)
+    c.run([a], lambda: c.heading(a) != (108, 100) or not c.alive(a))
+    collapsed_where(c, a)                                  # (118, 100) comes down
+    late = c.tunneller(12, (100, 108))
+    c.dig_in(late)
+    check('a tunnel dug in later goes for the front of the route', c.heading(late), (128, 100))
+    check('  which is now the line s target', c.line(1)[:3], (c.tile(128, 100), 128, 100))
+
+
+@scenario
+def the_route_goes_round_the_keep():
+    # The keep stands squarely between the breach and the campfire, and beyond it a wall
+    # runs right across the way. The route is laid out round the keep and through the wall,
+    # and the tunnel following it never passes under the keep.
+    inner = [(132, y) for y in range(84, 117)]
+    c = Castle(walls=[(108, 100)] + inner, camp=(150, 100))
+    c.keep(116, 94, 124, 106)
+    t = c.tunneller(11, (100, 100))
+    c.dig_in(t)
+    c.take_down(108, 100)
+    searches = c.watch_searches()
+    c.run([t], lambda: c.heading(t) != (108, 100) or not c.alive(t))
+    target = c.heading(t)
+    check('the route leads on to the wall beyond the keep', target[0], 132)
+    check('  laid out once, and followed with no search of its own',
+          [m[0] for m in searches], [3])
+    under = [p for p in c.steps(t) if 116 <= p[0] <= 124 and 94 <= p[1] <= 106]
+    check('  and not one tile of the tunnel runs under the keep', under, [])
+    check('  and it brings that piece of wall down', (collapsed_where(c, t), c.standing(*target)),
+          (target, False))
+
+
 if __name__ == '__main__':
     print('\n%s' % ('ALL OK' if not FAILURES else 'FAILURES: ' + ', '.join(FAILURES)))
     sys.exit(1 if FAILURES else 0)

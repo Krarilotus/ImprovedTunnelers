@@ -176,6 +176,18 @@ class Castle:
         return None
 
     # --------------------------------------------------------------- the module
+    def watch_searches(self):
+        """Every run of the game's target search from here on, as (mode, range, x, y) -
+        the filter mode the module set, and the search's own arguments. The real search
+        still runs: the hook only looks."""
+        seen = []
+
+        def look(cpu):
+            args = [cpu.m.u32(cpu.r['esp'] + 4 + 4 * i) for i in range(5)]
+            seen.append((self.h.u32(self.f.aim_mode), args[2], args[3], args[4]))
+        self.h.cpu.hooks[self.f.alg_find] = look
+        return seen
+
     def line(self, owner, slot=0):
         a = self.f.lines + 64 * owner + 16 * slot
         return tuple(self.h.u32(a + 4 * k) for k in range(4))

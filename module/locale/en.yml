@@ -40,13 +40,13 @@ retarget_group_descr: |
   game would have aimed it, and that piece of fortification becomes the meeting point. Every
   tunnel dug in after it goes for that same spot if it can reach it, so they open one road in.
 
-  The first tunnel to get there brings it down. Every other one arrives at the hole, finds
-  nothing left to collapse on, and is sent on from there: to the nearest fortification
-  further in, in the direction of the enemy's campfire. That becomes the new meeting point,
-  the next tunnel to arrive goes on through it to the next one, and so the line works its way
-  in, hit by hit, round the keep - which cannot be tunnelled - towards the campfire. When
-  nothing stands between the hole and the campfire any more, a tunnel takes the nearest
-  fortification instead and widens the way.
+  The first tunnel to get there brings it down. The first one to arrive on the rubble after it
+  lays out the route from the hole to the enemy's campfire, once, round the keep - which cannot
+  be tunnelled. From then on the meeting point is the first fortification on that route still
+  standing: each tunnel that arrives on the rubble is sent along the route to it, the one that
+  gets there brings it down, and the next goes one further. Only when the whole route is open
+  do tunnels take the nearest fortification instead, to widen the way. Following the route costs
+  no search at all; laying it out costs one, once per siege.
 
   A tunnel that is sent on is not a new tunnel: it carries on from where it stands, and when
   it finally comes up under its target it collapses exactly as any tunnel does, with the same

@@ -405,6 +405,41 @@ local LINE_BLOCK = 64
 -- short enough that a line from a game played before a load is not waiting in the next one.
 local LINE_LIFETIME_SECONDS = 600
 
+-- A line's route to the enemy's campfire: its path, tile by tile, and the fortifications on
+-- it, both breach first, behind a 16 byte head. The search that lays it out may reach as
+-- far, in steps, as the campfire is plus ROUTE_SLACK for the way round the keep, but never
+-- further than ROUTE_REACH; the route ends at the campfire's tile or the nearest tile to it
+-- within END_RADIUS that the search reached.
+local ROUTE = {
+  entries = 24,
+  slack = 40,
+  reach = 160,
+  endRadius = 12,
+  found = 64,                                 -- how many the walk may find before it keeps
+                                              -- only those nearest the breach
+  pathMax = 192,                              -- tiles of path: more than the reach, always
+  searchNumberLimit = 0x7D00,                 -- where the game's search counter wraps
+}
+ROUTE.pathOffset = 16 + ROUTE.entries * 12
+ROUTE.size = ROUTE.pathOffset + ROUTE.pathMax * 4
+
+-- A tunnel sent at its line's target searches no further than the target's own distance
+-- in steps plus this: room to go round a keep, without paying for a spread to the edge of
+-- the range when the target turns out to be unreachable.
+ROUTE.pinSlack = 24
+
+-- Inside the target search: its read of the flag map (which search last reached a tile),
+-- and of the wall owner layer. (Kept in the one table: the module's main chunk is close to
+-- Lua's ceiling of two hundred locals.)
+ROUTE.flagMapOperand = 0x1F8
+ROUTE.wallOwnerOperand = 0x146
+ROUTE.guards = {
+  [0x1F4] = { 0x0F, 0xBF, 0x14, 0x45 },
+  [0x143] = { 0x0F, 0xB6, 0x85 },
+  [0x1FC] = { 0x3B, 0x56, 0x04 },                  -- cmp edx, [esi+4]: the search's number
+}
+ROUTE.buildingOwner = 0xD6                    -- who a building belongs to
+
 -- How close two collapses have to be to count as the same breach, so the second one adds
 -- its time to the first zone instead of taking a second one.
 local DENIAL_STACK_RADIUS = 2
@@ -509,6 +544,16 @@ C.SAVE_LADDER_X = 0x12C           -- where the tunnel being extended began
 C.SAVE_LADDER_Y = 0x130
 C.SAVE_PREVIOUS = 0x134
 C.LAST_REDIRECT = 0x138            -- the tick a tunnel was last sent on
+C.SEARCHED = 0x13C                -- the first aim ran a search of its own
+C.ROUTE_CURRENT = 0x140           -- the route line_front last looked at
+C.ROUTE_GEN = 0x144               -- the number of the search a route was laid out by
+C.ROUTE_BEST = 0x148              -- how near the campfire the route's end is, squared
+C.ROUTE_FOUND = 0x14C             -- fortifications the walk has found so far
+C.ROUTE_X = 0x150                 -- where the walk is
+C.ROUTE_Y = 0x154
+C.WALK_X = 0x158
+C.WALK_Y = 0x15C
+C.PATH_FOUND = 0x160              -- tiles of path the walk has stepped on so far
 C.FILL_UNIT = 0x22C               -- the tunnel being written into the queue
 C.FILL_FLAGS = 0x230
 C.FILL_TILE = 0x234
@@ -543,7 +588,10 @@ C.ZONES = C.QUEUE + QUEUE_MAX * 16
 C.RECORDS = C.ZONES + ZONE_COUNT * ZONE_SIZE
 C.LINES = C.RECORDS + RECORD_COUNT * RECORD_SIZE     -- four lines per player
 C.PLAN_BUFFER = C.LINES + (PLAYER_COUNT + 1) * LINE_BLOCK  -- a plan being extended
-C.SIZE = C.PLAN_BUFFER + PLAN_BYTES
+C.ROUTE_TEMP = C.PLAN_BUFFER + PLAN_BYTES                -- a route being read out
+C.PATH_TEMP = C.ROUTE_TEMP + ROUTE.found * 12            -- ... and its path
+C.ROUTES = C.PATH_TEMP + ROUTE.pathMax * 4               -- one route to every line
+C.SIZE = C.ROUTES + (PLAYER_COUNT + 1) * 4 * ROUTE.size
 
 ---------------------------------------------------------------------------------------
 -- Defaults
@@ -575,9 +623,13 @@ local REPORT_WORDS = {
       .. "d = 1 joined the line, 2 started a line, 3 the line was the game's own answer)",
   [41] = "tunnel arrived on a fortification, collapsing",
   [42] = "tunnel arrived on empty ground and is sent on (tile = its new target, "
-      .. "b = 1 its line, 2 towards the campfire, 3 widening, c = its line, d = times sent on)",
+      .. "b = 7 along its line's route, 1 to its line by a search, 2 towards the campfire, "
+      .. "3 widening the way in, c = its line, d = times sent on)",
   [43] = "tunnel arrived on empty ground and collapses there (b = 4 sent on too often, "
       .. "5 nothing in reach, 6 the path would not lay or the tunnel is as long as it gets)",
+  [44] = "a line laid out its route to the campfire (a = player, tile = the first "
+      .. "fortification on it, flags = tiles on its path, b = fortifications on it, "
+      .. "c = how far the search reached)",
   [45] = "a line's path would not lay; the tunnel keeps the game's own target (b = laid)",
 }
 
@@ -859,17 +911,17 @@ return {
     -- so a player on our own team is passed over; with no team table to read, a table of
     -- nothing but zeroes reads as "nobody is allied with anybody".
     local anchor
+    local teamTable
+    if teamSite ~= nil then
+      teamTable = readAddress(teamSite + OFFSET_PLAYER_TEAMS)
+    end
+    if teamTable == nil then
+      teamTable = core.allocate((PLAYER_COUNT + 1) * 4, true)
+      for player = 0, PLAYER_COUNT do
+        writeInteger(teamTable + 4 * player, 0)
+      end
+    end
     if unitBase ~= nil and (campIds ~= nil or keepIds ~= nil) then
-      local teamTable
-      if teamSite ~= nil then
-        teamTable = readAddress(teamSite + OFFSET_PLAYER_TEAMS)
-      end
-      if teamTable == nil then
-        teamTable = core.allocate((PLAYER_COUNT + 1) * 4, true)
-        for player = 0, PLAYER_COUNT do
-          writeInteger(teamTable + 4 * player, 0)
-        end
-      end
       anchor = core.allocateAssembly(templates.find_anchor, {
         ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
         ANCHOR_FROM_ADDRESS = control + C.ANCHOR_FROM,
@@ -1092,6 +1144,8 @@ return {
       })
       local newLine = core.allocateAssembly(templates.new_line, {
         AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+        ROUTES_ADDRESS = control + C.ROUTES,
+        ROUTE_SIZE = ROUTE.size,
         LINE_ADDRESS = lines,
         STANDS_ADDRESS = stands,
         ALG_RESULT_ADDRESS = algResult,
@@ -1099,6 +1153,110 @@ return {
         ALG_TARGET_Y_ADDRESS = algY,
         TICKS_ADDRESS = ticks,
         RECORD_ADDRESS = control + C.RECORD,
+      })
+
+      -- A line's route to the campfire, and its front. Without the map's rows or a search
+      -- that looks the way it should, no route is ever laid out and a line whose target is
+      -- down falls back on the search towards the campfire.
+      local routeBuild, followRoute
+      local routesOk = rowTable ~= nil and anchor ~= nil
+        and guardsHold(search, ROUTE.guards, "the search's own maps")
+      if routesOk then
+        local routeWalk = core.allocateAssembly(templates.route_walk, {
+          END_RADIUS = ROUTE.endRadius,
+          CAMP_X_ADDRESS = control + C.CAMP_X,
+          CAMP_Y_ADDRESS = control + C.CAMP_Y,
+          MAP_LIMIT = MAP_LIMIT,
+          WALK_X_ADDRESS = control + C.WALK_X,
+          WALK_Y_ADDRESS = control + C.WALK_Y,
+          ROW_TABLE_ADDRESS = rowTable,
+          FLAG_MAP_ADDRESS = readAddress(search + ROUTE.flagMapOperand),
+          ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
+          ROUTE_BEST_ADDRESS = control + C.ROUTE_BEST,
+          ROUTE_X_ADDRESS = control + C.ROUTE_X,
+          ROUTE_Y_ADDRESS = control + C.ROUTE_Y,
+          ROUTE_FOUND_ADDRESS = control + C.ROUTE_FOUND,
+          DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
+          TILE_FLAGS_ADDRESS = tileFlags,
+          WALL_FAMILY = WALL_FAMILY_FLAGS,
+          WALL_OWNER_ADDRESS = readAddress(search + ROUTE.wallOwnerOperand),
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          BUILDING_STRIDE = SEARCH_STRIDE,
+          BUILDING_TYPE = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
+          BUILDING_OWNER = (buildingBase + ROUTE.buildingOwner) & 0xFFFFFFFF,
+          TYPE_LIMIT = BUILDING_TYPE_LIMIT,
+          GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
+          AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+          TEAMS_ADDRESS = teamTable,
+          FOUND_MAX = ROUTE.found,
+          ROUTE_TEMP_ADDRESS = control + C.ROUTE_TEMP,
+          DIRECTIONS_ADDRESS = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
+          X_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_X_DELTAS_OPERAND),
+          Y_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
+          ROUTE_ENTRIES = ROUTE.entries,
+          PATH_FOUND_ADDRESS = control + C.PATH_FOUND,
+          PATH_MAX = ROUTE.pathMax,
+          PATH_TEMP_ADDRESS = control + C.PATH_TEMP,
+          PATH_OFFSET = ROUTE.pathOffset,
+        })
+        routeBuild = core.allocateAssembly(templates.route_build, {
+          AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+          ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
+          ANCHOR_ADDRESS = anchor,
+          AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+          AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+          AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+          CAMP_X_ADDRESS = control + C.CAMP_X,
+          CAMP_Y_ADDRESS = control + C.CAMP_Y,
+          ROUTE_SLACK = ROUTE.slack,
+          ROUTE_REACH = ROUTE.reach,
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
+          SEARCHED_ADDRESS = control + C.SEARCHED,
+          LINE_SEARCH_ADDRESS = lineSearch,
+          PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
+          ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
+          ROUTE_WALK_ADDRESS = routeWalk,
+          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+          REPORT_ADDRESS = report,
+          REPORT_PAD_ADDRESS = reportPad,
+          AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+        })
+        followRoute = core.allocateAssembly(templates.follow_route, {
+          LINE_ADDRESS = lines,
+          ROUTE_SIZE = ROUTE.size,
+          ROUTES_ADDRESS = control + C.ROUTES,
+          PATH_OFFSET = ROUTE.pathOffset,
+          PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
+          SEARCH_NUMBER_LIMIT = ROUTE.searchNumberLimit,
+          ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
+          DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
+          FLAG_MAP_ADDRESS = readAddress(search + ROUTE.flagMapOperand),
+          ALG_RESULT_ADDRESS = algResult,
+          ALG_TARGET_X_ADDRESS = algX,
+          ALG_TARGET_Y_ADDRESS = algY,
+        })
+      else
+        routeBuild = core.allocateCode({ 0xC7, 0x06, 0x02, 0x00, 0x00, 0x00, 0xC3 })  -- state 2
+        followRoute = core.allocateCode({ 0x31, 0xC0, 0xC3 })                        -- search
+      end
+      local lineFront = core.allocateAssembly(templates.line_front, {
+        STANDS_ADDRESS = stands,
+        LINE_ADDRESS = lines,
+        ROUTE_SIZE = ROUTE.size,
+        ROUTES_ADDRESS = control + C.ROUTES,
+        ROUTE_CURRENT_ADDRESS = control + C.ROUTE_CURRENT,
+        ROUTE_BUILD_ADDRESS = routeBuild,
+      })
+      local aimAtLine = core.allocateAssembly(templates.aim_at_line, {
+        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+        RANGE_ADDRESS = control + C.RETARGET_RANGE,
+        PIN_SLACK = ROUTE.pinSlack,
+        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+        AIM_PIN_ADDRESS = control + C.AIM_PIN,
+        AIM_MODE_ADDRESS = control + C.AIM_MODE,
+        SEARCHED_ADDRESS = control + C.SEARCHED,
+        LINE_SEARCH_ADDRESS = lineSearch,
       })
 
       -- Laying the next leg while keeping the tunnel one piece.
@@ -1144,7 +1302,10 @@ return {
         AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
         TICKS_ADDRESS = ticks,
         STANDS_ADDRESS = stands,
-        AIM_PIN_ADDRESS = control + C.AIM_PIN,
+        LINE_FRONT_ADDRESS = lineFront,
+        ROUTE_CURRENT_ADDRESS = control + C.ROUTE_CURRENT,
+        FOLLOW_ROUTE_ADDRESS = followRoute,
+        AIM_AT_LINE_ADDRESS = aimAtLine,
         AIM_MODE_ADDRESS = control + C.AIM_MODE,
         LINE_SEARCH_ADDRESS = lineSearch,
         ANCHOR_ADDRESS = anchor or anchorStub,
@@ -1223,9 +1384,9 @@ return {
         RECORD_ADDRESS = control + C.RECORD,
         LINE_ADDRESS = lines,
         TICKS_ADDRESS = ticks,
-        STANDS_ADDRESS = stands,
-        AIM_PIN_ADDRESS = control + C.AIM_PIN,
-        AIM_MODE_ADDRESS = control + C.AIM_MODE,
+        LINE_FRONT_ADDRESS = lineFront,
+        AIM_AT_LINE_ADDRESS = aimAtLine,
+        SEARCHED_ADDRESS = control + C.SEARCHED,
         LINE_SEARCH_ADDRESS = lineSearch,
         VANILLA_RANGE = VANILLA_RANGE,
         LINE_LIFETIME = LINE_LIFETIME_SECONDS * TICKS_PER_SECOND,
