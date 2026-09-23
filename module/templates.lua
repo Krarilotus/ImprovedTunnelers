@@ -337,7 +337,7 @@ stands_done:
 ret
 ]]
 
--- The record of the tunneler at AIM_UNIT (scaled): {uid, times sent on, its line, spare},
+-- The record of the tunneler at AIM_UNIT (scaled): {uid, times sent on, its line, step},
 -- 16 bytes, found by uid in a ring. A tunneler not in it takes the next entry of the ring,
 -- starting from nothing, so one that dies simply leaves its entry to be reused. The entry
 -- is left in RECORD_ADDRESS. EAX, ECX and EDX.
@@ -355,6 +355,7 @@ mov ecx, [RING_CURSOR_ADDRESS]
 mov [ecx], edx
 mov dword [ecx+4], 0
 mov dword [ecx+8], 0
+mov dword [ecx+12], 0
 lea edx, [ecx+16]
 cmp edx, RECORDS_END_ADDRESS
 jb record_cursor
@@ -937,6 +938,7 @@ ret
 -- and EDI are kept.
 local place_aim = [[
 mov dword [OURS_ADDRESS], 0
+mov dword [QUIET_ADDRESS], 0
 call FIND_TARGET_ADDRESS
 test eax, eax
 je place_done
@@ -1004,6 +1006,7 @@ mov dword [REPORT_ADDRESS+20], 2
 jmp place_report
 place_joined:
 mov dword [OURS_ADDRESS], 1
+mov dword [QUIET_ADDRESS], 1
 mov dword [REPORT_ADDRESS+20], 1
 jmp place_mine
 place_is_line:
@@ -1058,6 +1061,7 @@ ret
 -- Hooked on the test straight after the trace, with EAX its result. The unit is already
 -- standing at the entrance, which is where the search starts.
 local place_net = [[
+mov dword [QUIET_ADDRESS], 0
 test eax, eax
 jne net_laid
 cmp dword [OURS_ADDRESS], 0
@@ -1091,6 +1095,80 @@ net_laid:
 jmp LAID_ADDRESS
 ]]
 
+-- The search inside the cone towards the enemy's campfire, for the tunnel at AIM_UNIT (the
+-- scaled unit in ESI) from AIM_FROM. Nothing is searched when there is no camp to aim at,
+-- or the tunnel stands on it. Out: EAX the tile found, 0 for none; SEARCHED set when a
+-- search ran. EAX, ECX and EDX.
+local aim_cone = [[
+push ebx
+mov [ANCHOR_UNIT_ADDRESS], esi
+call ANCHOR_ADDRESS
+test eax, eax
+je cone_none
+mov eax, [CAMP_X_ADDRESS]
+sub eax, [AIM_FROM_X_ADDRESS]
+mov ecx, [CAMP_Y_ADDRESS]
+sub ecx, [AIM_FROM_Y_ADDRESS]
+mov edx, eax
+test edx, edx
+jge cone_abs_x
+neg edx
+cone_abs_x:
+mov ebx, ecx
+test ebx, ebx
+jge cone_abs_y
+neg ebx
+cone_abs_y:
+cmp edx, ebx
+jge cone_longest
+mov edx, ebx
+cone_longest:
+test edx, edx
+je cone_none
+mov ebx, edx
+imul eax, eax, 64
+cdq
+idiv ebx
+mov [AIM_DIR_X_ADDRESS], eax
+mov eax, ecx
+imul eax, eax, 64
+cdq
+idiv ebx
+mov [AIM_DIR_Y_ADDRESS], eax
+imul eax, eax
+mov ecx, [AIM_DIR_X_ADDRESS]
+imul ecx, ecx
+add eax, ecx
+mov [AIM_DIR_LENGTH_ADDRESS], eax
+mov dword [SEARCHED_ADDRESS], 1
+mov dword [AIM_MODE_ADDRESS], 2
+call LINE_SEARCH_ADDRESS
+pop ebx
+ret
+cone_none:
+xor eax, eax
+pop ebx
+ret
+]]
+
+-- Inside traceAndCommitPathPlan, where the trace has found no way back to the unit. The
+-- game takes that to mean its own maps are stale and rebuilds the path linkage of every
+-- building and the separate-area map of the whole map before it gives up: millions of
+-- instructions, all in one tick - the lag spike that came with a tunnel's refused path.
+-- For a path this module asked for (QUIET set) the maps are not stale, the corridor simply
+-- does not lead back, so the plan is emptied and the trace returns at once. Everything
+-- else, the game's own units included, still gets the rebuild.
+local quiet_trace = [[
+mov edi, [esp+0x10]
+add dword [edi+0x78], 1
+cmp dword [QUIET_ADDRESS], 0
+je quiet_rebuild
+mov dword [edi+PLAN_LENGTH_FIELD], 0
+jmp DONE_ADDRESS
+quiet_rebuild:
+jmp RETURN_ADDRESS
+]]
+
 -- Sending a tunnel on from where it stands, once it has arrived on empty ground.
 --
 --   1  its line's front (line_front): the line's target while that stands, else the next
@@ -1112,10 +1190,19 @@ jmp LAID_ADDRESS
 -- there waits too, rather than each running the same searches only to be refused the same
 -- way. The try counts against the tunnel's allowance, so none waits for ever.
 --
+-- One search per call, never more. Laying out the route, the search for the line, the cone
+-- and the widening are each a search, and one arrival used to run up to four of them and a
+-- path in a single tick. Now, when a second search would be needed, the tunnel waits where
+-- it stands (EAX 2, REDIRECT_HOW 9) and the step it has reached is kept in its record as
+-- ticks * 4 + step - 0 from the top, 1 the cone, 2 widening - so the next tick carries on
+-- there instead of repeating what already failed. A step older than STEP_WINDOW ticks is
+-- forgotten and the tunnel starts from the top.
+--
 -- REDIRECT_HOW says which way it went (7 along its line's route, 1 its line by a search, 2
 -- the cone, 3 widening), or why not (4 used up, 5 nothing in reach, 6 the path would not
--- lay, 8 the tunnel is as long as a plan can hold). The line only moves on once the path to
--- its new target is actually laid. EBX, ESI and EDI are kept.
+-- lay, 8 the tunnel is as long as a plan can hold, 9 waiting its turn for a search). The
+-- line only moves on once the path to its new target is actually laid. EBX, ESI and EDI
+-- are kept.
 local redirect = [[
 push ebx
 push esi
@@ -1140,7 +1227,21 @@ mov [AIM_FROM_X_ADDRESS], ecx
 movsx ecx, word [esi+UNIT_Y]
 mov [AIM_FROM_Y_ADDRESS], ecx
 mov edi, [esi+UNIT_TILE]
+mov dword [SEARCHED_ADDRESS], 0
 mov ecx, [RECORD_ADDRESS]
+mov eax, [TICKS_ADDRESS]
+shl eax, 2
+sub eax, [ecx+12]
+mov edx, [ecx+12]
+mov dword [ecx+12], 0
+cmp eax, STEP_WINDOW
+jae redirect_top
+and edx, 3
+cmp edx, 1
+je redirect_cone
+cmp edx, 2
+je redirect_widen
+redirect_top:
 mov ebx, [ecx+8]
 test ebx, ebx
 je redirect_cone
@@ -1167,6 +1268,9 @@ mov dword [REDIRECT_HOW_ADDRESS], 7
 call FOLLOW_ROUTE_ADDRESS
 test eax, eax
 jne redirect_go
+xor edx, edx
+cmp dword [SEARCHED_ADDRESS], 0
+jne redirect_later
 call AIM_AT_LINE_ADDRESS
 mov dword [REDIRECT_HOW_ADDRESS], 1
 test eax, eax
@@ -1179,52 +1283,19 @@ add eax, ROUTES_ADDRESS
 cmp dword [eax], 1
 je redirect_widen
 redirect_cone:
-mov [ANCHOR_UNIT_ADDRESS], esi
-call ANCHOR_ADDRESS
-test eax, eax
-je redirect_widen
-mov eax, [CAMP_X_ADDRESS]
-sub eax, [AIM_FROM_X_ADDRESS]
-mov ecx, [CAMP_Y_ADDRESS]
-sub ecx, [AIM_FROM_Y_ADDRESS]
-mov edx, eax
-test edx, edx
-jge redirect_abs_x
-neg edx
-redirect_abs_x:
-mov ebx, ecx
-test ebx, ebx
-jge redirect_abs_y
-neg ebx
-redirect_abs_y:
-cmp edx, ebx
-jge redirect_longest
-mov edx, ebx
-redirect_longest:
-test edx, edx
-je redirect_widen
-mov ebx, edx
-imul eax, eax, 64
-cdq
-idiv ebx
-mov [AIM_DIR_X_ADDRESS], eax
-mov eax, ecx
-imul eax, eax, 64
-cdq
-idiv ebx
-mov [AIM_DIR_Y_ADDRESS], eax
-imul eax, eax
-mov ecx, [AIM_DIR_X_ADDRESS]
-imul ecx, ecx
-add eax, ecx
-mov [AIM_DIR_LENGTH_ADDRESS], eax
-mov dword [AIM_MODE_ADDRESS], 2
-call LINE_SEARCH_ADDRESS
+mov edx, 1
+cmp dword [SEARCHED_ADDRESS], 0
+jne redirect_later
+call AIM_CONE_ADDRESS
 mov dword [REDIRECT_HOW_ADDRESS], 2
 test eax, eax
 jne redirect_go
 redirect_widen:
+mov edx, 2
+cmp dword [SEARCHED_ADDRESS], 0
+jne redirect_later
 mov dword [AIM_MODE_ADDRESS], 4
+mov dword [SEARCHED_ADDRESS], 1
 call LINE_SEARCH_ADDRESS
 mov dword [REDIRECT_HOW_ADDRESS], 3
 test eax, eax
@@ -1262,6 +1333,15 @@ jmp redirect_out
 redirect_full:
 mov dword [REDIRECT_HOW_ADDRESS], 8
 jmp redirect_none
+redirect_later:
+mov ecx, [RECORD_ADDRESS]
+mov eax, [TICKS_ADDRESS]
+lea eax, [eax*4+edx]
+mov [ecx+12], eax
+mov dword [REDIRECT_HOW_ADDRESS], 9
+mov dword [AIM_MODE_ADDRESS], 0
+mov eax, 2
+jmp redirect_out
 redirect_laid:
 mov ecx, [RECORD_ADDRESS]
 mov ebx, [ecx+8]
@@ -1343,7 +1423,9 @@ push dword [ALG_TARGET_Y_ADDRESS]
 push dword [ALG_TARGET_X_ADDRESS]
 push dword [CURRENT_UNIT_ADDRESS]
 mov ecx, UNITS_STATE_ADDRESS
+mov dword [QUIET_ADDRESS], 1
 call SET_DESTINATION_ADDRESS
+mov dword [QUIET_ADDRESS], 0
 test eax, eax
 je extend_put_back
 movzx ebx, word [esi+UNIT_PATH_LENGTH]
@@ -1496,6 +1578,8 @@ cmp ecx, [LAST_REDIRECT_ADDRESS]
 je arrive_wait
 mov [LAST_REDIRECT_ADDRESS], ecx
 call REDIRECT_ADDRESS
+cmp dword [REDIRECT_HOW_ADDRESS], 9
+je arrive_wait
 cmp dword [DIAGNOSTICS_ADDRESS], 0
 je arrive_redirect_said
 push eax
@@ -2343,6 +2427,8 @@ return {
   place_aim = place_aim,
   place_net = place_net,
   redirect = redirect,
+  quiet_trace = quiet_trace,
+  aim_cone = aim_cone,
   extend_plan = extend_plan,
   arrival = arrival,
   tunnel_targets = tunnel_targets,

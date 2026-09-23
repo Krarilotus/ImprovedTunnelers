@@ -705,13 +705,32 @@ def scenario(extreme):
     answers[2] = 0
     answers[0] = SIDE
     got = send_on(unit)
-    check('with nothing towards the campfire, the way in is widened', got, (1, 3, True))
-    check('  cone first, then the nearest of all', [a[0] for a in asked], [2, 4])
-    check('  and the line moves there', line(1, 0)[0], SIDE)
+    check('with nothing towards the campfire, it waits after the one search', got, (2, 9, True))
+    check('  the cone', [a[0] for a in asked], [2])
+    check('  and nothing is traced', traces, [])
+    h.put32(f.ticks, h.u32(f.ticks) + 1)
+    got = send_on(unit)
+    check('  and on the next tick the way in is widened', got, (1, 3, True))
+    check('    by the nearest of all, without searching the cone again',
+          [a[0] for a in asked], [4])
+    check('    and the line moves there', line(1, 0)[0], SIDE)
+
+    set_line(1, 0, HERE)
+    dug(unit, 4002)
+    h.put32(f.ticks, h.u32(f.ticks) + 1)
+    send_on(unit)
+    h.put32(f.ticks, h.u32(f.ticks) + 200)
+    send_on(unit)
+    check('a step left too long is forgotten: it starts from the top again',
+          [a[0] for a in asked], [2])
+    h.put32(rec + 12, 0)
 
     set_line(1, 0, HERE)
     dug(unit, 4002)
     answers[0] = 0
+    h.put32(f.ticks, h.u32(f.ticks) + 1)
+    send_on(unit)
+    h.put32(f.ticks, h.u32(f.ticks) + 1)
     got = send_on(unit)
     check('with nothing in reach at all, it collapses where it is', got, (0, 5, True))
     check('  and no path is traced', traces, [])
@@ -849,7 +868,9 @@ def scenario(extreme):
     answers[2] = 0
     answers[0] = 0
     dug(unit, 6002)
-    check('with nowhere to go, the game collapses it there', arrive(unit), 'collapses')
+    check('with nowhere to go, it first waits a tick for its second search', arrive(unit),
+          'digs on')
+    check('  and then the game collapses it there', arrive(unit), 'collapses')
     h.put32(f.control + 0x08, 0)
     answers[2] = NEXT
     dug(unit, 6003)

@@ -37,7 +37,10 @@ it comes up under its new target it collapses exactly the way it would have at t
 the same damage, and the whole tunnel behind it, back to its entrance, comes down with it.
 Laying out the route costs one search, once per siege. Following it costs no search at all:
 the stretch of route ahead is handed straight to the game's own path tracer. Tunnels arriving
-together are still sent on one a tick.
+together are still sent on one a tick, and a tunnel that needs more than one search to find
+its next target waits where it stands and runs them on successive ticks - never two in one.
+A path the game refuses to lay for a tunnel sent on no longer makes the game rebuild its path
+maps for the whole map, which was the worst of the lag.
 
 **A collapse damages, it does not delete.** What the tunnel comes up under takes a damage
 figure you set, through the game's own damage. At the default nothing survives, as before; turn

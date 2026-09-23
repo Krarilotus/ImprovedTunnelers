@@ -53,6 +53,10 @@ retarget_group_descr: |
   game will not lay a tunnel's way to its new target, the tunnel waits a moment and tries
   another rather than collapsing into empty ground.
 
+  Choosing the next target is spread over ticks: a tunnel runs at most one search a tick and
+  waits where it stands in between, and a refused path no longer sets off the game's
+  whole-map rebuild.
+
   A tunnel that is sent on is not a new tunnel: it carries on from where it stands, and when
   it finally comes up under its target it collapses exactly as any tunnel does, with the same
   damage - and the whole tunnel behind it, back to the entrance, comes down with it.

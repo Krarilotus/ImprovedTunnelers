@@ -234,6 +234,7 @@ local UNIT_PREVIOUS_TILE = 0xDC
 -- The game's own "is this unit worth aiming at" test, asked by every unit's update before
 -- it shoots at or charges at somebody. Two instructions are replayed, so the hook is ten
 -- bytes wide.
+
 local AOB_WORTH_AIMING_AT =
   "8B 44 24 04 69 C0 90 04 00 00 0F B7 84 08 ? ? ? ? 66 3D 6F 00"
 local AIM_HOOK = 0x00
@@ -429,8 +430,17 @@ ROUTE.pathOffset = 16 + ROUTE.entries * 16
 ROUTE.claimSeconds = 30
 ROUTE.refusedSeconds = 60
 ROUTE.waitSeconds = 2
+ROUTE.stepSeconds = 2                         -- how long a half-done retarget is kept
 ROUTE.refused = 8                             -- targets set aside at a time
 ROUTE.size = ROUTE.pathOffset + ROUTE.pathMax * 4
+-- Where traceAndCommitPathPlan finds no way back and goes on to rebuild the whole map.
+ROUTE.traceFailed = {
+  aob = "8B 7C 24 10 83 47 78 01 8B CF C7 87 ? ? ? ? 00 00 00 00 E8",
+  hookSize = 8,
+  planLengthOperand = 0x0C,     -- mov [edi+planLength], 0
+  done = 0x39,                  -- pop ebp / pop ebx / pop esi / pop edi / ret
+}
+ROUTE.traceFailed.guards = { [ROUTE.traceFailed.done] = { 0x5D, 0x5B, 0x5E, 0x5F } }
 
 -- A tunnel sent at its line's target searches no further than the target's own distance
 -- in steps plus this: room to go round a keep, without paying for a spread to the edge of
@@ -573,6 +583,7 @@ C.FOLLOW_AT = 0x17C               -- where on its route the tunneller stands
 C.FOLLOW_FIRST = 0x180            -- the first fortification standing ahead of it
 C.FOLLOW_PICK = 0x184             -- ... and the one it is sent at
 C.REFUSED = 0x188                 -- {tile, until}, the targets set aside
+C.QUIET = 0x1C8                   -- the path being laid is ours: no rebuild if it fails
 C.FILL_UNIT = 0x22C               -- the tunnel being written into the queue
 C.FILL_FLAGS = 0x230
 C.FILL_TILE = 0x234
@@ -1297,6 +1308,7 @@ return {
 
       -- Laying the next leg while keeping the tunnel one piece.
       local extend = core.allocateAssembly(templates.extend_plan, {
+        QUIET_ADDRESS = control + C.QUIET,
         EXTEND_FULL_ADDRESS = control + C.EXTEND_FULL,
         AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
         UNIT_PATH_INDEX = unitField(UNIT_PATH_INDEX),
@@ -1319,7 +1331,25 @@ return {
       })
 
       -- Sending a tunnel on from empty ground.
+      -- The search in the cone towards the enemy's campfire.
+      local aimCone = core.allocateAssembly(templates.aim_cone, {
+        ANCHOR_ADDRESS = anchor or anchorStub,
+        ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
+        CAMP_X_ADDRESS = control + C.CAMP_X,
+        CAMP_Y_ADDRESS = control + C.CAMP_Y,
+        AIM_DIR_X_ADDRESS = control + C.AIM_DIR_X,
+        AIM_DIR_Y_ADDRESS = control + C.AIM_DIR_Y,
+        AIM_DIR_LENGTH_ADDRESS = control + C.AIM_DIR_LENGTH,
+        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+        SEARCHED_ADDRESS = control + C.SEARCHED,
+        AIM_MODE_ADDRESS = control + C.AIM_MODE,
+        LINE_SEARCH_ADDRESS = lineSearch,
+      })
+
       local redirect = core.allocateAssembly(templates.redirect, {
+        SEARCHED_ADDRESS = control + C.SEARCHED,
+        STEP_WINDOW = ROUTE.stepSeconds * TICKS_PER_SECOND * 4,
         EXTEND_FULL_ADDRESS = control + C.EXTEND_FULL,
         REFUSED_CURSOR_ADDRESS = control + C.REFUSED_CURSOR,
         REFUSED_TICKS = ROUTE.refusedSeconds * TICKS_PER_SECOND,
@@ -1355,14 +1385,8 @@ return {
         FOLLOW_ROUTE_ADDRESS = followRoute,
         AIM_AT_LINE_ADDRESS = aimAtLine,
         AIM_MODE_ADDRESS = control + C.AIM_MODE,
+        AIM_CONE_ADDRESS = aimCone,
         LINE_SEARCH_ADDRESS = lineSearch,
-        ANCHOR_ADDRESS = anchor or anchorStub,
-        ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
-        CAMP_X_ADDRESS = control + C.CAMP_X,
-        CAMP_Y_ADDRESS = control + C.CAMP_Y,
-        AIM_DIR_X_ADDRESS = control + C.AIM_DIR_X,
-        AIM_DIR_Y_ADDRESS = control + C.AIM_DIR_Y,
-        AIM_DIR_LENGTH_ADDRESS = control + C.AIM_DIR_LENGTH,
         NEW_LINE_ADDRESS = newLine,
         LINE_LIFETIME = LINE_LIFETIME_SECONDS * TICKS_PER_SECOND,
         ALG_RESULT_ADDRESS = algResult,
@@ -1406,9 +1430,24 @@ return {
       remember(tunneler + TUNNELER_ARRIVED_HOOK, TUNNELER_ARRIVED_HOOK_SIZE)
       writeJump(tunneler + TUNNELER_ARRIVED_HOOK, arrival, TUNNELER_ARRIVED_HOOK_SIZE)
 
+      -- A path of ours that will not lay must not set off the game's whole-map rebuild.
+      local traceFailed = scanOptional(ROUTE.traceFailed.aob, "the path trace's failure branch")
+      if traceFailed ~= nil
+          and guardsHold(traceFailed, ROUTE.traceFailed.guards, "the path trace's failure branch") then
+        local quiet = core.allocateAssembly(templates.quiet_trace, {
+          QUIET_ADDRESS = control + C.QUIET,
+          PLAN_LENGTH_FIELD = readInteger(traceFailed + ROUTE.traceFailed.planLengthOperand),
+          DONE_ADDRESS = traceFailed + ROUTE.traceFailed.done,
+          RETURN_ADDRESS = traceFailed + ROUTE.traceFailed.hookSize,
+        })
+        remember(traceFailed, ROUTE.traceFailed.hookSize)
+        writeJump(traceFailed, quiet, ROUTE.traceFailed.hookSize)
+      end
+
       -- The first target: lines, over the game's own answer.
       local firstAim = core.allocateAssembly(templates.place_aim, {
         OURS_ADDRESS = control + C.OURS,
+        QUIET_ADDRESS = control + C.QUIET,
         FIND_TARGET_ADDRESS = finder,
         RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
         ALG_RESULT_ADDRESS = algResult,
@@ -1453,6 +1492,7 @@ return {
       -- ... and the net under it, should a line's path refuse to lay.
       local net = core.allocateAssembly(templates.place_net, {
         OURS_ADDRESS = control + C.OURS,
+        QUIET_ADDRESS = control + C.QUIET,
         AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
         VANILLA_RANGE = VANILLA_RANGE,
         LINE_SEARCH_ADDRESS = lineSearch,

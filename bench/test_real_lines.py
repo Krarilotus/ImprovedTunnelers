@@ -266,6 +266,38 @@ def a_group_spreads_along_a_thick_wall_instead_of_piling_onto_one_tile():
     check('  and all three are down', [c.standing(*p) for p in targets], [False] * 3)
 
 
+@scenario
+def a_path_of_ours_that_will_not_lay_costs_no_whole_map_rebuild():
+    # A trace that finds no way back makes the game rebuild the path linkage of every
+    # building and the area map of the whole map - the lag spike. For a path the module
+    # asked for that is skipped; the game's own paths still get it.
+    from realworld import UNITS_STATE
+    c = Castle(walls=[(108, 100)], camp=(150, 100))
+    t = c.tunneller(11, (100, 100))
+    c.dig_in(t)
+    rebuilds = []
+    c.h.cpu.hooks[0x4A5F60] = lambda cpu: rebuilds.append(1)
+    quiet = c.f.control + 0x1C8
+    x, y = 104, 120                         # a tile the last search never stamped a way back to
+    tile = c.tile(x, y)
+
+    def lay():
+        c.h.put8(0x21AEC98 + y * 400 + x, 1)
+        c.h.put16(0x1E6CD38 + 2 * tile, 0x7ABC)     # a search number no neighbour carries
+        c.h.put16(0x1E45918 + 2 * tile, 9)
+        c.call(c.f.set_destination, (t, x, y, 2), UNITS_STATE)
+        return c.h.cpu.r['eax']
+
+    c.h.put32(quiet, 1)
+    got = lay()
+    check('a path of ours that will not lay is refused', got, 0)
+    check('  without the whole-map rebuild', len(rebuilds), 0)
+    check('  and the flag is left for the module to clear', c.h.u32(quiet), 1)
+    c.h.put32(quiet, 0)
+    lay()
+    check("a refused path of the game's own still gets its rebuild", len(rebuilds), 1)
+
+
 if __name__ == '__main__':
     print('\n%s' % ('ALL OK' if not FAILURES else 'FAILURES: ' + ', '.join(FAILURES)))
     sys.exit(1 if FAILURES else 0)
