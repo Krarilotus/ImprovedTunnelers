@@ -434,7 +434,8 @@ ROUTE.stepSeconds = 2                         -- how long a half-done retarget i
 ROUTE.refused = 8                             -- targets set aside at a time
 ROUTE.size = ROUTE.pathOffset + ROUTE.pathMax * 4
 -- Where traceAndCommitPathPlan finds no way back and goes on to rebuild the whole map.
-ROUTE.stopwatchFloor = 12000                  -- a tick this long (x1024 cycles) is worth a line
+ROUTE.drainBudget = 2500                      -- collapse work a tick may take (x1024 cycles)
+ROUTE.stopwatchFloor = 90000                  -- a tick this long (x1024 cycles, ~25 ms) is worth a line
 ROUTE.travelHook = 0x7E0                      -- je: not at its destination yet
 ROUTE.traceFailed = {
   aob = "8B 7C 24 10 83 47 78 01 8B CF C7 87 ? ? ? ? 00 00 00 00 E8",
@@ -595,6 +596,12 @@ C.SW_MAX_STATE = 0x1E0            -- ... the state it started in
 C.SW_MAX_UNIT = 0x1E4
 C.SW_MAX_HOW = 0x1E8              -- ... and REDIRECT_HOW after it
 C.SW_COUNT = 0x1EC                -- ... tunneller updates this tick
+C.SW_TILES = 0x1F0                -- ... tunnel tiles the collapse started on this tick
+C.SW_DAMAGE_MAX = 0x1F4           -- ... the dearest single call of the game's damage
+C.SW_DAMAGE_CALLS = 0x1F8         -- ... how many calls of it
+C.SW_DAMAGE_KIND = 0x1FC          -- ... what the dearest hit: a building type, -1 a wall
+C.STEP_ACTIVE = 0x200             -- a tunnel tile is part way through falling in
+C.DRAIN_START = 0x204             -- when this tick's collapse work began (cycles / 1024)
 C.FILL_UNIT = 0x22C               -- the tunnel being written into the queue
 C.FILL_FLAGS = 0x230
 C.FILL_TILE = 0x234
@@ -672,8 +679,9 @@ local REPORT_WORDS = {
       .. "moment (tile = the target, flags = its flags, c = the line, d = tries, "
       .. "e = where the tunnel stands, f = that tile's flags, g = its plan so far)",
   [47] = "a slow tick (a = its length, tile = spent in tunneller updates, flags = spent "
-      .. "collapsing tunnels, b = the dearest single tunneller update, c = the state it "
-      .. "started in, d = its unit, e = how it was sent on, f = tunneller updates, g = the "
+      .. "collapsing tunnels, b = the dearest single tunneller update, c = the dearest "
+      .. "single call of the game's damage, d = calls of it, e = what that one hit (a "
+      .. "building type, -1 a wall), f = tunnel tiles the collapse started on, g = the "
       .. "clock; all times in units of 1024 CPU cycles)",
   [44] = "a line laid out its route to the campfire (a = player, tile = the first "
       .. "fortification on it, flags = tiles on its path, b = fortifications on it, "
@@ -1087,6 +1095,7 @@ return {
           TILE_MAP_STATE_ADDRESS = tileMapState,
           PROCESS_DAMAGE_ADDRESS = processDamage,
           FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
+          STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
         })
 
         -- ... and the tick that works through what is queued.
@@ -1100,10 +1109,23 @@ return {
           SW_TUNNEL_ADDRESS = control + C.SW_TUNNEL,
           SW_QUEUE_ADDRESS = control + C.SW_QUEUE,
           SW_MAX_ADDRESS = control + C.SW_MAX,
-          SW_MAX_STATE_ADDRESS = control + C.SW_MAX_STATE,
-          SW_MAX_UNIT_ADDRESS = control + C.SW_MAX_UNIT,
-          SW_MAX_HOW_ADDRESS = control + C.SW_MAX_HOW,
           SW_COUNT_ADDRESS = control + C.SW_COUNT,
+          SW_TILES_ADDRESS = control + C.SW_TILES,
+          SW_DAMAGE_MAX_ADDRESS = control + C.SW_DAMAGE_MAX,
+          SW_DAMAGE_CALLS_ADDRESS = control + C.SW_DAMAGE_CALLS,
+          SW_DAMAGE_KIND_ADDRESS = control + C.SW_DAMAGE_KIND,
+          STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
+          DRAIN_START_ADDRESS = control + C.DRAIN_START,
+          DRAIN_BUDGET = ROUTE.drainBudget,
+          RADIUS_ADDRESS = control + C.SPREAD_RADIUS,
+          STEP_DX_ADDRESS = control + C.STEP_DX,
+          STEP_DY_ADDRESS = control + C.STEP_DY,
+          STEP_THIS_TILE_ADDRESS = control + C.STEP_THIS_TILE,
+          TILE_FLAGS_ADDRESS = tileFlags,
+          WALL_FAMILY = WALL_FAMILY_FLAGS,
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          BUILDING_STRIDE = SEARCH_STRIDE,
+          BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
           QUEUE_ADDRESS = queue,
           QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT,
           SPEED_ADDRESS = control + C.SPEED,

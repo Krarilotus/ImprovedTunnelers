@@ -2194,17 +2194,17 @@ ret
 -- its own "put this tile back" does, and it is why a tunnel over raised ground must never
 -- simply be flattened to nothing. Then, unless this is a tunnel being quietly filled in
 -- behind a tunneler that is still digging, whatever stands within reach is shaken.
+--
+-- One neighbour per call, at STEP_DX / STEP_DY, which it then moves on; when the last one
+-- is done STEP_ACTIVE goes to 0. The game's damage is the dear part of a collapse on a real
+-- map - a building it brings down sets the game rebuilding its maps - so queue_tick has to
+-- be able to stop between any two of them. EAX comes back 1 when the game's damage was
+-- called, else 0. EBX is kept.
 local queue_step = [[
-mov eax, [RADIUS_ADDRESS]
-test eax, eax
-jl step_done
-neg eax
-mov [STEP_DY_ADDRESS], eax
-step_row:
-mov eax, [RADIUS_ADDRESS]
-neg eax
-mov [STEP_DX_ADDRESS], eax
-step_tile:
+push ebx
+xor ebx, ebx
+cmp dword [RADIUS_ADDRESS], 0
+jl step_finished
 mov edx, [STEP_Y_ADDRESS]
 add edx, [STEP_DY_ADDRESS]
 cmp edx, 1
@@ -2269,16 +2269,24 @@ push dword [STEP_THIS_TILE_ADDRESS]
 mov ecx, TILE_MAP_STATE_ADDRESS
 call PROCESS_DAMAGE_ADDRESS
 mov dword [FAMILY_ACTIVE_ADDRESS], 0
+mov ebx, 1
 step_next:
 add dword [STEP_DX_ADDRESS], 1
 mov eax, [STEP_DX_ADDRESS]
 cmp eax, [RADIUS_ADDRESS]
-jle step_tile
+jle step_out
+mov eax, [RADIUS_ADDRESS]
+neg eax
+mov [STEP_DX_ADDRESS], eax
 add dword [STEP_DY_ADDRESS], 1
 mov eax, [STEP_DY_ADDRESS]
 cmp eax, [RADIUS_ADDRESS]
-jle step_row
-step_done:
+jle step_out
+step_finished:
+mov dword [STEP_ACTIVE_ADDRESS], 0
+step_out:
+mov eax, ebx
+pop ebx
 ret
 ]]
 
@@ -2317,14 +2325,14 @@ mov eax, [SW_QUEUE_ADDRESS]
 mov [REPORT_ADDRESS+8], eax
 mov eax, [SW_MAX_ADDRESS]
 mov [REPORT_ADDRESS+12], eax
-mov eax, [SW_MAX_STATE_ADDRESS]
+mov eax, [SW_DAMAGE_MAX_ADDRESS]
 mov [REPORT_ADDRESS+16], eax
-mov eax, [SW_MAX_UNIT_ADDRESS]
+mov eax, [SW_DAMAGE_CALLS_ADDRESS]
 mov [REPORT_ADDRESS+20], eax
-mov eax, [SW_MAX_HOW_ADDRESS]
+mov eax, [SW_DAMAGE_KIND_ADDRESS]
 mov [REPORT_ADDRESS+24], eax
 mov dword [REPORT_ADDRESS+28], 47
-mov eax, [SW_COUNT_ADDRESS]
+mov eax, [SW_TILES_ADDRESS]
 mov [REPORT_ADDRESS+32], eax
 mov [REPORT_ADDRESS+36], ebx
 push ecx
@@ -2342,14 +2350,22 @@ mov [SW_TUNNEL_ADDRESS], eax
 mov [SW_QUEUE_ADDRESS], eax
 mov [SW_MAX_ADDRESS], eax
 mov [SW_COUNT_ADDRESS], eax
+mov [SW_DAMAGE_MAX_ADDRESS], eax
+mov [SW_DAMAGE_CALLS_ADDRESS], eax
+mov [SW_TILES_ADDRESS], eax
 tick_unwatched:
-cmp dword [QUEUE_COUNT_ADDRESS], 0
-je tick_done
+rdtsc
+shrd eax, edx, 10
+mov [DRAIN_START_ADDRESS], eax
 mov eax, [SPEED_ADDRESS]
 test eax, eax
 jle tick_done
 mov [TICK_LEFT_ADDRESS], eax
 tick_next:
+cmp dword [STEP_ACTIVE_ADDRESS], 0
+jne tick_step
+cmp dword [TICK_LEFT_ADDRESS], 0
+jle tick_done
 cmp dword [QUEUE_COUNT_ADDRESS], 0
 je tick_done
 sub dword [QUEUE_COUNT_ADDRESS], 1
@@ -2364,16 +2380,53 @@ mov eax, [ecx+8]
 mov [STEP_Y_ADDRESS], eax
 mov eax, [ecx+12]
 mov [STEP_FLAGS_ADDRESS], eax
+mov eax, [RADIUS_ADDRESS]
+neg eax
+mov [STEP_DX_ADDRESS], eax
+mov [STEP_DY_ADDRESS], eax
+mov dword [STEP_ACTIVE_ADDRESS], 1
+sub dword [TICK_LEFT_ADDRESS], 1
+add dword [SW_TILES_ADDRESS], 1
+tick_step:
+rdtsc
+shrd eax, edx, 10
+mov esi, eax
 call STEP_ADDRESS
+mov edi, eax
+test edi, edi
+je tick_stepped
+add dword [SW_DAMAGE_CALLS_ADDRESS], 1
+rdtsc
+shrd eax, edx, 10
+sub eax, esi
+cmp eax, [SW_DAMAGE_MAX_ADDRESS]
+jbe tick_stepped
+mov [SW_DAMAGE_MAX_ADDRESS], eax
+mov ecx, [STEP_THIS_TILE_ADDRESS]
+mov eax, -1
+test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
+jnz tick_kind
+movzx eax, word [ecx*2+BUILDING_TILE_ADDRESS]
+imul eax, eax, BUILDING_STRIDE
+movsx eax, word [eax+BUILDING_TYPE_ADDRESS]
+tick_kind:
+mov [SW_DAMAGE_KIND_ADDRESS], eax
+tick_stepped:
+cmp dword [STEP_ACTIVE_ADDRESS], 0
+jne tick_budget
 push dword [STEP_Y_ADDRESS]
 push dword [STEP_X_ADDRESS]
 push 1
 mov ecx, PATH_STATE_ADDRESS
 call UPDATE_WALK_ADDRESS
-sub dword [TICK_LEFT_ADDRESS], 1
-mov eax, [TICK_LEFT_ADDRESS]
-test eax, eax
-jg tick_next
+tick_budget:
+test edi, edi
+je tick_next
+rdtsc
+shrd eax, edx, 10
+sub eax, [DRAIN_START_ADDRESS]
+cmp eax, DRAIN_BUDGET
+jb tick_next
 tick_done:
 cmp dword [DIAGNOSTICS_ADDRESS], 0
 je tick_out

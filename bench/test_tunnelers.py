@@ -972,7 +972,7 @@ def scenario(extreme):
     before = len(dh.logs)
     dh.run(d.tick_site, until=tick_on)
     check('an ordinary tick writes nothing', len(dh.logs) - before, 0)
-    dh.cpu.clock_offset = getattr(dh.cpu, 'clock_offset', 0) + 1024 * 60000
+    dh.cpu.clock_offset = getattr(dh.cpu, "clock_offset", 0) + 1024 * 200000
     dh.run(d.tick_site, until=tick_on)
     slow = dh.logs[before:]
     check('a tick far longer than usual writes one line', len(slow), 1)
@@ -1190,7 +1190,19 @@ def scenario(extreme):
         h.put32(f.step_x, 200)
         h.put32(f.step_y, 100)
         h.put32(f.step_flags, 5 << 8)
-        h.run(f.step_routine, until=SENTINEL)
+        whole_tile()
+
+    def whole_tile():
+        """The step does one neighbour a call; run it until the tile is done."""
+        r = h.u32(f.spread_radius)
+        h.put32(f.control + 0x258, -r & 0xFFFFFFFF)          # STEP_DX
+        h.put32(f.control + 0x25C, -r & 0xFFFFFFFF)          # STEP_DY
+        h.put32(f.control + 0x200, 1)                        # STEP_ACTIVE
+        for _ in range(200):
+            h.run(f.step_routine, until=SENTINEL)
+            if not h.u32(f.control + 0x200):
+                return
+        raise AssertionError('the step never finished its tile')
 
     fall_in()
     check('the ground goes back to the height the map gives it',
@@ -1275,7 +1287,7 @@ def scenario(extreme):
             h.put8(f.live_height + y * 400 + x, 12)
     hits.clear()
     h.put32(f.step_flags, 1 | (5 << 8))                     # a quiet fill
-    h.run(f.step_routine, until=SENTINEL)
+    whole_tile()
     check('a quiet fill puts the ground back', h.m.read(f.live_height + stile, 1)[0], 8)
     check('  and damages nothing', len(hits), 0)
 
@@ -1300,6 +1312,39 @@ def scenario(extreme):
     h.run(tick, until=tick_on)
     h.run(tick, until=tick_on)
     check('and then it stops at nothing left', h.u32(f.queue_count), 0)
+
+    # A tick stops between two calls of the game's damage once its time is spent, and the
+    # next one carries on with the same tile where it left off.
+    h.put32(f.spread_radius, 2)
+    h.put32(f.spread_damage, 60)
+    shaken = []
+    h.stub(f.process_damage, 0, 32, record=shaken)
+    burn = []
+    def slow(cpu):                                          # each call "costs" 3000 units
+        cpu.clock_offset = getattr(cpu, 'clock_offset', 0) + 3000 * 1024
+    h.cpu.hooks[f.process_damage] = lambda cpu, old=h.cpu.hooks.get(f.process_damage): (slow(cpu), old and old(cpu))
+    for y in range(98, 103):
+        for x in range(198, 203):
+            h.put16(f.building_tiles + 2 * (y * 400 + x), 31)   # a workshop all round
+    h.put32(f.queue, stile)
+    h.put32(f.queue + 4, 200)
+    h.put32(f.queue + 8, 100)
+    h.put32(f.queue + 12, 5 << 8)
+    h.put32(f.queue_count, 1)
+    h.put32(f.control + 0x200, 0)
+    h.run(tick, until=tick_on)
+    check('a tick whose time is spent stops after one call of the damage', len(shaken), 1)
+    check('  with the tile still part way through', h.u32(f.control + 0x200), 1)
+    h.run(tick, until=tick_on)
+    check('  and the next tick carries on with it', len(shaken), 2)
+    h.stub(f.process_damage, 0, 32, record=shaken)
+    h.cpu.clock_offset = 0
+    for _ in range(40):
+        h.run(tick, until=tick_on)
+    check('  until the tile is done', (h.u32(f.control + 0x200), len(shaken)), (0, 25))
+    for y in range(98, 103):
+        for x in range(198, 203):
+            h.put16(f.building_tiles + 2 * (y * 400 + x), 0)
 
     # The game's own prologue follows this hook and reads its `this` out of ECX, so every
     # register the replayed three instructions do not touch has to come back untouched.
