@@ -32,6 +32,12 @@ spend themselves on rubble. If the game refuses to lay a tunnel's way to its new
 tunnel waits a moment where it is and is then sent somewhere else; that spot is left alone for
 a minute. It is no longer lost.
 
+**No tunnel passes under a standing fortification.** Whatever the route says - a way that
+looked open through a gate, past ladders or a siege tower - a tunnel that comes under an enemy
+wall, gate or tower on its way collapses right there, on that piece. The one exception is a
+thick wall being taken a tile per tunnel: passing under the tiles the others are bringing
+down is the point.
+
 **A tunnel that is sent on is still one tunnel.** It carries on from where it stands, and when
 it comes up under its new target it collapses exactly the way it would have at the first one -
 the same damage, and the whole tunnel behind it, back to its entrance, comes down with it.

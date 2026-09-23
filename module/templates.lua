@@ -1151,6 +1151,119 @@ pop ebx
 ret
 ]]
 
+-- A tunnel on its way that comes under a standing enemy fortification collapses there.
+-- Whatever the route says - it can call the way to the campfire open when the search that
+-- measured it slipped through a gate, past a ladder or a siege tower - the ground the tunnel
+-- actually crosses has the last word. Hooked on UpdateTunneler's "not there yet" branch, so
+-- it looks once a tick at the tile the tunneller is under; when that is an enemy wall,
+-- stair, crenellation, gate or tower, the tunnel is cut short right there - its plan ends
+-- where it has got to, its destination is here - and handed to the arrival as if it had
+-- arrived, which lets the game collapse it the way it collapses any tunnel.
+--
+-- Two exceptions: its own destination, which the ordinary arrival takes care of, and a
+-- fortification on its line's route that another tunnel was sent at within CLAIM_TICKS -
+-- that is the thick wall being taken a tile per tunnel, and passing under the tiles the
+-- others are bringing down is the point. EAX is the game's "arrived"; everything else kept.
+local crossing = [[
+test eax, eax
+jne ARRIVED_ADDRESS
+cmp dword [ENABLED_ADDRESS], 0
+je cross_off
+push ebx
+push esi
+mov esi, [CURRENT_UNIT_ADDRESS]
+imul esi, esi, 1168
+mov ecx, [esi+UNIT_TILE]
+test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
+jz cross_building
+movzx eax, byte [ecx+WALL_OWNER_ADDRESS]
+and eax, 7
+add eax, 1
+jmp cross_whose
+cross_building:
+movzx eax, word [ecx*2+BUILDING_TILE_ADDRESS]
+test eax, eax
+je cross_none
+imul eax, eax, BUILDING_STRIDE
+movsx edx, word [eax+BUILDING_TYPE]
+cmp edx, TYPE_LIMIT
+ja cross_none
+cmp dword [edx*4+GATE_OR_TOWER_ADDRESS], 0
+je cross_none
+movsx eax, word [eax+BUILDING_OWNER]
+cross_whose:
+movsx edx, word [esi+UNIT_OWNER]
+cmp eax, edx
+je cross_none
+mov ebx, [eax*4+TEAMS_ADDRESS]
+test ebx, ebx
+je cross_enemy
+cmp ebx, [edx*4+TEAMS_ADDRESS]
+je cross_none
+cross_enemy:
+mov ax, [esi+UNIT_X]
+cmp ax, [esi+UNIT_DEST_X]
+jne cross_elsewhere
+mov ax, [esi+UNIT_Y]
+cmp ax, [esi+UNIT_DEST_Y]
+je cross_none
+cross_elsewhere:
+mov edx, [esi+UNIT_UID]
+mov eax, RECORDS_ADDRESS
+cross_record:
+cmp [eax], edx
+je cross_record_found
+add eax, 16
+cmp eax, RECORDS_END_ADDRESS
+jb cross_record
+jmp cross_cut
+cross_record_found:
+mov eax, [eax+8]
+test eax, eax
+je cross_cut
+sub eax, LINE_ADDRESS
+shr eax, 4
+imul eax, eax, ROUTE_SIZE
+add eax, ROUTES_ADDRESS
+cmp dword [eax], 1
+jne cross_cut
+mov ebx, [eax+4]
+lea edx, [eax+16]
+cross_entry:
+test ebx, ebx
+je cross_cut
+cmp [edx], ecx
+jne cross_entry_next
+mov eax, [TICKS_ADDRESS]
+sub eax, [edx+12]
+cmp dword [edx+12], 0
+je cross_cut
+cmp eax, CLAIM_TICKS
+jb cross_none
+jmp cross_cut
+cross_entry_next:
+add edx, 16
+sub ebx, 1
+jmp cross_entry
+cross_cut:
+mov ax, [esi+UNIT_PATH_INDEX]
+mov [esi+UNIT_PATH_LENGTH], ax
+mov ax, [esi+UNIT_X]
+mov [esi+UNIT_DEST_X], ax
+mov ax, [esi+UNIT_Y]
+mov [esi+UNIT_DEST_Y], ax
+mov [esi+UNIT_DEST_TILE], ecx
+mov word [esi+UNIT_MOVE_STATUS], 0
+pop esi
+pop ebx
+jmp ARRIVED_ADDRESS
+cross_none:
+pop esi
+pop ebx
+cross_off:
+jmp NOT_ARRIVED_ADDRESS
+]]
+
 -- Inside traceAndCommitPathPlan, where the trace has found no way back to the unit. The
 -- game takes that to mean its own maps are stale and rebuilds the path linkage of every
 -- building and the separate-area map of the whole map before it gives up: millions of
@@ -2429,6 +2542,7 @@ return {
   redirect = redirect,
   quiet_trace = quiet_trace,
   aim_cone = aim_cone,
+  crossing = crossing,
   extend_plan = extend_plan,
   arrival = arrival,
   tunnel_targets = tunnel_targets,

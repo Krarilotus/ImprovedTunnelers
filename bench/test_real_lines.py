@@ -298,6 +298,25 @@ def a_path_of_ours_that_will_not_lay_costs_no_whole_map_rebuild():
     check("a refused path of the game's own still gets its rebuild", len(rebuilds), 1)
 
 
+@scenario
+def a_tunnel_collapses_under_the_first_enemy_fortification_it_crosses():
+    # The tunnel is on its way to the wall at x=116. A wall at x=112, right on its way, was
+    # not there when it was aimed - the way a route can miss a piece behind a gate, a
+    # ladder or a siege tower. It comes up under that one, and 116 is left standing.
+    c = Castle(walls=[(116, 100)], camp=(150, 100))
+    t = c.tunneller(11, (100, 100))
+    c.dig_in(t)
+    check('it is aimed at the far wall', c.heading(t), (116, 100))
+    check('  along a tunnel under x=112', (112, 100) in c.steps(t), True)
+    c.wall(112, 100)
+    where = collapsed_where(c, t)
+    check('it collapses under the wall it crosses', where, (112, 100))
+    check('  which comes down', c.standing(112, 100), False)
+    check('  and the wall it was aimed at still stands', c.standing(116, 100), True)
+    index, length, ladder = c.plan(t)
+    check('  its tunnel ends where it got to', length <= 13, True)
+
+
 if __name__ == '__main__':
     print('\n%s' % ('ALL OK' if not FAILURES else 'FAILURES: ' + ', '.join(FAILURES)))
     sys.exit(1 if FAILURES else 0)

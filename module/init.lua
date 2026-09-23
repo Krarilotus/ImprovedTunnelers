@@ -434,6 +434,7 @@ ROUTE.stepSeconds = 2                         -- how long a half-done retarget i
 ROUTE.refused = 8                             -- targets set aside at a time
 ROUTE.size = ROUTE.pathOffset + ROUTE.pathMax * 4
 -- Where traceAndCommitPathPlan finds no way back and goes on to rebuild the whole map.
+ROUTE.travelHook = 0x7E0                      -- je: not at its destination yet
 ROUTE.traceFailed = {
   aob = "8B 7C 24 10 83 47 78 01 8B CF C7 87 ? ? ? ? 00 00 00 00 E8",
   hookSize = 8,
@@ -1282,6 +1283,47 @@ return {
           ALG_TARGET_X_ADDRESS = algX,
           ALG_TARGET_Y_ADDRESS = algY,
         })
+
+        -- A tunnel collapses under the first enemy fortification it comes to.
+        if guardsHold(tunneler, { [ROUTE.travelHook - 2] = { 0x85, 0xC0, 0x0F, 0x84 } },
+            "the tunneler's travel test") then
+          local crossing = core.allocateAssembly(templates.crossing, {
+            ARRIVED_ADDRESS = tunneler + TUNNELER_ARRIVED_HOOK,
+            NOT_ARRIVED_ADDRESS = jumpTarget(tunneler + ROUTE.travelHook),
+            ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
+            CURRENT_UNIT_ADDRESS = currentUnit,
+            UNIT_TILE = unitField(UNIT_TILE),
+            UNIT_OWNER = unitField(UNIT_OWNER),
+            UNIT_X = unitField(UNIT_X),
+            UNIT_Y = unitField(UNIT_Y),
+            UNIT_DEST_X = unitField(UNIT_DEST_X),
+            UNIT_DEST_Y = unitField(UNIT_DEST_Y),
+            UNIT_DEST_TILE = unitField(UNIT_DEST_TILE),
+            UNIT_UID = unitField(UNIT_UID),
+            UNIT_PATH_INDEX = unitField(UNIT_PATH_INDEX),
+            UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
+            UNIT_MOVE_STATUS = unitField(UNIT_MOVE_STATUS),
+            TILE_FLAGS_ADDRESS = tileFlags,
+            WALL_FAMILY = WALL_FAMILY_FLAGS,
+            WALL_OWNER_ADDRESS = readAddress(search + ROUTE.wallOwnerOperand),
+            BUILDING_TILE_ADDRESS = buildingTiles,
+            BUILDING_STRIDE = SEARCH_STRIDE,
+            BUILDING_TYPE = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
+            BUILDING_OWNER = (buildingBase + ROUTE.buildingOwner) & 0xFFFFFFFF,
+            TYPE_LIMIT = BUILDING_TYPE_LIMIT,
+            GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
+            TEAMS_ADDRESS = teamTable,
+            RECORDS_ADDRESS = records,
+            RECORDS_END_ADDRESS = records + RECORD_COUNT * RECORD_SIZE,
+            LINE_ADDRESS = lines,
+            ROUTE_SIZE = ROUTE.size,
+            ROUTES_ADDRESS = control + C.ROUTES,
+            TICKS_ADDRESS = ticks,
+            CLAIM_TICKS = ROUTE.claimSeconds * TICKS_PER_SECOND,
+          })
+          remember(tunneler + ROUTE.travelHook, 6)
+          writeJump(tunneler + ROUTE.travelHook, crossing, 6)
+        end
       else
         routeBuild = core.allocateCode({ 0xC7, 0x06, 0x02, 0x00, 0x00, 0x00, 0xC3 })  -- state 2
         followRoute = core.allocateCode({ 0x31, 0xC0, 0xC3 })                        -- search
