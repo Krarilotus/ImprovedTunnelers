@@ -358,7 +358,8 @@ def scenario(extreme):
         mode, pin = h.u32(f.aim_mode), h.u32(f.aim_pin)
         args = [cpu.m.u32(cpu.r['esp'] + 4 + 4 * i) for i in range(5)]
         asked.append((mode, pin if mode == 1 else 0, args[2], args[3], args[4]))
-        found = (pin if pin in reach else 0) if mode == 1 else answers.get(mode, 0)
+        # mode 4 is the module's own open search: the same answer as the game's mode 0
+        found = (pin if pin in reach else 0) if mode == 1 else answers.get(mode % 4, 0)
         h.put32(f.alg_result, found)
         x, y = xy(found) if found else (0, 0)
         h.put32(f.alg_x, x)
@@ -430,7 +431,7 @@ def scenario(extreme):
         cpu.r['ebp'], cpu.r['edi'], cpu.r['edx'] = tile, y, x
         cpu.r['ebx'] = 0x5EB5
         cpu.eip = take
-        for _ in range(60):
+        for _ in range(300):
             if cpu.eip in (took_it, spread_on):
                 break
             cpu.step()
@@ -705,7 +706,7 @@ def scenario(extreme):
     answers[0] = SIDE
     got = send_on(unit)
     check('with nothing towards the campfire, the way in is widened', got, (1, 3, True))
-    check('  cone first, then the nearest of all', [a[0] for a in asked], [2, 0])
+    check('  cone first, then the nearest of all', [a[0] for a in asked], [2, 4])
     check('  and the line moves there', line(1, 0)[0], SIDE)
 
     set_line(1, 0, HERE)
@@ -742,7 +743,7 @@ def scenario(extreme):
     answers[0] = SIDE
     got = send_on(unit)
     check('knowing no campfire, it goes straight to the nearest', (got[1], [a[0] for a in asked]),
-          (3, [0]))
+          (3, [4]))
     h.put32(f.camp_ids + 0x39F4 * 2, 9)
     check('the filter is never left on for the game', h.u32(f.aim_mode), 0)
 
@@ -781,7 +782,7 @@ def scenario(extreme):
     new_leg[:] = [5, 3]
     got = send_on(unit)
     base = f.unit(unit)
-    check('a tunnel that would not fit its plan is not sent on', got, (0, 6, True))
+    check('a tunnel that would not fit its plan is not sent on', got, (0, 8, True))
     check('  and is put back exactly as it was',
           (nibbles(unit, 797) == [1] * 797, struct.unpack('<H', h.m.read(base + 0xFC, 2))[0],
            struct.unpack('<H', h.m.read(base + 0xFA, 2))[0],
@@ -794,10 +795,32 @@ def scenario(extreme):
     trace_ok[0] = False
     got = send_on(unit)
     trace_ok[0] = True
-    check('one whose path will not lay is not sent on', got, (0, 6, True))
+    check('one whose path will not lay is not sent on: it waits where it is', got,
+          (2, 6, True))
+    refused_ring = f.control + 0x188
+    check('  and its target is set aside', h.u32(refused_ring) in (NEXT, SIDE), True)
+    check('  and the spot it stands on is left alone a moment',
+          (h.u32(f.control + 0x16C), h.u32(f.control + 0x170) > h.u32(f.ticks)), (HERE, True))
     check('  and is put back exactly as it was',
           (nibbles(unit, 9), struct.unpack('<H', h.m.read(base + 0xFC, 2))[0],
            struct.unpack('<H', h.m.read(base + 0xFA, 2))[0]), ([4] * 9, 9, 9))
+
+    # the filter sets a refused target aside for the module's own searches, never the game's
+    for k in range(0, 64, 4):
+        h.put32(refused_ring + k, 0)
+    h.put32(refused_ring, 40000)
+    h.put32(refused_ring + 4, h.u32(f.ticks) + 100)
+    h.put32(f.aim_mode, 4)
+    check('a target set aside is passed by the module s own search', reaches(40000, 150, 150),
+          'passed')
+    h.put32(f.aim_mode, 0)
+    check('  but the game s own search takes it as always', reaches(40000, 150, 150), 'taken')
+    h.put32(refused_ring + 4, h.u32(f.ticks) - 1)
+    h.put32(f.aim_mode, 4)
+    check('  and once its time is up it is taken again', reaches(40000, 150, 150), 'taken')
+    h.put32(f.aim_mode, 0)
+    h.put32(refused_ring, 0)
+    h.put32(f.control + 0x170, 0)                           # nothing cooling
 
     # --------------------------------------------------------------- the arrival
     print(' where a tunnel goes: arriving')
@@ -853,6 +876,20 @@ def scenario(extreme):
     asked.clear()
     arrive(12)
     check('  and on the next tick it is its turn', len(asked) > 0, True)
+    # where the game just refused a path, tunnels wait a moment instead of searching again
+    answers[2] = NEXT
+    dug(unit, 6006)
+    h.put32(f.control + 0x16C, HERE)
+    h.put32(f.control + 0x170, h.u32(f.ticks) + 10)
+    asked.clear()
+    check('arriving where a path was just refused, it waits', arrive(unit), 'digs on')
+    check('  without a search', asked, [])
+    check('  still at the end of its tunnel', f.unit_field(unit, 'state'), 3)
+    h.put32(f.ticks, h.u32(f.ticks) + 20)
+    asked.clear()
+    arrive(unit)
+    check('  and after the moment it looks again', len(asked) > 0, True)
+    h.put32(f.control + 0x170, 0)
     h.cpu.hooks.pop(resume, None)
     h.cpu.hooks.pop(tail, None)
     h.cpu.hooks.pop(laid, None)

@@ -48,6 +48,11 @@ retarget_group_descr: |
   do tunnels take the nearest fortification instead, to widen the way. Following the route costs
   no search at all; laying it out costs one, once per siege.
 
+  Tunnels arriving together are spread along the route: where a wall is several tiles thick,
+  each is sent at a tile of its own instead of all coming up under the same one. And if the
+  game will not lay a tunnel's way to its new target, the tunnel waits a moment and tries
+  another rather than collapsing into empty ground.
+
   A tunnel that is sent on is not a new tunnel: it carries on from where it stands, and when
   it finally comes up under its target it collapses exactly as any tunnel does, with the same
   damage - and the whole tunnel behind it, back to the entrance, comes down with it.

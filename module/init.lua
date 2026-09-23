@@ -420,7 +420,16 @@ local ROUTE = {
   pathMax = 192,                              -- tiles of path: more than the reach, always
   searchNumberLimit = 0x7D00,                 -- where the game's search counter wraps
 }
-ROUTE.pathOffset = 16 + ROUTE.entries * 12
+ROUTE.pathOffset = 16 + ROUTE.entries * 16
+
+-- How long a fortification on a route stays spoken for once a tunnel has been sent at it:
+-- long enough for the tunnel to get there and bring it down. A target the game refused to
+-- lay a path to is set aside for longer; the spot the refused tunnel stood on is left
+-- alone a moment, every tunnel arriving there waiting instead of searching.
+ROUTE.claimSeconds = 30
+ROUTE.refusedSeconds = 60
+ROUTE.waitSeconds = 2
+ROUTE.refused = 8                             -- targets set aside at a time
 ROUTE.size = ROUTE.pathOffset + ROUTE.pathMax * 4
 
 -- A tunnel sent at its line's target searches no further than the target's own distance
@@ -554,6 +563,16 @@ C.ROUTE_Y = 0x154
 C.WALK_X = 0x158
 C.WALK_Y = 0x15C
 C.PATH_FOUND = 0x160              -- tiles of path the walk has stepped on so far
+C.CAMP_BUILDING = 0x164           -- the enemy's campfire, as a building
+C.ANCHOR_ID = 0x168               -- ... the one find_anchor is looking at
+C.FAIL_SPOT = 0x16C               -- where the game last refused a path, and until when
+C.FAIL_UNTIL = 0x170              -- tunnels arriving there wait
+C.REFUSED_CURSOR = 0x174          -- the next slot of the targets set aside
+C.EXTEND_FULL = 0x178             -- the extension failed for want of room, not the trace
+C.FOLLOW_AT = 0x17C               -- where on its route the tunneller stands
+C.FOLLOW_FIRST = 0x180            -- the first fortification standing ahead of it
+C.FOLLOW_PICK = 0x184             -- ... and the one it is sent at
+C.REFUSED = 0x188                 -- {tile, until}, the targets set aside
 C.FILL_UNIT = 0x22C               -- the tunnel being written into the queue
 C.FILL_FLAGS = 0x230
 C.FILL_TILE = 0x234
@@ -625,8 +644,11 @@ local REPORT_WORDS = {
   [42] = "tunnel arrived on empty ground and is sent on (tile = its new target, "
       .. "b = 7 along its line's route, 1 to its line by a search, 2 towards the campfire, "
       .. "3 widening the way in, c = its line, d = times sent on)",
-  [43] = "tunnel arrived on empty ground and collapses there (b = 4 sent on too often, "
-      .. "5 nothing in reach, 6 the path would not lay or the tunnel is as long as it gets)",
+  [43] = "tunnel arrived on empty ground and collapses there (b = 4 sent on as often as "
+      .. "allowed, 5 nothing in reach, 8 the tunnel is as long as a plan can hold)",
+  [46] = "the game would not lay the path; the target is set aside and tunnels here wait a "
+      .. "moment (tile = the target, flags = its flags, c = the line, d = tries, "
+      .. "e = where the tunnel stands, f = that tile's flags, g = its plan so far)",
   [44] = "a line laid out its route to the campfire (a = player, tile = the first "
       .. "fortification on it, flags = tiles on its path, b = fortifications on it, "
       .. "c = how far the search reached)",
@@ -835,6 +857,7 @@ return {
     writeInteger(control + C.UNDER_BUILDINGS, underOn and 1 or 0)
     writeInteger(control + C.DIAGNOSTICS, diagnosticsOn and 1 or 0)
     writeInteger(control + C.RING_CURSOR, records)
+    writeInteger(control + C.REFUSED_CURSOR, control + C.REFUSED)
 
     self.control = control
     self.patched = {}
@@ -923,6 +946,8 @@ return {
     end
     if unitBase ~= nil and (campIds ~= nil or keepIds ~= nil) then
       anchor = core.allocateAssembly(templates.find_anchor, {
+        ANCHOR_ID_ADDRESS = control + C.ANCHOR_ID,
+        CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
         ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
         ANCHOR_FROM_ADDRESS = control + C.ANCHOR_FROM,
         ANCHOR_TO_ADDRESS = control + C.ANCHOR_TO,
@@ -1102,6 +1127,11 @@ return {
       -- AI's included, never see it - except for the single run one of the routines below
       -- asks it for.
       local filter = core.allocateAssembly(templates.aim_filter, {
+        BUILDING_TILE_ADDRESS = buildingTiles,
+        CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
+        TICKS_ADDRESS = ticks,
+        REFUSED_ADDRESS = control + C.REFUSED,
+        REFUSED_END_ADDRESS = control + C.REFUSED + ROUTE.refused * 8,
         AIM_MODE_ADDRESS = control + C.AIM_MODE,
         AIM_PIN_ADDRESS = control + C.AIM_PIN,
         AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
@@ -1222,6 +1252,12 @@ return {
           AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
         })
         followRoute = core.allocateAssembly(templates.follow_route, {
+          STANDS_ADDRESS = stands,
+          TICKS_ADDRESS = ticks,
+          CLAIM_TICKS = ROUTE.claimSeconds * TICKS_PER_SECOND,
+          FOLLOW_AT_ADDRESS = control + C.FOLLOW_AT,
+          FOLLOW_FIRST_ADDRESS = control + C.FOLLOW_FIRST,
+          FOLLOW_PICK_ADDRESS = control + C.FOLLOW_PICK,
           LINE_ADDRESS = lines,
           ROUTE_SIZE = ROUTE.size,
           ROUTES_ADDRESS = control + C.ROUTES,
@@ -1261,6 +1297,7 @@ return {
 
       -- Laying the next leg while keeping the tunnel one piece.
       local extend = core.allocateAssembly(templates.extend_plan, {
+        EXTEND_FULL_ADDRESS = control + C.EXTEND_FULL,
         AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
         UNIT_PATH_INDEX = unitField(UNIT_PATH_INDEX),
         UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
@@ -1283,6 +1320,17 @@ return {
 
       -- Sending a tunnel on from empty ground.
       local redirect = core.allocateAssembly(templates.redirect, {
+        EXTEND_FULL_ADDRESS = control + C.EXTEND_FULL,
+        REFUSED_CURSOR_ADDRESS = control + C.REFUSED_CURSOR,
+        REFUSED_TICKS = ROUTE.refusedSeconds * TICKS_PER_SECOND,
+        FAIL_SPOT_ADDRESS = control + C.FAIL_SPOT,
+        FAIL_UNTIL_ADDRESS = control + C.FAIL_UNTIL,
+        WAIT_TICKS = ROUTE.waitSeconds * TICKS_PER_SECOND,
+        LINE_ADDRESS = lines,
+        ROUTE_SIZE = ROUTE.size,
+        ROUTES_ADDRESS = control + C.ROUTES,
+        REFUSED_ADDRESS = control + C.REFUSED,
+        REFUSED_END_ADDRESS = control + C.REFUSED + ROUTE.refused * 8,
         CURRENT_UNIT_ADDRESS = currentUnit,
         AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
         RECORD_OF_ADDRESS = recordOf,
@@ -1324,6 +1372,9 @@ return {
       })
 
       local arrival = core.allocateAssembly(templates.arrival, {
+        FAIL_SPOT_ADDRESS = control + C.FAIL_SPOT,
+        FAIL_UNTIL_ADDRESS = control + C.FAIL_UNTIL,
+        UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
         CURRENT_UNIT_ADDRESS = currentUnit,
         UNIT_TILE = unitField(UNIT_TILE),
         UNIT_X = unitField(UNIT_X),
@@ -1507,6 +1558,8 @@ return {
         writeJump(search + SEARCH_BUILDING_TEST, targets, SEARCH_BUILDING_TEST_SIZE)
 
         local accept = core.allocateAssembly(templates.tunnel_accept, {
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
+          CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
           ENABLED_ADDRESS = control + C.TARGETS_ENABLED,
           GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
           TYPE_LIMIT = BUILDING_TYPE_LIMIT,

@@ -191,7 +191,7 @@ def tunnels_follow_the_route_to_the_campfire_and_only_then_widen():
     c.run([d], lambda: c.heading(d) != (108, 100) or not c.alive(d))
     check('with the route open all the way, the last widens the breach instead',
           c.heading(d), (108, 112))
-    check('  going straight for the nearest wall', [m[0] for m in searches], [0])
+    check('  with one search, straight for the nearest fortification', [m[0] for m in searches], [4])
     check('  and brings it down', (collapsed_where(c, d), c.standing(108, 112)),
           ((108, 112), False))
     check('nothing is written below the image base', len(c.strays), 0)
@@ -234,6 +234,36 @@ def the_route_goes_round_the_keep():
     check('  and not one tile of the tunnel runs under the keep', under, [])
     check('  and it brings that piece of wall down', (collapsed_where(c, t), c.standing(*target)),
           (target, False))
+
+
+@scenario
+def a_group_spreads_along_a_thick_wall_instead_of_piling_onto_one_tile():
+    # The next wall on the route is three tiles deep. Three tunnels arrive on the rubble of
+    # the first together: each is sent at a tile of its own, and each brings its tile down,
+    # instead of all three coming up under the first tile and two of them spent for nothing.
+    thick = [(x, y) for x in (116, 117, 118) for y in range(90, 111)]
+    c = Castle(walls=[(108, 100)] + thick, camp=(150, 100))
+    units = [c.tunneller(11 + i, (100, 98 + 2 * i)) for i in range(3)]
+    for t in units:
+        c.dig_in(t)
+    c.take_down(108, 100)
+    c.run(units, lambda: all(c.heading(t) != (108, 100) or not c.alive(t) for t in units))
+    targets = sorted(c.heading(t) for t in units)
+    check('three tunnels arriving together are sent at three different tiles',
+          len(set(targets)), 3)
+    check('  the three tiles of the wall, in a row along the route', targets,
+          [(116, 100), (117, 100), (118, 100)])
+    heading = {t: c.heading(t) for t in units}
+    spots = {}
+
+    def note(n):
+        for t in units:
+            if c.alive(t) and c.state(t) == 4 and t not in spots:
+                spots[t] = c.at(t)
+    c.run(units, lambda: not any(c.alive(t) for t in units), watch=note)
+    check('each collapses under the tile it was sent at',
+          [spots.get(t) for t in units], [heading[t] for t in units])
+    check('  and all three are down', [c.standing(*p) for p in targets], [False] * 3)
 
 
 if __name__ == '__main__':

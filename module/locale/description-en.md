@@ -25,6 +25,13 @@ the next goes one further. Only when the whole route to the campfire is open do 
 the nearest fortification instead, to widen the way in. Tunnels dug in later join the line where
 its front is now.
 
+**Tunnels arriving together are spread out.** Where the next wall on the route is several tiles
+thick, the first tunnel is sent at its first tile, the next at the one behind it, and so on -
+each spot is held for the tunnel sent at it, so they don't all come up under the same tile and
+spend themselves on rubble. If the game refuses to lay a tunnel's way to its new target, the
+tunnel waits a moment where it is and is then sent somewhere else; that spot is left alone for
+a minute. It is no longer lost.
+
 **A tunnel that is sent on is still one tunnel.** It carries on from where it stands, and when
 it comes up under its new target it collapses exactly the way it would have at the first one -
 the same damage, and the whole tunnel behind it, back to its entrance, comes down with it.
