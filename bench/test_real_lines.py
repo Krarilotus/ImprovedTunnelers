@@ -317,6 +317,53 @@ def a_tunnel_collapses_under_the_first_enemy_fortification_it_crosses():
     check('  its tunnel ends where it got to', length <= 13, True)
 
 
+
+def stockpile(c, x0, y0, owner_byte=1):
+    """A 3x3 stockpile as placeStockpile lays it: the wall bit and the stockpile bit on
+    every tile, the owner in the wall owner layer, and the building on every tile."""
+    tiles = [(x, y) for y in range(y0, y0 + 3) for x in range(x0, x0 + 3)]
+    c.building(10, c.enemy, tiles)
+    for x, y in tiles:
+        t = c.tile(x, y)
+        c.h.put32(c.f.tile_flags + 4 * t, 0x102)
+        c.h.put8(c.f.wall_owner + t, owner_byte)
+    return tiles
+
+
+@scenario
+def a_tunnel_passes_under_a_stockpile():
+    # A stockpile stands on the tunnel's way to the wall at x=116. The game marks it with
+    # the wall bit, but it is no wall: the tunnel runs on under it to the wall it was sent at.
+    c = Castle(walls=[(116, 100)], camp=(150, 100))
+    t = c.tunneller(11, (100, 100))
+    c.dig_in(t)
+    check('it is aimed at the far wall', c.heading(t), (116, 100))
+    tiles = stockpile(c, 111, 99)
+    check('  along a tunnel under the stockpile', (112, 100) in c.steps(t), True)
+    where = collapsed_where(c, t)
+    check('it does not collapse under the stockpile', where, (116, 100))
+    check('  it brings the wall down', c.standing(116, 100), False)
+    check('  and the stockpile is left as it was',
+          [c.h.u32(c.f.tile_flags + 4 * c.tile(*p)) for p in tiles], [0x102] * 9)
+
+
+@scenario
+def a_stockpile_on_the_route_does_not_block_it():
+    # Between the breach and the campfire stand a stockpile and, behind it, a wall. The
+    # stockpile is not a fortification on the route: the first tunnel to arrive on the rubble
+    # is sent past it to the wall.
+    c = Castle(walls=[(108, 100), (128, 100)], camp=(150, 100))
+    stockpile(c, 117, 99)
+    a = c.tunneller(11, (100, 100))
+    c.dig_in(a)
+    c.take_down(108, 100)
+    c.run([a], lambda: c.heading(a) != (108, 100) or not c.alive(a))
+    check('the tunnel is sent past the stockpile to the wall behind it', c.heading(a),
+          (128, 100))
+    check('  and brings that wall down', (collapsed_where(c, a), c.standing(128, 100)),
+          ((128, 100), False))
+
+
 if __name__ == '__main__':
     print('\n%s' % ('ALL OK' if not FAILURES else 'FAILURES: ' + ', '.join(FAILURES)))
     sys.exit(1 if FAILURES else 0)

@@ -74,6 +74,10 @@ tries is told the ground is too unstable.
 not only plain wall - and workshops, houses and farms never can. Tunnels may pass beneath the
 town to reach what lies behind it, but never beneath a keep.
 
+**A stockpile is not a wall.** The game marks a stockpile's footprint with the same bit as a
+wall, but it cannot be damaged. Tunnels are never aimed at one, never collapse under one, and a
+stockpile standing on the way to the campfire does not count as a fortification blocking it.
+
 **Diggers are left alone.** A tunneller digging its entrance or its tunnel cannot be picked by
 the mouse or a drag box, is passed over by the orders you give a group, and enemy archers do
 not shoot at it. It is back to normal the moment it is above ground.
@@ -82,7 +86,9 @@ not shoot at it. It is back to normal the moment it is above ground.
 recruits them at its Tunneler's Guild and sends them with the raid like its macemen: they
 march with the others, hit the buildings the raid goes for and fight what they meet. The
 unmodified game recruits them and then leaves them standing, because it has no raid troop
-to put them in. An AI without a guild just recruits its next raid unit instead.
+to put them in - and since it still counts them as raiders, it stops recruiting the rest of
+the raid and never sends it out. An AI without a guild just recruits its next raid unit
+instead.
 
 **Tunnellers behave like soldiers.** They obey stances, and they get the ordinary attack-here
 button; the dig button moves one slot along to make room for it.

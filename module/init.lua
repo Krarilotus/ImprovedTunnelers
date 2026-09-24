@@ -440,11 +440,13 @@ ROUTE.travelHook = 0x7E0                      -- je: not at its destination yet
 ROUTE.raids = {
   tribeAob = "56 57 8B 7C 24 10 33 C0 69 FF 90 04 00 00 0F BF 97 ? ? ? ? 8B 0C 85 ? ? ? ? 3B D1",
   tribeHook = 0x0E,               -- movsx edx, word [edi+unitType]
+  changeInto = 0x20,              -- movsx esi, word [edi+unitTypeToChangeInto]
   guildAob = "85 C0 0F 84 ? ? ? ? 83 FB 1E 6A 00 55 50 75",
   guildNext = 0xAD,               -- the recruiting loop's "next unit"
   maceman = 26,
 }
 ROUTE.raids.guildGuards = { [ROUTE.raids.guildNext] = { 0x8B, 0x44, 0x24, 0x28, 0x83, 0xC0, 0x01 } }
+ROUTE.raids.tribeGuards = { [ROUTE.raids.changeInto] = { 0x0F, 0xBF, 0xB7 } }
 ROUTE.traceFailed = {
   aob = "8B 7C 24 10 83 47 78 01 8B CF C7 87 ? ? ? ? 00 00 00 00 E8",
   hookSize = 8,
@@ -479,6 +481,14 @@ local DENIAL_STACK_RADIUS = 2
 -- alike: a tunnel may be aimed at any of them, a collapse takes any of them away, and the
 -- ground under them is never touched, since for a wall that height is its strength.
 local WALL_FAMILY_FLAGS = 0x100 | 0x200 | 0x800
+
+-- The same flag word's stockpile bit. The game marks a stockpile's whole footprint with it
+-- and with the wall bit (clearStockpileFootprintTiles takes the two away together), which
+-- makes a stockpile look like a stretch of wall to anything that only asks for the wall
+-- bit - but it cannot be damaged. Tunnels are never aimed at it, never collapse under it,
+-- and a route to the campfire running beneath it is not blocked by it. (In ROUTE, not a
+-- local of its own: the main chunk is at Lua's ceiling of two hundred locals.)
+ROUTE.stockpileFlag = 0x2
 
 -- ... and the two of them the game's own damage routine does not sort into its wall loop
 -- by itself, so that a tunnel could never do anything but take them away outright.
@@ -1086,6 +1096,7 @@ return {
         -- One tile of it: the ground goes back, and what stands about is shaken.
         local step = core.allocateAssembly(templates.queue_step, {
           WALL_FAMILY = WALL_FAMILY_FLAGS,
+          STOCKPILE = ROUTE.stockpileFlag,
           FORTIFIED_ADDRESS = fortified,
           TYPE_LIMIT = BUILDING_TYPE_LIMIT,
           TUNNEL_DAMAGE = TUNNEL_DAMAGE,
@@ -1204,6 +1215,8 @@ return {
       -- AI's included, never see it - except for the single run one of the routines below
       -- asks it for.
       local filter = core.allocateAssembly(templates.aim_filter, {
+        STOCKPILE = ROUTE.stockpileFlag,
+        TILE_FLAGS_ADDRESS = tileFlags,
         BUILDING_TILE_ADDRESS = buildingTiles,
         CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
         TICKS_ADDRESS = ticks,
@@ -1237,6 +1250,7 @@ return {
         ALG_RESULT_ADDRESS = algResult,
       })
       local stands = core.allocateAssembly(templates.stands, {
+        STOCKPILE = ROUTE.stockpileFlag,
         TILE_FLAGS_ADDRESS = tileFlags,
         BUILDING_TILE_ADDRESS = buildingTiles,
         WALL_FAMILY = WALL_FAMILY_FLAGS,
@@ -1286,6 +1300,7 @@ return {
           DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
           TILE_FLAGS_ADDRESS = tileFlags,
           WALL_FAMILY = WALL_FAMILY_FLAGS,
+          STOCKPILE = ROUTE.stockpileFlag,
           WALL_OWNER_ADDRESS = readAddress(search + ROUTE.wallOwnerOperand),
           BUILDING_TILE_ADDRESS = buildingTiles,
           BUILDING_STRIDE = SEARCH_STRIDE,
@@ -1370,6 +1385,7 @@ return {
             UNIT_MOVE_STATUS = unitField(UNIT_MOVE_STATUS),
             TILE_FLAGS_ADDRESS = tileFlags,
             WALL_FAMILY = WALL_FAMILY_FLAGS,
+            STOCKPILE = ROUTE.stockpileFlag,
             WALL_OWNER_ADDRESS = readAddress(search + ROUTE.wallOwnerOperand),
             BUILDING_TILE_ADDRESS = buildingTiles,
             BUILDING_STRIDE = SEARCH_STRIDE,
@@ -1514,6 +1530,7 @@ return {
         TILE_FLAGS_ADDRESS = tileFlags,
         BUILDING_TILE_ADDRESS = buildingTiles,
         WALL_FAMILY = WALL_FAMILY_FLAGS,
+        STOCKPILE = ROUTE.stockpileFlag,
         RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
         LAST_REDIRECT_ADDRESS = control + C.LAST_REDIRECT,
         REDIRECT_ADDRESS = redirect,
@@ -1826,10 +1843,12 @@ return {
     local tribeSite = scanOptional(ROUTE.raids.tribeAob, "the AI's raid troop lookup")
     local guildSite = scanOptional(ROUTE.raids.guildAob, "the AI's recruiting building test")
     if tribeSite ~= nil and guildSite ~= nil
-        and guardsHold(guildSite, ROUTE.raids.guildGuards, "the AI's recruiting loop") then
+        and guardsHold(guildSite, ROUTE.raids.guildGuards, "the AI's recruiting loop")
+        and guardsHold(tribeSite, ROUTE.raids.tribeGuards, "the AI's raid troop lookup") then
       local hook = tribeSite + ROUTE.raids.tribeHook
       local tribe = core.allocateAssembly(templates.raid_tribe, {
         UNIT_TYPE_OPERAND = readInteger(hook + 3),
+        CHANGE_INTO_OPERAND = readInteger(tribeSite + ROUTE.raids.changeInto + 3),
         ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
         TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
         STAND_IN_TYPE = ROUTE.raids.maceman,

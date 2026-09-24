@@ -181,7 +181,7 @@ class Fixture:
         offsets = dict(owner=0x96, x=0xC4, y=0xC6, tile=0xD4, uid=0x98, state=0x2C0,
                        looking=0x3FC, siege=0x432, path_len=0xFC, stage=0xF6,
                        kind=0x8E, alive=0x8C, dying=0x2A0, dest_x=0xC8, dest_y=0xCA,
-                       dest_tile=0xD8)
+                       dest_tile=0xD8, behaviour=0x42A)
         for name, value in fields.items():
             off = offsets[name]
             if name in ('tile', 'uid', 'dest_tile'):
@@ -254,6 +254,12 @@ def scenario(extreme):
     cpu = h.run(arrive, until=carry_on)
     check('zone laid on a wall tile', f.zone(0), (150, 200, 3, 5000 + f.duration))
     check('and the collapse carries on as usual', cpu.eip, carry_on)
+
+    h.put32(f.tile_flags + 4 * tile, 0x100 | 0x2)        # a stockpile: wall bit and all
+    h.put32(f.control + 0x08, 0)                         # (retargeting off: no search)
+    h.run(arrive, until=carry_on)
+    check('a stockpile is empty ground: no zone laid', f.zone(1)[3], 0)
+    h.put32(f.control + 0x08, 1)
 
     h.put32(f.tile_flags + 4 * tile, 0)
     h.put16(f.building_tiles + 2 * tile, 12)             # a building instead
@@ -1495,8 +1501,9 @@ def raids(extreme):
                       '8B 0C 85 ? ? ? ? 3B D1')[0]
     enabled = f.control + 0x1C
 
-    def troop(kind, unit):
+    def troop(kind, unit, becomes=0):
         f.set_unit(unit, owner=3, kind=kind, alive=2)
+        h.put16(f.unit(unit) + 0x2CA, becomes)              # unitTypeToChangeInto
         return h.run(lookup, stack=[3, unit]).r['eax']
 
     mace = troop(26, 21)
@@ -1504,9 +1511,15 @@ def raids(extreme):
     check('a tunneller recruited for a raid gets the same one', troop(5, 22), mace)
     check('  and a spearman is still in it too', troop(24, 23), mace)
     check('  and an archer is not', troop(22, 24) != mace, True)
+    # What recruiting really hands over: a peasant on its way to the guild or the barracks.
+    check('a peasant on its way to become a tunneller gets the same one',
+          troop(1, 26, becomes=5), mace)
+    check('  and one on its way to become an archer gets the archer troop',
+          troop(1, 27, becomes=22), troop(22, 28))
     h.put32(enabled, 0)
     check('switched off, a tunneller gets no troop, as in the unmodified game',
           troop(5, 25), 0)
+    check('  nor a peasant on its way to become one', troop(1, 29, becomes=5), 0)
     h.put32(enabled, 1)
 
     site = h.E.find('85 C0 0F 84 ? ? ? ? 83 FB 1E 6A 00 55 50 75')[0]
