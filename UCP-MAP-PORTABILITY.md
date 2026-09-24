@@ -79,7 +79,8 @@ Do not turn the section-dispatch result into an unlimited-format claim.
   The 800-step bound, base-height preservation, wall/building protection and
   volatile-register clobbering are exercised; native path/damage callees are stubs.
 - The six-fixture stock dispatch test above passes. Python stays in `bench/`,
-  outside the module allowlist; all nine shipped descriptions explain the change.
+  outside the module allowlist. All nine module descriptions remain brief player
+  overviews; technical details and test instructions belong in the review/bundle.
 
 Still perform a short **single-player** acceptance check with a newly created
 1.7.1 save during delayed damage: copy/rename to `.map`; open, edit, save and start

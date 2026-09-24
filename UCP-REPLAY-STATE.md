@@ -50,7 +50,8 @@ until verification requests it, not performed each simulation tick.
 **Older-save migration is out of scope.** Keep exactly the same module packages/settings for a saved match
 or recording; this version does not promise playback of recordings made with
 the former CPU-timed scheduler. Default-on settings and existing categories stay
-the same, and all nine locale descriptions/tooltips explain the change.
+the same. All nine locales are retained; module descriptions are brief player
+overviews, with technical details kept in the review and test instructions.
 
 Renaming a save to `.map` remains supported as an editable scenario. Map Extensions
 1.1.5 adds `initializeOnMap=true` to its existing required-state registration:
