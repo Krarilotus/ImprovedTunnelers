@@ -1,0 +1,77 @@
+denial_group: Bausperre nach einem Durchbruch
+denial_group_descr: Nach einem erfolgreichen Einsturz bleibt die Bresche für Spieler und KI vorübergehend
+  unbebaubar. Weitere Tunnel an derselben Stelle verlängern die Sperre; ein Einsturz unter leerem Boden
+  erzeugt keine Sperre. Es gelten die normalen gegnerischen Sperrradien des Spiels.
+denial_enabled: Bauen an einer frischen Bresche sperren
+denial_enabled_tooltip: 'Aus: keine zusätzliche Bausperre nach einem Einsturz.'
+denial_message: Grund der Bausperre anzeigen
+denial_message_tooltip: Text Resource Modifier zeigt eine Meldung über instabilen Boden in der Spielsprache
+  an. Ist sie nicht verfügbar, bleibt die ursprüngliche Meldung erhalten.
+denial_seconds: Sperrdauer (Sekunden)
+denial_seconds_tooltip: 'Spielzeit bei normaler Geschwindigkeit, in Spielticks gezählt. Ein weiterer Tunnel
+  verlängert die Sperre um diesen Wert. Standard: 120.'
+retarget_group: Tunnelverlauf
+retarget_group_descr: Tunnel derselben Belagerung treffen sich an einer Bresche und arbeiten sich entlang
+  einer gemeinsamen Route zum gegnerischen Lagerfeuer vor. Sie umgehen den Bergfried und werden bei zerstörten
+  Zielen weitergeleitet. Pro Tunnel wird höchstens eine Suche je Tick ausgeführt.
+retarget_enabled: Tunnel bündeln und durch die Bresche weiterführen
+retarget_enabled_tooltip: 'Aus: Jeder Tunnel behält sein ursprüngliches Ziel, auch wenn es bereits zerstört
+  wurde.'
+retarget_range: Tunnelreichweite (Felder)
+retarget_range_tooltip: 'Suchweite für Treffpunkt und Folgeziele. Weiter entfernte Tunnel bilden eine
+  eigene Gruppe. Standard: 80.'
+retarget_max: Maximale Weiterleitungen pro Tunnel
+retarget_max_tooltip: 'Wie oft ein Tunnel nach Erreichen eines leeren Ziels weitergeleitet werden darf.
+  Standard: 10.'
+targets_under: Unter der Stadt graben
+targets_under_tooltip: Erlaubt Wege unter gewöhnlichen Gebäuden. Ziele bleiben Befestigungen; Bergfriede
+  werden umgangen.
+digging_unselectable: Grabende Tunnelgräber nicht auswählen
+digging_unselectable_tooltip: Maus, Auswahlrahmen und Gruppenbefehle überspringen grabende Tunnelgräber.
+  Oberirdisch sind sie wieder auswählbar.
+digging_untargetable: Grabende Tunnelgräber nicht angreifen
+digging_untargetable_tooltip: Die normale Zielprüfung des Spiels ignoriert Tunnelgräber beim Graben.
+collapse_damage: Einsturzschaden
+collapse_damage_tooltip: 'Schaden am Ziel durch die normale Schadensroutine. Überlebende Gebäude behalten
+  den Schaden. Standard: 2500.'
+collapse_spread: Gebäude neben dem Tunnel beschädigen
+collapse_spread_tooltip: Erschütterungen beschädigen gewöhnliche Gebäude neben dem Tunnel. Befestigungen
+  sind ausgenommen; direkt untergrabene Befestigungen behalten den normalen Pfadschaden.
+collapse_speed: Einsturzgeschwindigkeit (Felder pro Tick)
+collapse_speed_tooltip: 'Der Tunnel stürzt vom Ziel zurück zum Eingang ein. Kleine Werte sind langsamer.
+  Standard: 2.'
+collapse_spread_radius: Reichweite der Erschütterung (Felder)
+collapse_spread_radius_tooltip: 'Abstand beiderseits des Tunnels, in dem gewöhnliche Gebäude Schaden erhalten.
+  Standard: 2.'
+collapse_spread_damage: Schaden neben dem Tunnel
+collapse_spread_damage_tooltip: 'Schaden an gewöhnlichen Gebäuden innerhalb der Erschütterungsreichweite.
+  Befestigungen erhalten keinen Zusatzschaden. Standard: 60.'
+targets_group: Tunnelziele
+targets_group_descr: Erweitert die Zielwahl auf Tore und Türme. Gewöhnliche Gebäude und Vorratslager werden
+  nicht zu Zielen. Bergfriede bleiben geschützt.
+targets_enabled: Türme und Tore als Ziele erlauben
+targets_enabled_tooltip: 'Aus: ursprüngliche Zielwahl für Mauern und die drei kleinen Türme.'
+ui_group: Angriffsbefehl für Tunnelgräber
+ui_group_descr: Verschiebt den Tunnelknopf um einen Platz und gibt Tunnelgräbern den normalen Angriffsknopf.
+  Bilder, Hilfetexte und Befehle bleiben erhalten.
+ui_enabled: Tunnelknopf verschieben und Angriffsknopf hinzufügen
+ui_enabled_tooltip: 'Aus: unveränderte Befehlsschaltflächen des Spiels.'
+raids_group: Tunnelgräber in KI-Überfällen
+raids_group_descr: Tunnelgräber aus RaidUnit1-8 schließen sich der Überfallgruppe für Streitkolbenkämpfer
+  und Speerträger an. Sie kämpfen oberirdisch; Belagerungstunnel bleiben getrennt. Ohne Tunnelgräbergilde
+  wählt die KI ihre nächste Überfalleinheit.
+raids_enabled: Tunnelgräber für KI-Überfälle zulassen
+raids_enabled_tooltip: 'Aus: ursprüngliche fehlende Gruppenzuordnung für Tunnelgräber in Überfällen.'
+stances_group: Kampfhaltung
+stances_group_descr: Untätige oder wartende Tunnelgräber reagieren gemäß ihrer defensiven oder aggressiven
+  Gruppenhaltung. Bewegungs- und Grabarbeiten behalten ihre eigenen Befehle. Die Reaktionsreichweiten
+  stammen aus dem Spiel.
+stances_enabled: Defensive und aggressive Haltung beachten
+stances_enabled_tooltip: 'Aus: ursprüngliches Verhalten ohne automatische Haltungsreaktion.'
+diagnostics_group: Diagnose
+diagnostics_group_descr: Schreibt technische Ereignisse zu Ankunft, Zielsuche und Bausperren in ucp3.log.
+  Für normale Spiele ausgeschaltet lassen.
+diagnostics_enabled: Tunneldiagnose protokollieren
+diagnostics_enabled_tooltip: 'Standard: aus. Protokolliert Tunnelereignisse und höchstens einmal pro Sekunde
+  nahe Bauversuche.'
+module_name: Verbesserte Tunnelgräber

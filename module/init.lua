@@ -279,7 +279,6 @@ local MESSAGE_GUARDS = {
 -- without it the denial simply keeps the game's own "enemy units are too close" refusal.
 local MESSAGE_GROUP = 0x4D
 local MESSAGE_ENTRY = 250
-local MESSAGE_TEXT = "The ground is too unstable to build here right now"
 
 -- Offsets inside isEnemyTooCloseUnk. The hook sits after the coordinates have been
 -- checked, so the zone test never runs on coordinates the game would have thrown out.
@@ -957,7 +956,7 @@ return {
     -- will take it and a denial is laid, nothing standing on it means the target has gone
     -- and the tunneler is sent back to the game's own search.
 
-    local denialReady, retargetReady, messageReady = false, false, false
+    local denialReady, retargetReady = false, false
     local collapseReady, familyReady = false, false
     local teamSite = scanOptional(AOB_PLAYER_TEAMS, "the player team table")
     local enemySite = scanOptional(AOB_ENEMY_TOO_CLOSE, "the build denial check")
@@ -1666,33 +1665,45 @@ return {
       -- through textResourceModifier; if that module is not there, or says no, the message
       -- is left exactly as the game writes it.
       if denialReady and messageOn then
-        local texts = modules ~= nil and modules.textResourceModifier or nil
-        local wrote = false
-        if texts ~= nil and texts.SetText ~= nil then
-          wrote = pcall(function() texts:SetText(MESSAGE_GROUP, MESSAGE_ENTRY, MESSAGE_TEXT) end)
-          if not wrote then
-            log(WARNING, "improved-tunnelers: the game's text could not be changed, so a "
-              .. "denial keeps the game's own refusal message.")
+        -- cr.tex and its encoding are available at the framework's afterInit.
+        -- Do not install a message hook pointing at an absent/rejected string.
+        local attempted = false
+        hooks.registerHookCallback("afterInit", function()
+          if attempted or self.control ~= control then return end
+          attempted = true
+          local texts = modules ~= nil and modules.textResourceModifier or nil
+          local wrote = false
+          if texts ~= nil and texts.SetText ~= nil and texts.GetLanguage ~= nil then
+            local ok, accepted = pcall(function()
+              local language = texts:GetLanguage()
+              local text = type(language) == "string" and require("messages")[language:lower()]
+              return text ~= nil and texts:SetText(MESSAGE_GROUP, MESSAGE_ENTRY, text)
+            end)
+            wrote = ok and accepted == true
+            if not wrote then
+              log(WARNING, "improved-tunnelers: the game's text could not be changed, so a "
+                .. "denial keeps the game's own refusal message.")
+            end
+          else
+            log(INFO, "improved-tunnelers: no textResourceModifier, so a denial keeps the "
+              .. "game's own refusal message.")
           end
-        else
-          log(INFO, "improved-tunnelers: no textResourceModifier, so a denial keeps the "
-            .. "game's own refusal message.")
-        end
-        local messageSite = wrote and scanOptional(AOB_PLACEMENT_MESSAGE,
-          "the placement refusal message") or nil
-        if messageSite ~= nil and guardsHold(messageSite, MESSAGE_GUARDS,
-            "the placement refusal message") then
-          local message = core.allocateAssembly(templates.placement_message, {
-            MINE_ADDRESS = control + C.MINE,
-            MINE_TICK_ADDRESS = control + C.MINE_TICK,
-            TICKS_ADDRESS = ticks,
-            MESSAGE_ENTRY = MESSAGE_ENTRY,
-            RETURN_ADDRESS = messageSite + MESSAGE_HOOK + MESSAGE_HOOK_SIZE,
-          })
-          remember(messageSite + MESSAGE_HOOK, MESSAGE_HOOK_SIZE)
-          writeJump(messageSite + MESSAGE_HOOK, message, MESSAGE_HOOK_SIZE)
-          messageReady = true
-        end
+          local messageSite = wrote and scanOptional(AOB_PLACEMENT_MESSAGE,
+            "the placement refusal message") or nil
+          if messageSite ~= nil and guardsHold(messageSite, MESSAGE_GUARDS,
+              "the placement refusal message") then
+            local message = core.allocateAssembly(templates.placement_message, {
+              MINE_ADDRESS = control + C.MINE,
+              MINE_TICK_ADDRESS = control + C.MINE_TICK,
+              TICKS_ADDRESS = ticks,
+              MESSAGE_ENTRY = MESSAGE_ENTRY,
+              RETURN_ADDRESS = messageSite + MESSAGE_HOOK + MESSAGE_HOOK_SIZE,
+            })
+            remember(messageSite + MESSAGE_HOOK, MESSAGE_HOOK_SIZE)
+            writeJump(messageSite + MESSAGE_HOOK, message, MESSAGE_HOOK_SIZE)
+            log(INFO, "improved-tunnelers: localized placement refusal enabled.")
+          end
+        end)
       end
     end
 
@@ -1913,7 +1924,7 @@ return {
       denialReady and (denialOn and string.format("on, %d s", denialSeconds) or "off")
         or "unavailable",
       (denialReady and denialOn and messageOn)
-        and (messageReady and ", with its own refusal message" or ", with the game's message")
+        and ", localized refusal pending game-text initialization"
         or "",
       retargetReady and (retargetOn and string.format(
         "gather on lines and are sent on %s up to %d times, reaching %d tiles",
@@ -1954,6 +1965,7 @@ return {
       core.writeCodeBytes(patched[index].address, patched[index].bytes)
     end
     self.patched = {}
+    self.control = nil
   end,
 
 }

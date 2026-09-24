@@ -6,6 +6,9 @@ enemy's camp.
 
 What the module does, in plain English, is in `module/locale/description-en.md`.
 
+The UCP3.0.7 packaging/localization contribution, optional AI Swapper starting
+troops, focused checks and remaining release gates are in [UCP-INTEGRATION.md](UCP-INTEGRATION.md).
+
 ## What is in here
 
 | Folder | |

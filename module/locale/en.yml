@@ -1,3 +1,4 @@
+module_name: Improved Tunnelers
 denial_group: Building denial after a breach
 denial_group_descr: |
   When a tunnel brings a wall or a tower down, the ground around the hole is denied to
@@ -22,13 +23,13 @@ denial_message: Say why building is refused
 denial_message_tooltip: |
   A player who tries to build in a fresh breach is told "The ground is too unstable to build
   here right now" instead of the game's "enemy units are too close". Needs the Text Resource
-  Modifier module to be on; without it the game's own message is used and this does nothing.
+  Modifier module. It follows the game language; unavailable translations keep the game's own message.
 denial_seconds: Denial time (seconds)
 denial_seconds_tooltip: |
   How long the ground stays denied, in seconds of game time at normal speed. It is counted
   in game ticks, so it is the same for everyone in a multiplayer game whatever speed each
   machine is set to, and a second tunnel through the same breach adds this time again.
-  Default 30.
+  Default 120.
 
 retarget_group: Where tunnels go
 retarget_group_descr: |

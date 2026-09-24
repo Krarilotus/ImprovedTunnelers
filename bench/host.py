@@ -1,7 +1,7 @@
 """Run a resource-grid-overlay build inside lupa with core mocked onto an emulated 32 bit
 address space, so its assembly and the game's own drawing code really execute."""
 import re, struct, hashlib, sys
-import lupa, keystone
+import lupa
 sys.path.insert(0, r'C:\Users\MONSTE~1\AppData\Local\Temp\shcw')
 sys.path.insert(0, r'C:\Users\MONSTE~1\AppData\Local\Temp\shcw\perf')
 from shc import Exe, G
@@ -36,7 +36,11 @@ HEAP = 0x60000000
 STACK_TOP = 0x70100000
 SENTINEL = 0x7FFFFFF0
 
-KS = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_32)
+try:
+    import keystone
+    KS = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_32)
+except ImportError:
+    KS = None  # The normal FASM path and Lua-only integration checks do not use it.
 
 
 def fasm_to_keystone(script, values):

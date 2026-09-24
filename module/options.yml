@@ -2,7 +2,7 @@ meta:
   version: 1.0.0
 options:
 - display: GroupBox
-  category: [Improved Tunnelers]
+  category: ['{{module_name}}']
   header: '{{denial_group}}'
   text: '{{denial_group_descr}}'
   hasHeader: true
@@ -30,13 +30,13 @@ options:
     display: Number
     contents:
       type: integer
-      value: 30
+      value: 120
       min: 1
       max: 300
       step: 1
 
 - display: GroupBox
-  category: [Improved Tunnelers]
+  category: ['{{module_name}}']
   header: '{{retarget_group}}'
   text: '{{retarget_group_descr}}'
   hasHeader: true
@@ -73,7 +73,7 @@ options:
       step: 1
 
 - display: GroupBox
-  category: [Improved Tunnelers]
+  category: ['{{module_name}}']
   header: '{{targets_group}}'
   text: '{{targets_group_descr}}'
   hasHeader: true
@@ -88,7 +88,7 @@ options:
       value: true
 
 - display: GroupBox
-  category: [Improved Tunnelers]
+  category: ['{{module_name}}']
   header: '{{ui_group}}'
   text: '{{ui_group_descr}}'
   hasHeader: true
@@ -162,7 +162,7 @@ options:
     display: Number
     contents:
       type: integer
-      value: 20
+      value: 60
       min: 0
       max: 1000
   - url: improved-tunnelers.ui.enabled
@@ -175,7 +175,7 @@ options:
       value: true
 
 - display: GroupBox
-  category: [Improved Tunnelers]
+  category: ['{{module_name}}']
   header: '{{stances_group}}'
   text: '{{stances_group_descr}}'
   hasHeader: true
@@ -190,7 +190,7 @@ options:
       value: true
 
 - display: GroupBox
-  category: [Improved Tunnelers]
+  category: ['{{module_name}}']
   header: '{{raids_group}}'
   text: '{{raids_group_descr}}'
   hasHeader: true
@@ -205,7 +205,7 @@ options:
       value: true
 
 - display: GroupBox
-  category: [Improved Tunnelers]
+  category: ['{{module_name}}']
   header: '{{diagnostics_group}}'
   text: '{{diagnostics_group_descr}}'
   hasHeader: true

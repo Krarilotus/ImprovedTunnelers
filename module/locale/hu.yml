@@ -1,0 +1,75 @@
+denial_group: Építési tilalom a rés megnyitása után
+denial_group_descr: Sikeres omlás után a rés átmenetileg beépíthetetlen a játékos és az MI számára. További
+  alagutak meghosszabbítják a tilalmat; üres föld alatti omlás nem hoz létre tilalmat. A játék szokásos
+  ellenségközelségi sugarait használja.
+denial_enabled: Építés tiltása a friss rés körül
+denial_enabled_tooltip: 'Kikapcsolva: nincs további építési tilalom az omlás után.'
+denial_message: Az építési tilalom okának megjelenítése
+denial_message_tooltip: A Text Resource Modifier a játék nyelvén jelzi az instabil talajt. Ha ez nem érhető
+  el, az eredeti üzenet marad.
+denial_seconds: Tilalom időtartama (másodperc)
+denial_seconds_tooltip: 'Normál sebességű játékidő, játékütemekben számolva. Egy újabb alagút hozzáadja
+  ezt az időt. Alapérték: 120.'
+retarget_group: Az alagutak útvonala
+retarget_group_descr: Egy ostrom alagútjai közös réshez tartanak, majd közös útvonalon haladnak az ellenséges
+  tábortűz felé. Megkerülik a vártorony épületét, és szükség esetén új célpontot keresnek. Alagutanként
+  ütemenként legfeljebb egy keresés történik.
+retarget_enabled: Alagutak egyesítése és folytatása a résen túl
+retarget_enabled_tooltip: 'Kikapcsolva: minden alagút megtartja eredeti célpontját akkor is, ha azt már
+  lerombolták.'
+retarget_range: Alagút hatótávolsága (mező)
+retarget_range_tooltip: 'A találkozási pont és további célok keresési távolsága. A távoli alagutak külön
+  csoportot alkotnak. Alapérték: 80.'
+retarget_max: Átirányítások felső határa alagutanként
+retarget_max_tooltip: 'Hányszor kaphat új célt az üres helyre érkező alagút. Alapérték: 10.'
+targets_under: Ásás a város alatt
+targets_under_tooltip: Engedélyezi az áthaladást a közönséges épületek alatt. Célpontok továbbra is az
+  erődítmények; a vártorony épületét megkerüli.
+digging_unselectable: Az ásó alagútásók ne legyenek kijelölhetők
+digging_unselectable_tooltip: Az egér, a kijelölőkeret és a csoportparancsok kihagyják az ásó egységeket.
+  A felszínen ismét kijelölhetők.
+digging_untargetable: Az ásó alagútásók ne legyenek támadhatók
+digging_untargetable_tooltip: A játék szokásos célpontellenőrzése figyelmen kívül hagyja az ásó alagútásókat.
+collapse_damage: Omlási sebzés
+collapse_damage_tooltip: 'A célpont sebzése a játék normál rendszerével. A túlélő épületek megtartják
+  a sérülést. Alapérték: 2500.'
+collapse_spread: Alagút melletti épületek sebzése
+collapse_spread_tooltip: A rengés a szomszédos közönséges épületeket sebzi, az erődítményeket nem. A közvetlenül
+  aláásott erődítmények a szokásos útvonalsebzést kapják.
+collapse_speed: Omlás sebessége (mező ütemenként)
+collapse_speed_tooltip: 'Az alagút a célponttól a bejárat felé omlik össze. Kisebb érték lassabb omlást
+  jelent. Alapérték: 2.'
+collapse_spread_radius: Rengés hatótávolsága (mező)
+collapse_spread_radius_tooltip: 'Az alagút két oldalán a közönséges épületeket érintő távolság. Alapérték:
+  2.'
+collapse_spread_damage: Alagút melletti sebzés
+collapse_spread_damage_tooltip: 'A rengés hatósugarában álló közönséges épületek sebzése. Erődítményeket
+  nem sebez tovább. Alapérték: 60.'
+targets_group: Alagútcélpontok
+targets_group_descr: A kapuk és tornyok is célpontok lehetnek. A közönséges épületek és készletraktárak
+  nem válnak célponttá. A vártorony védett marad.
+targets_enabled: Tornyok és kapuk célzása
+targets_enabled_tooltip: 'Kikapcsolva: az eredeti célválasztás, falak és három kis torony.'
+ui_group: Támadási parancs alagútásóknak
+ui_group_descr: Egy hellyel eltolja az alagútgombot, és hozzáadja a normál támadásgombot. Mindkét gomb
+  képe, súgója és parancsa megmarad.
+ui_enabled: Alagútgomb áthelyezése és támadás hozzáadása
+ui_enabled_tooltip: 'Kikapcsolva: a játék eredeti parancspanelje.'
+raids_group: Alagútásók az MI portyáiban
+raids_group_descr: A RaidUnit1-8 alagútásói a buzogányosok és lándzsások portyázó csoportjához csatlakoznak.
+  A felszínen harcolnak; az ostromalagutak külön maradnak. Alagútásócéh nélkül az MI a következő portyázó
+  egységet választja.
+raids_enabled: Alagútásók engedélyezése az MI portyáiban
+raids_enabled_tooltip: 'Kikapcsolva: az eredeti viselkedés, amely nem osztja portyázó csoportba az alagútásókat.'
+stances_group: Harci viselkedés
+stances_group_descr: A tétlen vagy várakozó alagútásók csoportjuk védekező vagy támadó beállítása szerint
+  reagálnak. A mozgás és ásás megtartja saját parancsait. A reakciótávolságot a játék adja.
+stances_enabled: Védekező és támadó beállítás követése
+stances_enabled_tooltip: 'Kikapcsolva: eredeti viselkedés, automatikus reakció nélkül.'
+diagnostics_group: Diagnosztika
+diagnostics_group_descr: Az érkezés, keresés és építés műszaki eseményeit az ucp3.log fájlba írja. Normál
+  játékhoz maradjon kikapcsolva.
+diagnostics_enabled: Alagutak diagnosztikai naplózása
+diagnostics_enabled_tooltip: 'Alapérték: kikapcsolva. Eseményeket és másodpercenként legfeljebb egy közeli
+  építési kísérletet naplóz.'
+module_name: Fejlesztett alagútásók
