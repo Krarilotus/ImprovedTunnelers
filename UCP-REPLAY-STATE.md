@@ -1,11 +1,10 @@
-# Replay and save-state correction (1.7.0)
+# Replay and save-state correction (1.7.0; terrain follow-up 1.7.1)
 
-**Compatibility cost:** requires UCP 3.0.7 and Map Extensions 1.1.5. Saved matches
-need matching module content/settings. Converted-map initialization is supplied
-by that owner; opening files in the unmodified game or older Map Extensions is
-not verified or promised. Other providers retain their requirements. The user
-accepts proceeding with this dependency explicitly stated, while identifying the
-resulting portability limitation as an undesirable design cost.
+Requires UCP 3.0.7 and Map Extensions 1.1.5 to run this module. Saved matches need
+matching module content/settings. A scenario must remain usable without it:
+[the 1.7.1 portability audit](UCP-MAP-PORTABILITY.md) verifies stock unknown-section
+dispatch and moves terrain repair out of private queued state. Native editor
+acceptance remains pending; stock file-size limits and other providers still apply.
 
 TL;DR: collapse work uses a deterministic allowance instead of CPU time. Map
 Extensions saves pending collapses, partial tiles, denied ground, tunnel records,

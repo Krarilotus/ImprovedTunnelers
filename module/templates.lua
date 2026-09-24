@@ -2189,9 +2189,10 @@ jmp RETURN_ADDRESS
 -- tunnel apart a few tiles at a time instead, starting at the target and running back to
 -- the entrance.
 --
--- The first walks a tunneler's path plan and writes each tile into a queue: where it is,
--- and who is bringing it down. Nothing else happens here, so a collapse costs no more than
--- a few dozen writes.
+-- The first walks the native path before its owner releases it. Restore bare ground and
+-- its native walk layer immediately: an optional damage queue must never be the only
+-- owner of terrain repair when a save is used as a map without this module. Walls and
+-- buildings keep their native height/hit points. Expensive damage remains queued.
 -- The plan it walks is the whole tunnel from its entrance, however many times the tunnel was
 -- sent on along the way - extend_plan keeps it so.
 local queue_fill = [[
@@ -2209,9 +2210,24 @@ movsx ecx, word [eax+UNIT_LADDER_Y]
 mov [FILL_Y_ADDRESS], ecx
 mov dword [FILL_STEP_ADDRESS], 0
 fill_loop:
+mov ecx, [FILL_TILE_ADDRESS]
+test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
+jnz fill_ground_done
+cmp word [ecx*2+BUILDING_TILE_ADDRESS], 0
+jne fill_ground_done
+mov al, byte [ecx+BASE_HEIGHT_ADDRESS]
+cmp al, byte [ecx+LIVE_HEIGHT_ADDRESS]
+jae fill_ground_done
+mov byte [ecx+LIVE_HEIGHT_ADDRESS], al
+push dword [FILL_Y_ADDRESS]
+push dword [FILL_X_ADDRESS]
+push 1
+mov ecx, PATH_STATE_ADDRESS
+call UPDATE_WALK_ADDRESS
+fill_ground_done:
 mov ecx, [QUEUE_COUNT_ADDRESS]
 cmp ecx, QUEUE_MAX
-jae fill_done
+jae fill_advance
 shl ecx, 4
 add ecx, QUEUE_ADDRESS
 mov edx, [FILL_TILE_ADDRESS]
@@ -2223,6 +2239,7 @@ mov [ecx+8], edx
 mov edx, [FILL_FLAGS_ADDRESS]
 mov [ecx+12], edx
 add dword [QUEUE_COUNT_ADDRESS], 1
+fill_advance:
 mov eax, [FILL_UNIT_ADDRESS]
 imul eax, eax, 1168
 mov ecx, [FILL_STEP_ADDRESS]
@@ -2273,11 +2290,9 @@ ret
 -- nothing stands; a wall or a building on the tile is left entirely to the game, which
 -- resets the height itself the moment the thing is destroyed.
 --
--- One tile of that queue: the ground it and its neighbours stand on goes back to the height
--- the map itself says they should be - the game keeps that in a second map, which is what
--- its own "put this tile back" does, and it is why a tunnel over raised ground must never
--- simply be flattened to nothing. Then, unless this is a tunnel being quietly filled in
--- behind a tunneler that is still digging, whatever stands within reach is shaken.
+-- Terrain repair now belongs to queue_fill, before the native path is released. This
+-- queue only shakes buildings; it must not lower neighbouring active tunnels whose
+-- native path is still responsible for their ground. Quiet fills do no damage.
 --
 -- One neighbour per call, at STEP_DX / STEP_DY, which it then moves on; when the last one
 -- is done STEP_ACTIVE goes to 0. The game's damage is the dear part of a collapse on a real
@@ -2308,15 +2323,6 @@ add ecx, eax
 mov [STEP_THIS_X_ADDRESS], eax
 mov [STEP_THIS_Y_ADDRESS], edx
 mov [STEP_THIS_TILE_ADDRESS], ecx
-test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
-jnz step_ground_done
-cmp word [ecx*2+BUILDING_TILE_ADDRESS], 0
-jne step_ground_done
-mov al, byte [ecx+BASE_HEIGHT_ADDRESS]
-cmp al, byte [ecx+LIVE_HEIGHT_ADDRESS]
-jae step_ground_done
-mov byte [ecx+LIVE_HEIGHT_ADDRESS], al
-step_ground_done:
 test dword [STEP_FLAGS_ADDRESS], 1
 jnz step_next
 mov eax, [SPREAD_DAMAGE_ADDRESS]

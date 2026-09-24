@@ -8,6 +8,8 @@ Başlangıç lağımcıları, AI Swapper 1.5.0’ın ayrı ve isteğe bağlı bi
 
 Kısa tek oyunculu test: bir lağımcı toplayıp yakındaki düşmana tepkisini duruşlar AÇIK/KAPALI iken karşılaştırın. Baskınlar için lağımcı loncası olan ve baskın ayarlarında lağımcı bulunan bir yapay zekâ kullanın. Başlangıç sayılarını AI Swapper’da ayrıca sınayın. Eski Unit Behaviour Fixes lağımcı yamasını aynı anda etkinleştirmeyin. Test sürümüdür; yeni oyun içi doğrulama ve insan çeviri incelemesi beklenmektedir.
 
-1.7.0 sürümü Map Extensions 1.1.5 gerektirir. Yeni bir oyun başlatın: eski kayıtlarda tünelci durumu bulunmadığından bu kayıtlar reddedilir. Yüklerken veya tekrar oynatırken aynı modül paketlerini ve ayarları koruyun. Bekleyen çökmeler, rotalar ve inşa kısıtlamaları artık kaydedilir. Test: Çökme sırasında kaydedin, yükleyin ve kesintisiz oyunla karşılaştırın. Baştan sona tekrar doğrulaması henüz yapılmadı.
+1.7.1 sürümü Map Extensions 1.1.5 gerektirir. Yeni bir oyun başlatın: eski kayıtlarda tünelci durumu bulunmadığından bu kayıtlar reddedilir. Yüklerken veya tekrar oynatırken aynı modül paketlerini ve ayarları koruyun. Bekleyen çökmeler, rotalar ve inşa kısıtlamaları artık kaydedilir. Test: Çökme sırasında kaydedin, yükleyin ve kesintisiz oyunla karşılaştırın. Baştan sona tekrar doğrulaması henüz yapılmadı.
 
 .map olarak yeniden adlandırılan bir kayıt hâlâ senaryo olarak açılıp düzenlenebilir. Haritalar tünelci durumunu sıfırdan başlatır; normal kayıtlar devam eden işleri geri yükler.
+
+Tünel tamamlandığında, gecikmeli hasardan önce arazi ve geçiş durumu düzeltilir. Böylece harita arazisi kayıtlı tünel kuyruğuna bağlı kalmaz. Modül olmadan bekleyen hasar ve inşa kısıtlamaları devam etmez. Oyun editöründeki test henüz yapılmadı.

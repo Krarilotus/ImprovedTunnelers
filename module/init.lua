@@ -1068,7 +1068,7 @@ return {
           familyReady = true
         end
         local queue = control + C.QUEUE
-        -- Writing a tunnel into the queue, one tile of it at a time.
+        -- Restore native terrain before releasing the tunnel path; queue only damage.
         local fill = core.allocateAssembly(templates.queue_fill, {
           FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
           FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
@@ -1080,6 +1080,13 @@ return {
           QUEUE_ADDRESS = queue,
           QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT,
           QUEUE_MAX = QUEUE_MAX,
+          WALL_FAMILY = WALL_FAMILY_FLAGS,
+          TILE_FLAGS_ADDRESS = tileFlags,
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          LIVE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
+          BASE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
+          PATH_STATE_ADDRESS = readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND),
+          UPDATE_WALK_ADDRESS = callTarget(walk + DAMAGE_WALK_UPDATE_CALL),
           DIRECTIONS_ADDRESS = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
           X_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_X_DELTAS_OPERAND),
           Y_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
@@ -1090,7 +1097,7 @@ return {
           UNIT_PREVIOUS_TILE = (unitBase + UNIT_PREVIOUS_TILE) & 0xFFFFFFFF,
         })
 
-        -- One tile of it: the ground goes back, and what stands about is shaken.
+        -- One tile of deferred building damage. Terrain no longer depends on this queue.
         local step = core.allocateAssembly(templates.queue_step, {
           WALL_FAMILY = WALL_FAMILY_FLAGS,
           STOCKPILE = ROUTE.stockpileFlag,
@@ -1112,8 +1119,6 @@ return {
           SPREAD_DAMAGE_ADDRESS = control + C.SPREAD_DAMAGE,
           ROW_TABLE_ADDRESS = rowTable,
           MAP_LIMIT = MAP_LIMIT,
-          LIVE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
-          BASE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
           TILE_FLAGS_ADDRESS = tileFlags,
           BUILDING_TILE_ADDRESS = buildingTiles,
           TILE_MAP_STATE_ADDRESS = tileMapState,

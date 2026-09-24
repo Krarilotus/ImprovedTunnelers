@@ -8,6 +8,8 @@ A kezdő alagútásók az AI Swapper 1.5.0 külön, választható funkciója. Az
 
 Rövid egyjátékos teszt: toborozz egy alagútásót, és hasonlítsd össze közeli ellenségre adott reakcióját a magatartások BE/KI állásában. Portyához legyen az MI-nek alagútásó céhe és alagútásó a portyabeállításaiban. A kezdőlétszámot külön teszteld az AI Swapperben. A Unit Behaviour Fixes régi alagútásó-javítását ne engedélyezd ezzel együtt. Tesztverzió; az új játékon belüli ellenőrzés és az emberi fordításellenőrzés még hátravan.
 
-Az 1.7.0 verzióhoz Map Extensions 1.1.5 szükséges. Kezdj új játékot: a régi mentésekből hiányzik az alagútásók állapota, ezért a modul elutasítja őket. Betöltéshez és visszajátszáshoz tartsd meg ugyanazokat a modulcsomagokat és beállításokat. A folyamatban lévő omlások, útvonalak és építési tilalmak most már mentésre kerülnek. Teszt: ments omlás közben, töltsd vissza, és hasonlítsd össze a megszakítás nélküli játékkal. A teljes visszajátszási ellenőrzés még hátravan.
+Az 1.7.1 verzióhoz Map Extensions 1.1.5 szükséges. Kezdj új játékot: a régi mentésekből hiányzik az alagútásók állapota, ezért a modul elutasítja őket. Betöltéshez és visszajátszáshoz tartsd meg ugyanazokat a modulcsomagokat és beállításokat. A folyamatban lévő omlások, útvonalak és építési tilalmak most már mentésre kerülnek. Teszt: ments omlás közben, töltsd vissza, és hasonlítsd össze a megszakítás nélküli játékkal. A teljes visszajátszási ellenőrzés még hátravan.
 
 A .map kiterjesztésűre átnevezett mentés továbbra is megnyitható és szerkeszthető pályaként. A pályák friss alagútásó-állapottal indulnak; a normál mentések visszaállítják a folyamatban lévő munkát.
+
+A terep és a járhatóság az alagút befejezésekor, a késleltetett sebzés előtt helyreáll. A térkép terepe így nem függ a mentett alagútsortól. A modul nélkül a függőben lévő sebzés és az építési korlátozások nem folytatódnak. A játékszerkesztőben végzett teszt még hátravan.
