@@ -41,8 +41,9 @@ a cleanup model to copy.
 Offline scans on six licensed SHC/Extreme1.41 fixtures (local, official EFIGS
 patch and official Polish patch pairs) find exactly one match for each of the
 15 signatures. Their code sections represent **two distinct layouts**, not six.
-Original instruction decoding found no partial-instruction overwrite in the
-recorded patch spans. This does not establish every payload's ABI or gameplay.
+The decoded jump-hook spans end on original instruction boundaries; separate
+branch-opcode and immediate edits are intentional. This does not establish
+every payload's ABI or gameplay.
 
 Four focused bench tests cover localization/defaults, delayed text integration,
 UI OFF, missing/invalid discovery and rejected native context. Payload assembly
