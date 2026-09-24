@@ -74,15 +74,19 @@ tries is told the ground is too unstable.
 not only plain wall - and workshops, houses and farms never can. Tunnels may pass beneath the
 town to reach what lies behind it, but never beneath a keep.
 
+**A stockpile is not a wall.** The game marks a stockpile's footprint with the same bit as a
+wall, but it cannot be damaged. Tunnels are never aimed at one, never collapse under one, and a
+stockpile standing on the way to the campfire does not count as a fortification blocking it.
+
 **Diggers are left alone.** A tunneller digging its entrance or its tunnel cannot be picked by
 the mouse or a drag box, is passed over by the orders you give a group, and enemy archers do
 not shoot at it. It is back to normal the moment it is above ground.
 
-**The AI can raid with tunnellers.** An AI character whose raid units include the Tunneler
-recruits them at its Tunneler's Guild and sends them with the raid like its macemen: they
-march with the others, hit the buildings the raid goes for and fight what they meet. The
-unmodified game recruits them and then leaves them standing, because it has no raid troop
-to put them in. An AI without a guild just recruits its next raid unit instead.
+**Raid tunnellers are not wasted.** An AI character whose raid units include the Tunneler
+recruits them at its Tunneler's Guild, but the game will not march a troop with a tunneller
+in it, so they used to stand at the guild - and hold up any raid troop they were in. Now a
+tunneller recruited for a raid joins the AI's siege tunnellers and digs in its next siege,
+and the raids march without it. An AI without a guild just recruits its next raid unit.
 
 **Tunnellers behave like soldiers.** They obey stances, and they get the ordinary attack-here
 button; the dig button moves one slot along to make room for it.
@@ -107,7 +111,7 @@ button; the dig button moves one slot along to make room for it.
 | **Diggers unpickable** | Mouse, drag box and group orders pass a digging tunneller by | on |
 | Nothing shoots diggers | Archers ignore a tunneller while it is digging | on |
 | **Attack-here button** | Tunnellers get the ordinary attack-here button | on |
-| **AI raids** | AI raid units may include tunnellers | on |
+| **AI raids** | Tunnellers the AI recruits for raids join its sieges instead | on |
 | **Stances** | Tunnellers obey defensive and aggressive stance | on |
 | Diagnostics | Write a line to `ucp3.log` for every tunnel dug in, every arrival and every refused building | off |
 

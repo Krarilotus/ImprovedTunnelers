@@ -236,9 +236,16 @@ jmp RETURN_ADDRESS
 -- less AIM_FROM and w the direction to the camp scaled down to 64 on its longer side, so
 -- everything fits a 32 bit register however far across the map the camp is.
 --
+-- Whatever the mode, a stockpile is never taken: the game marks its footprint with the wall
+-- bit, so the search comes to it as it would to a wall, but that wall cannot be damaged and
+-- a tunnel sent at it only collapses uselessly. The search spreads on past it instead, the
+-- game's own searches and the AI's included.
+--
 -- EBP is the tile, EDI its y and EDX its x, which is what the three stores it replaces
 -- are about; EAX and ECX are dead here either way and EBX is kept for the search.
 local aim_filter = [[
+test dword [ebp*4+TILE_FLAGS_ADDRESS], STOCKPILE
+jnz SPREAD_ADDRESS
 mov eax, [AIM_MODE_ADDRESS]
 test eax, eax
 je filter_take
@@ -322,11 +329,15 @@ ret
 ]]
 
 -- Whether a fortification still stands on tile EDX: a wall, a crenellation or a stair in
--- the flag layer, or a building. EAX 1 or 0; nothing else is touched.
+-- the flag layer, or a building. A stockpile is none of these, even though the game marks
+-- its footprint with the wall bit: that wall cannot be damaged, so it never stands in a
+-- tunnel's way. EAX 1 or 0; nothing else is touched.
 local stands = [[
 xor eax, eax
 test edx, edx
 jle stands_done
+test dword [edx*4+TILE_FLAGS_ADDRESS], STOCKPILE
+jnz stands_done
 test dword [edx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
 jnz stands_yes
 cmp word [edx*2+BUILDING_TILE_ADDRESS], 0
@@ -729,8 +740,9 @@ ret
 -- neighbour one nearer, so stepping to that neighbour again and again retraces the
 -- search's own way back to the breach - round the keep, since the search never went under
 -- it. Every tile stepped on is the route's path, and every enemy wall, stair,
--- crenellation, gate or tower among them a fortification on it. The walk finds them
--- campfire first; both are written into the route the other way round, breach first, and
+-- crenellation, gate or tower among them a fortification on it - but not a stockpile,
+-- whose wall bit marks a footprint that cannot be damaged, not a wall in the way. The
+-- walk finds them campfire first; both are written into the route the other way round, breach first, and
 -- only the ROUTE_ENTRIES fortifications nearest the breach are kept, each with its place
 -- on the path.
 --
@@ -801,6 +813,8 @@ jae walk_path_full
 mov [ecx*4+PATH_TEMP_ADDRESS], edi
 add dword [PATH_FOUND_ADDRESS], 1
 walk_path_full:
+test dword [edi*4+TILE_FLAGS_ADDRESS], STOCKPILE
+jnz walk_passed
 test dword [edi*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
 jz walk_building
 movzx eax, byte [edi+WALL_OWNER_ADDRESS]
@@ -1160,6 +1174,9 @@ ret
 -- where it has got to, its destination is here - and handed to the arrival as if it had
 -- arrived, which lets the game collapse it the way it collapses any tunnel.
 --
+-- A stockpile is passed under: the game marks it with the wall bit, but it cannot be
+-- damaged, and a tunnel collapsing beneath it would be wasted.
+--
 -- Two exceptions: its own destination, which the ordinary arrival takes care of, and a
 -- fortification on its line's route that another tunnel was sent at within CLAIM_TICKS -
 -- that is the thick wall being taken a tile per tunnel, and passing under the tiles the
@@ -1174,6 +1191,8 @@ push esi
 mov esi, [CURRENT_UNIT_ADDRESS]
 imul esi, esi, 1168
 mov ecx, [esi+UNIT_TILE]
+test dword [ecx*4+TILE_FLAGS_ADDRESS], STOCKPILE
+jnz cross_none
 test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
 jz cross_building
 movzx eax, byte [ecx+WALL_OWNER_ADDRESS]
@@ -1320,9 +1339,20 @@ jmp RETURN_ADDRESS
 -- AI raids. getDefensiveTribeForUnit sorts the units an AI recruits for raiding into its six
 -- raid troops by looking the unit type up in a table of twenty - knights, horse archers,
 -- the ranged units, two kinds of melee and the siege engines - and a type that is not in
--- it gets no troop at all: the tunneller is recruited and never ordered anywhere. Here a
--- tunneller is looked up as a maceman, so it joins the light melee troop, and the game's
--- own raid orders (move, attack this building) already treat it as the melee unit it is.
+-- it gets no troop at all: the tunneller is recruited and never ordered anywhere.
+--
+-- It cannot simply be put in a raid troop either. Sorted in with the macemen (as 1.6.0
+-- did) it stood at its guild and the melee troop stood with it - the game's troop code has
+-- its own isTribeFreeOfTunnelingUnits test, and a troop with a tunneller in it is not
+-- marched - and since the AI recruits for raids only until its raiders reach their number,
+-- a stuck troop also stopped it recruiting any more.
+--
+-- So a raid tunneller is made a siege tunneller instead: its AI behaviour goes from raiding
+-- (2) to tunnelling (15), and the lookup is left to find no troop, as it always did. The
+-- AI's own aiReassignTunnelersToTribe gathers every tunneller with that behaviour into its
+-- tunnelling troop whenever it runs, and useAITribe_0xe_toPlaceTunnels digs with them. It no longer counts as a raider, so
+-- the raid troops march and the AI goes on recruiting for them. Only a unit the recruiting
+-- has just marked as a raider is changed; any other look-up of a tunneller is left alone.
 -- Replaces `movsx edx, word [edi+unitType]`; EDX is the type the lookup compares.
 local raid_tribe = [[
 movsx edx, word [edi+UNIT_TYPE_OPERAND]
@@ -1330,8 +1360,11 @@ cmp dword [ENABLED_ADDRESS], 0
 je raid_tribe_back
 cmp edx, TUNNELER_TYPE
 jne raid_tribe_back
+cmp word [edi+UNIT_BEHAVIOUR_OPERAND], RAID_BEHAVIOUR
+jne raid_tribe_back
+mov word [edi+UNIT_BEHAVIOUR_OPERAND], TUNNELLING_BEHAVIOUR
 cmp dword [DIAGNOSTICS_ADDRESS], 0
-je raid_tribe_quiet
+je raid_tribe_back
 pushad
 mov eax, edi
 xor edx, edx
@@ -1343,8 +1376,6 @@ mov [REPORT_ADDRESS+4], eax
 mov dword [REPORT_ADDRESS+28], 48
 call REPORT_PAD_ADDRESS
 popad
-raid_tribe_quiet:
-mov edx, STAND_IN_TYPE
 raid_tribe_back:
 jmp RETURN_ADDRESS
 ]]
@@ -1755,6 +1786,8 @@ ret
 -- second collapse at the same breach does not take a second zone, it adds its time to the
 -- one already standing there.
 --
+-- A stockpile counts as empty ground: its wall bit cannot be damaged.
+--
 -- If the tile is empty - another tunnel took the target first - the tunnel is sent on
 -- (redirect) and the function returns through its own tail without switching state, so
 -- the tunneler digs straight on. If there is nowhere to send it, the game collapses it
@@ -1777,12 +1810,15 @@ mov [REPORT_ADDRESS], edx
 mov [REPORT_ADDRESS+4], ecx
 mov edx, [ecx*4+TILE_FLAGS_ADDRESS]
 mov [REPORT_ADDRESS+8], edx
+test edx, STOCKPILE
+jnz arrived_on_nothing
 test edx, WALL_FAMILY
 jnz arrived_on_something
 movzx edx, word [ecx*2+BUILDING_TILE_ADDRESS]
 mov [REPORT_ADDRESS+12], edx
 test dx, dx
 jnz arrived_on_something
+arrived_on_nothing:
 cmp dword [RETARGET_ENABLED_ADDRESS], 0
 je arrive_quiet
 cmp ecx, [FAIL_SPOT_ADDRESS]
@@ -2289,6 +2325,8 @@ test dword [STEP_FLAGS_ADDRESS], 1
 jnz step_next
 mov eax, [SPREAD_DAMAGE_ADDRESS]
 mov [STEP_DAMAGE_ADDRESS], eax
+test dword [ecx*4+TILE_FLAGS_ADDRESS], STOCKPILE
+jnz step_next
 test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
 jnz step_fortified
 movzx eax, word [ecx*2+BUILDING_TILE_ADDRESS]
