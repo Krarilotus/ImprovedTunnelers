@@ -36,13 +36,6 @@ HEAP = 0x60000000
 STACK_TOP = 0x70100000
 SENTINEL = 0x7FFFFFF0
 
-try:
-    import keystone
-    KS = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_32)
-except ImportError:
-    KS = None  # The normal FASM path and Lua-only integration checks do not use it.
-
-
 def fasm_to_keystone(script, values):
     """What core.assemble feeds FASM, turned into something keystone reads the same way."""
     lines = []
@@ -218,8 +211,10 @@ class Host:
             if len(code) != size:
                 raise AssertionError('fasm size differs between passes')
         else:
+            import keystone
+            assembler = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_32)
             address = self.allocate(0x4000)
-            code, _ = KS.asm(fasm_to_keystone(script, values), address)
+            code, _ = assembler.asm(fasm_to_keystone(script, values), address)
             code = bytes(code)
             self.heap = address + len(code) + 0x20
         self.m.write(address, code)

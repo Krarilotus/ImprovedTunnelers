@@ -9,7 +9,7 @@ fallbacks: denial120 seconds, spread damage60. Explicit saved values still win.
 
 AI Swapper1.5.0 is optional, not a dependency. It alone owns starting counts,
 native match initialization, acquisition and initial-defense assignment. An AI
-content pack which authors `startTroops.Tunneler` needs that dependency; this
+content pack which authors `startTroops.<mode>.Tunneler` needs that dependency; this
 behaviour module does not. Fixed Engineers independently owns crew cleanup and
 safe dismounting. Do not simultaneously select Unit Behaviour Fixes' duplicate
 tunneler-response correction.
@@ -57,6 +57,12 @@ verified release. An upstream license is not present in the inspected tree;
 its author must choose the terms before store release readiness is claimed.
 
 ## Package
+
+Only `module/` is shipped, using the explicit `module/files.yml` allowlist:
+three Lua files, metadata, options and localized descriptions/catalogs.
+`bench/` and `tools/` are developer tooling outside the package. Python is not
+a game-time dependency. Local disassembly/research scripts are not part of this
+repository contribution either.
 
 Use UCP's existing `scripts/build-module-package-files.ps1` against `module/`
 with its `files.yml`, or the extension store builder with source location
