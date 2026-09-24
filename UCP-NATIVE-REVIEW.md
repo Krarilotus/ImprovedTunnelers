@@ -38,6 +38,24 @@ a cleanup model to copy.
 
 ## Evidence and limits
 
+**Replay blockers:** `queue_tick` uses RDTSC/DRAIN_BUDGET to choose when to stop
+applying gameplay damage, even with diagnostics OFF. An isolated execution of
+the actual FASM payload from identical state processed two damage steps with a
+100-cycle simulated clock increment, but only one with a 10,000,000-cycle increment.
+The damage/path callbacks were controlled stubs: this establishes scheduling
+nondeterminism, not a full recorded-game desync. Use deterministic bounded work
+quotas in the existing queue; keep wall-clock timing observational only.
+
+Map Extensions1.0.0 (`d939912`) already exports `registerSection` with initialize,
+serialize and deserialize callbacks. Its newer required-state/native-interface
+work is used by AIC Tactics; coordinate there for stronger load admission.
+Recorder0.51.0 (`651817d`) saves through the extension-aware native world owner
+and fingerprints packages/settings, but does not automatically capture this
+module's private heap. Reuse Map Extensions for queue/route/denial state; do not
+add private save hooks or patch Recorder to reconstruct missing state. Encode
+module-relative pointers as offsets and validate before restoring. Both the
+wall-clock scheduler and missing saved state remain unresolved in 1.6.6.
+
 Offline scans on six licensed SHC/Extreme1.41 fixtures (local, official EFIGS
 patch and official Polish patch pairs) find exactly one match for each of the
 15 signatures. Their code sections represent **two distinct layouts**, not six.
