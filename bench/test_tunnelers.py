@@ -1501,26 +1501,18 @@ def raids(extreme):
                       '8B 0C 85 ? ? ? ? 3B D1')[0]
     enabled = f.control + 0x1C
 
-    def troop(kind, unit, behaviour=2):
-        f.set_unit(unit, owner=3, kind=kind, alive=2, behaviour=behaviour)
+    def troop(kind, unit):
+        f.set_unit(unit, owner=3, kind=kind, alive=2)
         return h.run(lookup, stack=[3, unit]).r['eax']
-
-    def behaviour(unit):
-        return h.u32(f.unit(unit) + 0x42A) & 0xFFFF
 
     mace = troop(26, 21)
     check('a maceman recruited for a raid gets a raid troop', mace != 0, True)
-    check('  and stays a raider', behaviour(21), 2)
-    check('a tunneller recruited for a raid gets no raid troop', troop(5, 22), 0)
-    check('  and becomes a siege tunneller instead', behaviour(22), 15)
-    check('a tunneller looked up for anything else is left alone', troop(5, 26, 4), 0)
-    check('  and keeps its behaviour', behaviour(26), 4)
-    check('a spearman still shares the maceman\'s troop', troop(24, 23), mace)
-    check('  and an archer does not', troop(22, 24) != mace, True)
+    check('a tunneller recruited for a raid gets the same one', troop(5, 22), mace)
+    check('  and a spearman is still in it too', troop(24, 23), mace)
+    check('  and an archer is not', troop(22, 24) != mace, True)
     h.put32(enabled, 0)
     check('switched off, a tunneller gets no troop, as in the unmodified game',
           troop(5, 25), 0)
-    check('  and stays a raider', behaviour(25), 2)
     h.put32(enabled, 1)
 
     site = h.E.find('85 C0 0F 84 ? ? ? ? 83 FB 1E 6A 00 55 50 75')[0]
@@ -1548,12 +1540,12 @@ def raids(extreme):
 
     d = Fixture(extreme, config={'diagnostics': {'enabled': True}})
     dh = d.h
-    d.set_unit(22, owner=3, kind=5, alive=2, behaviour=2)
+    d.set_unit(22, owner=3, kind=5, alive=2)
     before = len(dh.logs)
     dh.run(lookup, stack=[3, 22])
     said = dh.logs[before:]
-    check('with diagnostics on, a raid tunneller turned siege tunneller says so',
-          [('siege tunnellers' in x and 'a=22 tile=3' in x) for x in said], [True])
+    check('with diagnostics on, a tunneller joining a raid troop says so',
+          [('joins a raid troop' in x and 'a=22 tile=3' in x) for x in said], [True])
     stop2 = dh.allocate_code([0xC3])
     dh.cpu.hooks[site + 0xAD] = lambda cpu: setattr(cpu, 'eip', stop2)
     before = len(dh.logs)

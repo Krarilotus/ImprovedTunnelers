@@ -442,9 +442,7 @@ ROUTE.raids = {
   tribeHook = 0x0E,               -- movsx edx, word [edi+unitType]
   guildAob = "85 C0 0F 84 ? ? ? ? 83 FB 1E 6A 00 55 50 75",
   guildNext = 0xAD,               -- the recruiting loop's "next unit"
-  behaviourOffset = 0x42A,         -- a unit's AI behaviour: what its AI uses it for
-  raiding = 2,                    -- ... recruited for a raid
-  tunnelling = 15,                -- ... one of its siege tunnellers
+  maceman = 26,
 }
 ROUTE.raids.guildGuards = { [ROUTE.raids.guildNext] = { 0x8B, 0x44, 0x24, 0x28, 0x83, 0xC0, 0x01 } }
 ROUTE.traceFailed = {
@@ -703,8 +701,8 @@ local REPORT_WORDS = {
       .. "single call of the game's damage, d = calls of it, e = what that one hit (a "
       .. "building type, -1 a wall), f = tunnel tiles the collapse started on, g = the "
       .. "clock; all times in units of 1024 CPU cycles)",
-  [48] = "an AI recruited a tunneller for a raid; it joins the AI's siege tunnellers "
-      .. "instead (a = the unit, tile = its player)",
+  [48] = "an AI tunneller joins a raid troop, as a maceman would (a = the unit, "
+      .. "tile = its player)",
   [49] = "an AI wanted a raid tunneller but has no Tunneler's Guild; it recruits its next "
       .. "raid unit instead (a = the player)",
   [44] = "a line laid out its route to the campfire (a = player, tile = the first "
@@ -1848,11 +1846,8 @@ return {
       local tribe = core.allocateAssembly(templates.raid_tribe, {
         UNIT_TYPE_OPERAND = readInteger(hook + 3),
         ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
-        UNIT_BEHAVIOUR_OPERAND = (readInteger(hook + 3) - UNIT_TYPE + ROUTE.raids.behaviourOffset)
-          & 0xFFFFFFFF,
-        RAID_BEHAVIOUR = ROUTE.raids.raiding,
-        TUNNELLING_BEHAVIOUR = ROUTE.raids.tunnelling,
         TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
+        STAND_IN_TYPE = ROUTE.raids.maceman,
         RETURN_ADDRESS = hook + 7,
         DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
         REPORT_ADDRESS = report,

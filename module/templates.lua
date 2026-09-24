@@ -1339,20 +1339,9 @@ jmp RETURN_ADDRESS
 -- AI raids. getDefensiveTribeForUnit sorts the units an AI recruits for raiding into its six
 -- raid troops by looking the unit type up in a table of twenty - knights, horse archers,
 -- the ranged units, two kinds of melee and the siege engines - and a type that is not in
--- it gets no troop at all: the tunneller is recruited and never ordered anywhere.
---
--- It cannot simply be put in a raid troop either. Sorted in with the macemen (as 1.6.0
--- did) it stood at its guild and the melee troop stood with it - the game's troop code has
--- its own isTribeFreeOfTunnelingUnits test, and a troop with a tunneller in it is not
--- marched - and since the AI recruits for raids only until its raiders reach their number,
--- a stuck troop also stopped it recruiting any more.
---
--- So a raid tunneller is made a siege tunneller instead: its AI behaviour goes from raiding
--- (2) to tunnelling (15), and the lookup is left to find no troop, as it always did. The
--- AI's own aiReassignTunnelersToTribe gathers every tunneller with that behaviour into its
--- tunnelling troop whenever it runs, and useAITribe_0xe_toPlaceTunnels digs with them. It no longer counts as a raider, so
--- the raid troops march and the AI goes on recruiting for them. Only a unit the recruiting
--- has just marked as a raider is changed; any other look-up of a tunneller is left alone.
+-- it gets no troop at all: the tunneller is recruited and never ordered anywhere. Here a
+-- tunneller is looked up as a maceman, so it joins the light melee troop, and the game's
+-- own raid orders (move, attack this building) already treat it as the melee unit it is.
 -- Replaces `movsx edx, word [edi+unitType]`; EDX is the type the lookup compares.
 local raid_tribe = [[
 movsx edx, word [edi+UNIT_TYPE_OPERAND]
@@ -1360,11 +1349,8 @@ cmp dword [ENABLED_ADDRESS], 0
 je raid_tribe_back
 cmp edx, TUNNELER_TYPE
 jne raid_tribe_back
-cmp word [edi+UNIT_BEHAVIOUR_OPERAND], RAID_BEHAVIOUR
-jne raid_tribe_back
-mov word [edi+UNIT_BEHAVIOUR_OPERAND], TUNNELLING_BEHAVIOUR
 cmp dword [DIAGNOSTICS_ADDRESS], 0
-je raid_tribe_back
+je raid_tribe_quiet
 pushad
 mov eax, edi
 xor edx, edx
@@ -1376,6 +1362,8 @@ mov [REPORT_ADDRESS+4], eax
 mov dword [REPORT_ADDRESS+28], 48
 call REPORT_PAD_ADDRESS
 popad
+raid_tribe_quiet:
+mov edx, STAND_IN_TYPE
 raid_tribe_back:
 jmp RETURN_ADDRESS
 ]]
