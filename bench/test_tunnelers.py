@@ -1486,12 +1486,77 @@ def scenario(extreme):
     check('no zone is laid', g.zone(0), (0, 0, 0, 0))
 
 
+def raids(extreme):
+    """Tunnellers in AI raids: the raid troop lookup and the recruiting loop."""
+    print(' AI raids (%s)' % ('Extreme' if extreme else 'vanilla'))
+    f = Fixture(extreme)
+    h = f.h
+    lookup = h.E.find('56 57 8B 7C 24 10 33 C0 69 FF 90 04 00 00 0F BF 97 ? ? ? ? '
+                      '8B 0C 85 ? ? ? ? 3B D1')[0]
+    enabled = f.control + 0x1C
+
+    def troop(kind, unit):
+        f.set_unit(unit, owner=3, kind=kind, alive=2)
+        return h.run(lookup, stack=[3, unit]).r['eax']
+
+    mace = troop(26, 21)
+    check('a maceman recruited for a raid gets a raid troop', mace != 0, True)
+    check('a tunneller recruited for a raid gets the same one', troop(5, 22), mace)
+    check('  and a spearman is still in it too', troop(24, 23), mace)
+    check('  and an archer is not', troop(22, 24) != mace, True)
+    h.put32(enabled, 0)
+    check('switched off, a tunneller gets no troop, as in the unmodified game',
+          troop(5, 25), 0)
+    h.put32(enabled, 1)
+
+    site = h.E.find('85 C0 0F 84 ? ? ? ? 83 FB 1E 6A 00 55 50 75')[0]
+    stop = h.allocate_code([0xC3])
+    ended = []
+    rel = struct.unpack('<i', f.e.data[f.e.va2off(site + 4):f.e.va2off(site + 4) + 4])[0]
+    exit_to = (site + 8 + rel) & 0xFFFFFFFF                 # from the file: the hook is on it
+    for where, name in ((site + 8, 'recruits'), (exit_to, 'gives up'),
+                        (site + 0xAD, 'next unit')):
+        h.cpu.hooks[where] = (lambda n: lambda cpu: (ended.append(n), setattr(cpu, 'eip', stop)))(name)
+
+    def recruiting(building, kind):
+        ended.clear()
+        h.run(site, regs=dict(eax=building, ebx=kind))
+        return ended[-1] if ended else '?'
+
+    check('a unit whose building stands is recruited', recruiting(1234, 5), 'recruits')
+    check('a tunneller with no guild: the pass goes on to the next unit',
+          recruiting(0, 5), 'next unit')
+    check('any other unit with no building: the pass ends as it always did',
+          recruiting(0, 24), 'gives up')
+    h.put32(enabled, 0)
+    check('switched off, a tunneller with no guild ends the pass too', recruiting(0, 5),
+          'gives up')
+
+    d = Fixture(extreme, config={'diagnostics': {'enabled': True}})
+    dh = d.h
+    d.set_unit(22, owner=3, kind=5, alive=2)
+    before = len(dh.logs)
+    dh.run(lookup, stack=[3, 22])
+    said = dh.logs[before:]
+    check('with diagnostics on, a tunneller joining a raid troop says so',
+          [('joins a raid troop' in x and 'a=22 tile=3' in x) for x in said], [True])
+    stop2 = dh.allocate_code([0xC3])
+    dh.cpu.hooks[site + 0xAD] = lambda cpu: setattr(cpu, 'eip', stop2)
+    before = len(dh.logs)
+    dh.run(site, regs=dict(eax=0, ebx=5, ebp=3))
+    said = dh.logs[before:]
+    check('  and an AI with no guild says it recruits its next unit',
+          [('no Tunneler' in x and 'a=3 ' in x) for x in said], [True])
+
+
 def main():
     which = sys.argv[1] if len(sys.argv) > 1 else 'both'
     if which in ('v', 'both'):
         scenario(False)
+        raids(False)
     if which in ('e', 'both'):
         scenario(True)
+        raids(True)
     print('\n%s' % ('ALL OK' if not FAILURES else 'FAILURES: ' + ', '.join(FAILURES)))
     return 1 if FAILURES else 0
 

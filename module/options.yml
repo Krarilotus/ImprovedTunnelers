@@ -191,6 +191,21 @@ options:
 
 - display: GroupBox
   category: [Improved Tunnelers]
+  header: '{{raids_group}}'
+  text: '{{raids_group_descr}}'
+  hasHeader: true
+  children:
+  - url: improved-tunnelers.raids.enabled
+    name: improved-tunnelers-raids-enabled
+    text: '{{raids_enabled}}'
+    tooltip: '{{raids_enabled_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+
+- display: GroupBox
+  category: [Improved Tunnelers]
   header: '{{diagnostics_group}}'
   text: '{{diagnostics_group_descr}}'
   hasHeader: true

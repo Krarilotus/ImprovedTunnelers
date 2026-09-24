@@ -337,6 +337,10 @@ class CPU:
             n = self.get(insn, ops[2]) & 31
             if n:
                 self.set(insn, ops[0], ((d | (src << 32)) >> n) & MASK)
+        elif mn == 'div':
+            d = self.get(insn, ops[0])
+            n = (self.r['edx'] << 32) | self.r['eax']
+            self.r['eax'], self.r['edx'] = (n // d) & MASK, (n % d) & MASK
         elif mn == 'idiv':
             d = self.get(insn, ops[0])
             d = d - (1 << 32) if d >> 31 else d

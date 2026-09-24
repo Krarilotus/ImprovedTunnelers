@@ -437,6 +437,14 @@ ROUTE.size = ROUTE.pathOffset + ROUTE.pathMax * 4
 ROUTE.drainBudget = 2500                      -- collapse work a tick may take (x1024 cycles)
 ROUTE.stopwatchFloor = 90000                  -- a tick this long (x1024 cycles, ~25 ms) is worth a line
 ROUTE.travelHook = 0x7E0                      -- je: not at its destination yet
+ROUTE.raids = {
+  tribeAob = "56 57 8B 7C 24 10 33 C0 69 FF 90 04 00 00 0F BF 97 ? ? ? ? 8B 0C 85 ? ? ? ? 3B D1",
+  tribeHook = 0x0E,               -- movsx edx, word [edi+unitType]
+  guildAob = "85 C0 0F 84 ? ? ? ? 83 FB 1E 6A 00 55 50 75",
+  guildNext = 0xAD,               -- the recruiting loop's "next unit"
+  maceman = 26,
+}
+ROUTE.raids.guildGuards = { [ROUTE.raids.guildNext] = { 0x8B, 0x44, 0x24, 0x28, 0x83, 0xC0, 0x01 } }
 ROUTE.traceFailed = {
   aob = "8B 7C 24 10 83 47 78 01 8B CF C7 87 ? ? ? ? 00 00 00 00 E8",
   hookSize = 8,
@@ -519,6 +527,7 @@ C.RETARGET_RANGE = 0x0C
 C.RETARGET_MAX = 0x10             -- how often one tunnel may be sent on
 C.UI_ENABLED = 0x14
 C.STANCE_ENABLED = 0x18
+C.RAIDS_ENABLED = 0x1C            -- AI raids may include tunnellers
 C.TARGETS_ENABLED = 0x20
 C.DIAGNOSTICS = 0x24
 C.LAST_TICK = 0x28                -- the tick the zones were last looked at
@@ -656,6 +665,7 @@ local DEFAULTS = {
   diagnostics = { enabled = false },
   ui = { enabled = true },
   stances = { enabled = true },
+  raids = { enabled = true },
 }
 
 -- What each hook writes into the report block, and what the decision code at +0x1C means.
@@ -683,6 +693,10 @@ local REPORT_WORDS = {
       .. "single call of the game's damage, d = calls of it, e = what that one hit (a "
       .. "building type, -1 a wall), f = tunnel tiles the collapse started on, g = the "
       .. "clock; all times in units of 1024 CPU cycles)",
+  [48] = "an AI tunneller joins a raid troop, as a maceman would (a = the unit, "
+      .. "tile = its player)",
+  [49] = "an AI wanted a raid tunneller but has no Tunneler's Guild; it recruits its next "
+      .. "raid unit instead (a = the player)",
   [44] = "a line laid out its route to the campfire (a = player, tile = the first "
       .. "fortification on it, flags = tiles on its path, b = fortifications on it, "
       .. "c = how far the search reached)",
@@ -827,6 +841,7 @@ return {
     local diagnosticsOn = setting(config, "diagnostics", "enabled") and true or false
     local uiOn = setting(config, "ui", "enabled") and true or false
     local stancesOn = setting(config, "stances", "enabled") and true or false
+    local raidsOn = setting(config, "raids", "enabled") and true or false
 
     ---------------------------------------------------------------------------------
     -- Find the game code
@@ -880,6 +895,7 @@ return {
     writeInteger(control + C.RETARGET_MAX, retargetMax)
     writeInteger(control + C.UI_ENABLED, uiOn and 1 or 0)
     writeInteger(control + C.STANCE_ENABLED, stancesOn and 1 or 0)
+    writeInteger(control + C.RAIDS_ENABLED, raidsOn and 1 or 0)
     writeInteger(control + C.TARGETS_ENABLED, targetsOn and 1 or 0)
     writeInteger(control + C.COLLAPSE_DAMAGE, collapseDamage)
     writeInteger(control + C.SPREAD_ENABLED, spreadOn and 1 or 0)
@@ -1802,6 +1818,44 @@ return {
       stanceReady = true
     end
 
+    ---------------------------------------------------------------------------------
+    -- 5. Tunnellers in AI raids
+    ---------------------------------------------------------------------------------
+
+    local raidsReady = false
+    local tribeSite = scanOptional(ROUTE.raids.tribeAob, "the AI's raid troop lookup")
+    local guildSite = scanOptional(ROUTE.raids.guildAob, "the AI's recruiting building test")
+    if tribeSite ~= nil and guildSite ~= nil
+        and guardsHold(guildSite, ROUTE.raids.guildGuards, "the AI's recruiting loop") then
+      local hook = tribeSite + ROUTE.raids.tribeHook
+      local tribe = core.allocateAssembly(templates.raid_tribe, {
+        UNIT_TYPE_OPERAND = readInteger(hook + 3),
+        ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
+        TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
+        STAND_IN_TYPE = ROUTE.raids.maceman,
+        RETURN_ADDRESS = hook + 7,
+        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+        REPORT_ADDRESS = report,
+        REPORT_PAD_ADDRESS = reportPad,
+        UNIT_SIZE = UNIT_SIZE,
+      })
+      local guild = core.allocateAssembly(templates.raid_no_guild, {
+        ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
+        TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
+        RECRUIT_ADDRESS = guildSite + 8,
+        EXIT_ADDRESS = jumpTarget(guildSite + 2),
+        NEXT_ADDRESS = guildSite + ROUTE.raids.guildNext,
+        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+        REPORT_ADDRESS = report,
+        REPORT_PAD_ADDRESS = reportPad,
+      })
+      remember(hook, 7)
+      writeJump(hook, tribe, 7)
+      remember(guildSite, 8)
+      writeJump(guildSite, guild, 8)
+      raidsReady = true
+    end
+
     if tunneler ~= nil and unitBase ~= nil then
       -- The stopwatch round every tunneller update, for the diagnostics.
       -- It calls whatever sits on the entry already - the stance hook, when that is on -
@@ -1836,7 +1890,7 @@ return {
 
     log(INFO, string.format(
       "improved-tunnelers: build denial %s%s, tunnels %s, targets %s, collapse %s, "
-      .. "buttons %s, tunnelers %s, stances %s.",
+      .. "buttons %s, tunnelers %s, stances %s, AI raid tunnellers %s.",
       denialReady and (denialOn and string.format("on, %d s", denialSeconds) or "off")
         or "unavailable",
       (denialReady and denialOn and messageOn)
@@ -1857,7 +1911,8 @@ return {
         or "") .. string.format(", %d tiles a tick", collapseSpeed) or "unavailable",
       uiReady and (uiOn and "on" or "off") or "unavailable",
       (aimReady and untargetableOn) and "hidden while digging" or "as the game leaves them",
-      stanceReady and (stancesOn and "on" or "off") or "unavailable"))
+      stanceReady and (stancesOn and "on" or "off") or "unavailable",
+      raidsReady and (raidsOn and "on" or "off") or "unavailable"))
     if diagnosticsOn then
       log(INFO, "improved-tunnelers: diagnostics are on; every tunnel dug in, every arrival "
         .. "and every building attempt near a denial writes a line to this log.")

@@ -1317,6 +1317,58 @@ mov ecx, [FIRST_OPERAND]
 jmp RETURN_ADDRESS
 ]]
 
+-- AI raids. getDefensiveTribeForUnit sorts the units an AI recruits for raiding into its six
+-- raid troops by looking the unit type up in a table of twenty - knights, horse archers,
+-- the ranged units, two kinds of melee and the siege engines - and a type that is not in
+-- it gets no troop at all: the tunneller is recruited and never ordered anywhere. Here a
+-- tunneller is looked up as a maceman, so it joins the light melee troop, and the game's
+-- own raid orders (move, attack this building) already treat it as the melee unit it is.
+-- Replaces `movsx edx, word [edi+unitType]`; EDX is the type the lookup compares.
+local raid_tribe = [[
+movsx edx, word [edi+UNIT_TYPE_OPERAND]
+cmp dword [ENABLED_ADDRESS], 0
+je raid_tribe_back
+cmp edx, TUNNELER_TYPE
+jne raid_tribe_back
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je raid_tribe_quiet
+pushad
+mov eax, edi
+xor edx, edx
+mov ecx, UNIT_SIZE
+div ecx
+mov [REPORT_ADDRESS], eax
+mov eax, [esp+32+12]
+mov [REPORT_ADDRESS+4], eax
+mov dword [REPORT_ADDRESS+28], 48
+call REPORT_PAD_ADDRESS
+popad
+raid_tribe_quiet:
+mov edx, STAND_IN_TYPE
+raid_tribe_back:
+jmp RETURN_ADDRESS
+]]
+
+-- ... and in aiRecruitUnits, where the building a unit is recruited at turns out not to
+-- exist: the game gives up on the whole recruiting pass. For a tunneller with no
+-- Tunneler's Guild that pass goes on to the next unit instead. EAX is the building.
+local raid_no_guild = [[
+test eax, eax
+jne RECRUIT_ADDRESS
+cmp dword [ENABLED_ADDRESS], 0
+je EXIT_ADDRESS
+cmp ebx, TUNNELER_TYPE
+jne EXIT_ADDRESS
+cmp dword [DIAGNOSTICS_ADDRESS], 0
+je NEXT_ADDRESS
+pushad
+mov [REPORT_ADDRESS], ebp
+mov dword [REPORT_ADDRESS+28], 49
+call REPORT_PAD_ADDRESS
+popad
+jmp NEXT_ADDRESS
+]]
+
 -- Inside traceAndCommitPathPlan, where the trace has found no way back to the unit. The
 -- game takes that to mean its own maps are stale and rebuilds the path linkage of every
 -- building and the separate-area map of the whole map before it gives up: millions of
@@ -2705,6 +2757,8 @@ return {
   quiet_trace = quiet_trace,
   aim_cone = aim_cone,
   crossing = crossing,
+  raid_tribe = raid_tribe,
+  raid_no_guild = raid_no_guild,
   tunneler_timed = tunneler_timed,
   tunneler_entry = tunneler_entry,
   extend_plan = extend_plan,

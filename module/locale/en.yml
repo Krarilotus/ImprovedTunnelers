@@ -158,6 +158,17 @@ ui_group_descr: |
 ui_enabled: Move the dig tunnel button and add attack here
 ui_enabled_tooltip: Off leaves the command panel exactly as the game draws it.
 
+raids_group: Tunnellers in AI raids
+raids_group_descr: |
+  An AI character file may list the Tunneler among its raid units (RaidUnit1-8), and the
+  game's own code will even recruit one - but it then has no raid troop to put it in: the
+  table that sorts raid recruits into the AI's raid troops has no row for tunnellers, so
+  they stand at the guild for ever. With this on, a raid tunneller joins the same troop as
+  the AI's macemen and spearmen and goes where they go - marching with the raid, hitting
+  the buildings it is sent at and fighting whatever it meets, above ground. Siege tunnels
+  are not affected. An AI without a Tunneler's Guild simply recruits its next raid unit.
+raids_enabled: AI raids may include tunnellers
+raids_enabled_tooltip: Off leaves tunnellers listed as raid units standing at their guild, as in the unmodified game.
 stances_group: Stances
 stances_group_descr: |
   The defensive and aggressive stance buttons are drawn for tunnelers, and setting one does
