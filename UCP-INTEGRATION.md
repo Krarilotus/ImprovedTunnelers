@@ -2,7 +2,7 @@
 
 The native tunneler behaviours already belong to this repository at `a23619c`.
 This contribution does not copy the older Unit Behaviour Fixes idle-response
-patch or AI Swapper's starting-troop hook. Version1.6.6 adds standard package
+patch or AI Swapper's starting-troop hook. Version1.7.0 retains standard package
 inputs, declared dependencies, root description, nine UI catalogs/descriptions
 and a localized existing category. UI defaults now match the existing native
 fallbacks: denial120 seconds, spread damage60. Explicit saved values still win.
@@ -31,7 +31,7 @@ game message. A disabled/superseded module cannot install the deferred hook.
 Message translations cover the nine GUI languages plus native Italian/Polish;
 English/American share text. Actual custom cr.tex language labels and codepages
 need in-game verification; no fallback is represented as a completed translation.
-Native assembly payloads/signatures are unchanged. The existing message site
+The existing message site
 is scanned/guarded at installation, preserving original hook ownership.
 
 ## Checks and limitations
@@ -63,7 +63,7 @@ its author must choose the terms before store release readiness is claimed.
 ## Package
 
 Only `module/` is shipped, using the explicit `module/files.yml` allowlist:
-three Lua files, metadata, options and localized descriptions/catalogs.
+four Lua files, metadata, options and localized descriptions/catalogs.
 `bench/` and `tools/` are developer tooling outside the package. Python is not
 a game-time dependency. Local disassembly/research scripts are not part of this
 repository contribution either.
@@ -74,3 +74,12 @@ with its `files.yml`, or the extension store builder with source location
 directory entry. Repository Download ZIP is not an installable module. Use
 the store's signing process for secure distribution; do not run the author's
 machine-specific `tools/publish.py` in another installation.
+
+## 1.7.0 save and replay correction
+
+[UCP-REPLAY-STATE.md](UCP-REPLAY-STATE.md) describes deterministic collapse work,
+the existing Map Extensions required-state API, relocated private state, focused
+tests and remaining native acceptance. Map Extensions 1.1.5 is a prerequisite.
+Renaming `.sav` to `.map` remains an editable-scenario workflow: the owner
+initializes fresh tunneler state for maps instead of restoring battle work.
+Older-save migration is not in scope; no released legacy save contract is claimed.

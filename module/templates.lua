@@ -26,10 +26,8 @@
 -- the game itself uses to decide whether a unit is an enemy, so a zone never gets in the
 -- way of its owner or its owner's allies.
 --
--- Loading a save or starting a new game moves the tick counter backwards; when that
--- Loading a save or starting a new game moves the tick counter backwards; when that
--- happens the whole list is dropped rather than left to expire against a clock that no
--- longer applies.
+-- Map Extensions restores the zones and their last observed tick together. The backward
+-- tick check remains a defensive guard, not a substitute for restoring saved state.
 local denial_check = [[
 push ebx
 push ebp
@@ -2388,6 +2386,9 @@ ret
 -- was found, and that includes **ECX**: this is a thiscall, the prologue's `mov esi, ecx`
 -- five instructions later is where `this` comes from, and the whole function writes through
 -- it. Hence the pushad - the drain calls the game's own damage, which clobbers freely.
+-- SPEED bounds both new tunnel tiles and expensive damage calls per tick. Unlike a CPU
+-- time budget this produces the same work on every machine, including when replaying.
+-- A partial tile stays in STEP_* for the next tick; empty cells retain the tile bound.
 local queue_tick = [[
 pushad
 cmp dword [DIAGNOSTICS_ADDRESS], 0
@@ -2442,13 +2443,11 @@ mov [SW_DAMAGE_MAX_ADDRESS], eax
 mov [SW_DAMAGE_CALLS_ADDRESS], eax
 mov [SW_TILES_ADDRESS], eax
 tick_unwatched:
-rdtsc
-shrd eax, edx, 10
-mov [DRAIN_START_ADDRESS], eax
 mov eax, [SPEED_ADDRESS]
 test eax, eax
 jle tick_done
 mov [TICK_LEFT_ADDRESS], eax
+mov [DAMAGE_LEFT_ADDRESS], eax
 tick_next:
 cmp dword [STEP_ACTIVE_ADDRESS], 0
 jne tick_step
@@ -2510,11 +2509,8 @@ call UPDATE_WALK_ADDRESS
 tick_budget:
 test edi, edi
 je tick_next
-rdtsc
-shrd eax, edx, 10
-sub eax, [DRAIN_START_ADDRESS]
-cmp eax, DRAIN_BUDGET
-jb tick_next
+sub dword [DAMAGE_LEFT_ADDRESS], 1
+jnz tick_next
 tick_done:
 cmp dword [DIAGNOSTICS_ADDRESS], 0
 je tick_out

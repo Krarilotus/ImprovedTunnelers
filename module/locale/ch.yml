@@ -25,7 +25,7 @@ collapse_damage_tooltip: 通过游戏原有伤害系统攻击目标。未倒塌�
 collapse_spread: 伤害隧道旁的建筑
 collapse_spread_tooltip: 震动伤害附近的普通建筑，不额外伤害防御工事。隧道正上方的防御工事保留原有路径伤害。
 collapse_speed: 塌陷速度（每逻辑帧格数）
-collapse_speed_tooltip: 隧道从目标向入口依次塌陷。数值越小，速度越慢。默认：2。
+collapse_speed_tooltip: 每个模拟逻辑帧最多处理的新隧道格数和伤害调用次数。默认：2。密集区域可能需要更长时间；CPU 速度和诊断开关不会改变此限制。
 collapse_spread_radius: 震动范围（格）
 collapse_spread_radius_tooltip: 隧道两侧普通建筑受影响的距离。默认：2。
 collapse_spread_damage: 隧道旁的伤害

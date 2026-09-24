@@ -2,6 +2,19 @@
 -- not the launcher's independently selected UI locale.
 local english = "The ground is too unstable to build here right now"
 return {
+  missingSaveState = {
+    english = "This older save has no tunneler state. Use its original setup or start a new match.",
+    german = "Diesem alten Spielstand fehlen die Tunnelerdaten. Verwende seine ursprüngliche Konfiguration oder starte eine neue Partie.",
+    french = "Cette ancienne sauvegarde ne contient pas les données des tunneliers. Utilisez sa configuration d’origine ou commencez une nouvelle partie.",
+    spanish = "Esta partida guardada antigua no contiene el estado de los tuneladores. Usa su configuración original o empieza una partida nueva.",
+    turkish = "Bu eski kayıtta tünelci durumu yok. Kaydın özgün kurulumunu kullanın veya yeni bir oyun başlatın.",
+    russian = "В этом старом сохранении нет состояния подкопщиков. Используйте исходную конфигурацию или начните новую игру.",
+    hungarian = "Ebből a régi mentésből hiányzik az alagútásók állapota. Használd az eredeti beállításokat, vagy kezdj új játékot.",
+    chinese = "此旧存档没有挖隧道兵状态。请使用原来的配置，或开始新对局。",
+    persian = "این ذخیرهٔ قدیمی وضعیت تونل‌زن‌ها را ندارد. از تنظیمات اصلی آن استفاده کنید یا بازی جدیدی شروع کنید.",
+    italian = "Questo vecchio salvataggio non contiene lo stato dei genieri. Usa la configurazione originale o inizia una nuova partita.",
+    polish = "Ten stary zapis nie zawiera stanu kopaczy tuneli. Użyj pierwotnej konfiguracji lub rozpocznij nową grę.",
+  },
   english = english,
   american = english,
   german = "Der Boden ist hier noch zu instabil zum Bauen",

@@ -437,7 +437,6 @@ ROUTE.stepSeconds = 2                         -- how long a half-done retarget i
 ROUTE.refused = 8                             -- targets set aside at a time
 ROUTE.size = ROUTE.pathOffset + ROUTE.pathMax * 4
 -- Where traceAndCommitPathPlan finds no way back and goes on to rebuild the whole map.
-ROUTE.drainBudget = 2500                      -- collapse work a tick may take (x1024 cycles)
 ROUTE.stopwatchFloor = 90000                  -- a tick this long (x1024 cycles, ~25 ms) is worth a line
 ROUTE.travelHook = 0x7E0                      -- je: not at its destination yet
 ROUTE.raids = {
@@ -623,7 +622,7 @@ C.SW_DAMAGE_MAX = 0x1F4           -- ... the dearest single call of the game's d
 C.SW_DAMAGE_CALLS = 0x1F8         -- ... how many calls of it
 C.SW_DAMAGE_KIND = 0x1FC          -- ... what the dearest hit: a building type, -1 a wall
 C.STEP_ACTIVE = 0x200             -- a tunnel tile is part way through falling in
-C.DRAIN_START = 0x204             -- when this tick's collapse work began (cycles / 1024)
+C.DAMAGE_LEFT = 0x204             -- deterministic damage-call allowance for this tick
 C.FILL_UNIT = 0x22C               -- the tunnel being written into the queue
 C.FILL_FLAGS = 0x230
 C.FILL_TILE = 0x234
@@ -827,6 +826,7 @@ return {
 
   enable = function(self, config)
     config = config or {}
+    self.stateSupport = require('state').prepare()
 
     local denialOn = setting(config, "denial", "enabled") and true or false
     local denialSeconds = toInteger(setting(config, "denial", "seconds"),
@@ -853,6 +853,8 @@ return {
     local uiOn = setting(config, "ui", "enabled") and true or false
     local stancesOn = setting(config, "stances", "enabled") and true or false
     local raidsOn = setting(config, "raids", "enabled") and true or false
+    assert(spreadRadius >= 0 and spreadRadius <= 8 and collapseSpeed >= 1 and collapseSpeed <= 100,
+      "Improved Tunnelers: collapse radius/speed must be within the customization ranges")
 
     ---------------------------------------------------------------------------------
     -- Find the game code
@@ -1137,8 +1139,7 @@ return {
           SW_DAMAGE_CALLS_ADDRESS = control + C.SW_DAMAGE_CALLS,
           SW_DAMAGE_KIND_ADDRESS = control + C.SW_DAMAGE_KIND,
           STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
-          DRAIN_START_ADDRESS = control + C.DRAIN_START,
-          DRAIN_BUDGET = ROUTE.drainBudget,
+          DAMAGE_LEFT_ADDRESS = control + C.DAMAGE_LEFT,
           RADIUS_ADDRESS = control + C.SPREAD_RADIUS,
           STEP_DX_ADDRESS = control + C.STEP_DX,
           STEP_DY_ADDRESS = control + C.STEP_DY,
@@ -1913,6 +1914,18 @@ return {
     end
 
     ---------------------------------------------------------------------------------
+
+    require('state').attach(self, C, {
+      queue = QUEUE_MAX, zones = ZONE_COUNT, records = RECORD_COUNT,
+      lines = (PLAYER_COUNT + 1) * 4, refused = ROUTE.refused,
+      routeSize = ROUTE.size, entries = ROUTE.entries,
+      pathMax = ROUTE.pathMax, pathOffset = ROUTE.pathOffset,
+    }, table.concat({
+      tostring(denialReady), tostring(retargetReady), tostring(targetsReady),
+      tostring(collapseReady), tostring(familyReady), tostring(aimReady),
+      tostring(stanceReady), tostring(raidsReady), tostring(anchor ~= nil),
+      tostring(campIds ~= nil),
+    }, '/'))
 
     log(INFO, string.format(
       "improved-tunnelers: build denial %s%s, tunnels %s, targets %s, collapse %s, "

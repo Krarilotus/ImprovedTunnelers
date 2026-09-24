@@ -36,7 +36,7 @@ collapse_spread: Tünel yanındaki binalara hasar ver
 collapse_spread_tooltip: Sarsıntı yakındaki sıradan binaları etkiler, tahkimatları etkilemez. Doğrudan
   altından geçilen tahkimatlar normal güzergâh hasarını alır.
 collapse_speed: Çöküş hızı (oyun adımı başına kare)
-collapse_speed_tooltip: 'Tünel hedeften girişe doğru çöker. Düşük değer daha yavaştır. Varsayılan: 2.'
+collapse_speed_tooltip: 'Simülasyon adımı başına en fazla yeni tünel karesi ve hasar çağrısı. Varsayılan: 2. Yoğun alanlar daha uzun sürebilir; CPU hızı ve tanılama bu sınırı değiştirmez.'
 collapse_spread_radius: Sarsıntı menzili (kare)
 collapse_spread_radius_tooltip: 'Tünelin iki yanında sıradan binaların etkilendiği mesafe. Varsayılan:
   2.'

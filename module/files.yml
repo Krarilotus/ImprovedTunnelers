@@ -6,5 +6,6 @@ files:
 - src: init.lua
 - src: templates.lua
 - src: messages.lua
+- src: state.lua
 - src: description.md
 - src: locale

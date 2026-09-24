@@ -38,6 +38,11 @@ a cleanup model to copy.
 
 ## Evidence and limits
 
+The replay findings below describe **1.6.6**. They are addressed in the 1.7.0
+implementation and focused checks in [UCP-REPLAY-STATE.md](UCP-REPLAY-STATE.md).
+Whole-game save/editor/replay acceptance is still pending; the remaining patch
+ownership limitations below are unchanged.
+
 **Replay blockers:** `queue_tick` uses RDTSC/DRAIN_BUDGET to choose when to stop
 applying gameplay damage, even with diagnostics OFF. An isolated execution of
 the actual FASM payload from identical state processed two damage steps with a
