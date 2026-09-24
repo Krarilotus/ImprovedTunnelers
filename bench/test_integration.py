@@ -6,6 +6,7 @@ Those cases stub assembly generation: they verify Lua admission/lifecycle only,
 not emitted instructions, gameplay, text encoding or native compatibility.
 """
 import os
+import copy
 from pathlib import Path
 import re
 import unittest
@@ -76,6 +77,70 @@ class IntegrationTests(unittest.TestCase):
                 h = Host(extreme=extreme, config={'denial': {'message': False}})
                 self.assertEqual(h.after_init, [])
                 self.assertEqual(h.texts, [])
+
+    @unittest.skipUnless(os.environ.get('SHC_GAME_DIR'), 'licensed executable fixtures not supplied')
+    def test_ui_off_and_invalid_bindings(self):
+        import harness
+        from harness import Host
+        render_pattern = '8B 44 24 04 50 B9 ? ? ? ? E8 ? ? ? ? 85 C0 75 0B C7 05 ? ? ? ? ? 00 00 00'
+        tick_pattern = '8B 87 50 0A 00 00 8B 8F 98 09 00 00'
+        with patch.object(Host, 'allocate_assembly', lambda self, *_: self.allocate(16)):
+            for extreme in (False, True):
+                with self.subTest(extreme=extreme):
+                    h = Host(extreme=extreme, config={'ui': {'enabled': False}})
+                    render = h.E.find(render_pattern)[0]
+                    self.assertEqual(h.m.read(render + 0x249, 2), b'\x74\x22')
+                    # A cached location whose consumed opcode has changed must no
+                    # longer match the strengthened tick-counter signature.
+                    original = h.E
+                    changed = copy.copy(original)
+                    raw = bytearray(changed.data)
+                    tick = original.find(tick_pattern)[0]
+                    raw[original.va2off(tick) + 12] = 0x90
+                    changed.data = bytes(raw)
+                    with patch.object(harness, 'exe', return_value=changed):
+                        h = Host(extreme=extreme)
+                        self.assertEqual(h.after_init, [])
+                        self.assertTrue(any('game tick counter' in s for s in h.logs))
+            with patch.object(Host, 'scan', return_value=0):
+                h = Host()
+                self.assertEqual(len(h.mod[b'patched']), 0)
+
+    @unittest.skipUnless(os.environ.get('SHC_GAME_DIR'), 'licensed executable fixtures not supplied')
+    def test_failed_collapse_guard_disables_route_consumers(self):
+        import harness
+        from harness import Host
+        for extreme in (False, True):
+            calls = []
+            def allocate(host, script, values):
+                calls.append(script)
+                return host.allocate(16)
+            with patch.object(Host, 'allocate_assembly', allocate):
+                baseline = Host(extreme=extreme)
+                # Find the existing damage-walk call in the resolved update owner.
+                update = baseline.E.find('51 8B 0D ? ? ? ? 8B C1 69 C0 90 04 00 00 53 55')[0]
+                call = update + 0x926
+                walk = call + 5 + baseline.m.s32(call + 1)
+                changed = copy.copy(baseline.E)
+                raw = bytearray(changed.data)
+                raw[changed.va2off(walk) + 0x59] = 0x90
+                changed.data = bytes(raw)
+                calls.clear()
+                with patch.object(harness, 'exe', return_value=changed):
+                    h = Host(extreme=extreme)
+                templates = h.lua.eval(b'require("templates")')
+                self.assertNotIn(templates[b'route_walk'], calls)
+                self.assertTrue(any('tunnel collapse does not look' in s for s in h.logs))
+                calls.clear()
+                scan = Host.scan
+                def without_teams(host, pattern, *args):
+                    if pattern.startswith(b'8B 0C 85'):
+                        return None
+                    return scan(host, pattern, *args)
+                with patch.object(Host, 'scan', without_teams):
+                    h = Host(extreme=extreme)
+                self.assertNotIn(templates[b'find_anchor'], calls)
+                self.assertNotIn(templates[b'route_walk'], calls)
 
 
 if __name__ == '__main__':

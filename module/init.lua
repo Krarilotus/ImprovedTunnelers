@@ -92,7 +92,8 @@ local AOB_TOOLBAR_CLICK = "53 33 DB 39 1D ? ? ? ? 0F 85 ? ? ? ? 39 1D ? ? ? ? 0F
 
 -- updateUnits, where it decides whether a unit is due to look around for enemies this
 -- tick. The game tick counter is the third operand there.
-local AOB_TICK_COUNTER = "8B 87 50 0A 00 00 8B 8F 98 09 00 00"
+local AOB_TICK_COUNTER =
+  "8B 87 50 0A 00 00 8B 8F 98 09 00 00 8B 15 ? ? ? ? 23 C8 23 D0 3B D1"
 local OFFSET_TICK_COUNTER = 14
 
 -- Offsets inside UpdateTunneler. The function is byte for byte the same in both
@@ -244,10 +245,13 @@ local AIM_GUARDS = {
   [0x12] = { 0x66, 0x3D, 0x6F, 0x00 },
 }
 
--- Where the game looks up a player's keep, which is the module's idea of where that
--- player's castle is. The pattern sits in two functions that do the same thing and both
--- read the same table, so either match gives the right address.
-local AOB_KEEP_OF_PLAYER = "66 83 B8 ? ? ? ? 02 74 ? 69 ED F4 39 00 00 8B AD ? ? ? ?"
+-- The player's keep lookup, including the following troop-role case to distinguish
+-- it from the otherwise identical lookup in the second native function.
+local AOB_KEEP_OF_PLAYER =
+  "66 83 B8 ? ? ? ? 02 74 ? 69 ED F4 39 00 00 8B AD ? ? ? ? "
+  .. "85 ED 75 ? 5F 5D 33 C0 5B 59 C2 0C 00 8B C5 69 C0 2C 03 00 00 "
+  .. "0F BF 88 ? ? ? ? 89 8B 28 E0 18 00 0F BF 90 ? ? ? ? "
+  .. "5F 5D 89 93 2C E0 18 00 B8 01 00 00 00 5B 59 C2 0C 00 83 FA 06"
 local AOB_CAMPGROUND_OF_PLAYER = "8B 44 24 04 69 C0 F4 39 00 00 8B 80 ? ? ? ? 85 C0 7F"
 local CAMP_IDS_OPERAND = 0x0C
 local CAMP_GUARDS = {
@@ -728,7 +732,7 @@ local writeInteger = core.writeInteger
 ---@return number|nil
 local function scanOptional(pattern, purpose)
   local found, address = pcall(core.AOBScan, pattern)
-  if not found or address == nil then
+  if not found or type(address) ~= "number" or address <= 0 then
     log(WARNING, "improved-tunnelers: could not find " .. purpose
       .. "; the part of the module that needs it is off. Another module has probably "
       .. "patched the same code.")
@@ -787,9 +791,7 @@ end
 ---@param destination number
 ---@param size number how many bytes the jump replaces, at least 5
 local function writeJump(address, destination, size)
-  local relative = (destination - (address + 5)) & 0xFFFFFFFF
-  local bytes = { 0xE9, relative & 0xFF, (relative >> 8) & 0xFF, (relative >> 16) & 0xFF,
-    (relative >> 24) & 0xFF }
+  local bytes = { 0xE9, table.unpack(core.itob(core.getRelativeAddress(address, destination, -5))) }
   for _ = 6, size do
     bytes[#bytes + 1] = 0x90
   end
@@ -989,21 +991,14 @@ return {
       end
     end
 
-    -- Which camp the tunnels should be working towards. Only the nearest enemy is wanted,
-    -- so a player on our own team is passed over; with no team table to read, a table of
-    -- nothing but zeroes reads as "nobody is allied with anybody".
+    -- Which camp the tunnels should be working towards. Without the native team
+    -- table, leave camp targeting unavailable instead of inventing alliance data.
     local anchor
     local teamTable
     if teamSite ~= nil then
       teamTable = readAddress(teamSite + OFFSET_PLAYER_TEAMS)
     end
-    if teamTable == nil then
-      teamTable = core.allocate((PLAYER_COUNT + 1) * 4, true)
-      for player = 0, PLAYER_COUNT do
-        writeInteger(teamTable + 4 * player, 0)
-      end
-    end
-    if unitBase ~= nil and (campIds ~= nil or keepIds ~= nil) then
+    if teamTable ~= nil and unitBase ~= nil and (campIds ~= nil or keepIds ~= nil) then
       anchor = core.allocateAssembly(templates.find_anchor, {
         ANCHOR_ID_ADDRESS = control + C.ANCHOR_ID,
         CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
@@ -1047,7 +1042,8 @@ return {
     if tunneler ~= nil and ticks ~= nil and search ~= nil then
       local walk = callTarget(tunneler + TUNNELER_TUNNEL_DAMAGE_CALL)
       local tickSite = scanOptional(AOB_UPDATE_UNITS, "the game's pass over its units")
-      if guardsHold(walk, DAMAGE_WALK_GUARDS, "the tunnel collapse")
+      local walkReady = guardsHold(walk, DAMAGE_WALK_GUARDS, "the tunnel collapse")
+      if walkReady
           and tickSite ~= nil and guardsHold(tickSite, TICK_GUARDS, "the game's pass over its units")
           and rowTable ~= nil then
         local tileMapState = readAddress(walk + DAMAGE_WALK_TILE_MAP_OPERAND)
@@ -1279,7 +1275,7 @@ return {
       -- that looks the way it should, no route is ever laid out and a line whose target is
       -- down falls back on the search towards the campfire.
       local routeBuild, followRoute
-      local routesOk = rowTable ~= nil and anchor ~= nil
+      local routesOk = walkReady and rowTable ~= nil and anchor ~= nil
         and guardsHold(search, ROUTE.guards, "the search's own maps")
       if routesOk then
         local routeWalk = core.allocateAssembly(templates.route_walk, {
@@ -1776,7 +1772,7 @@ return {
     local render = scanOptional(AOB_RENDER_UNIT_BUTTONS, "the unit command buttons")
     local click = scanOptional(AOB_UNIT_BUTTON_CLICK, "the unit command button clicks")
     local toolbar = scanOptional(AOB_TOOLBAR_CLICK, "the toolbar button handler")
-    if render ~= nil and click ~= nil and toolbar ~= nil
+    if uiOn and render ~= nil and click ~= nil and toolbar ~= nil
         and guardsHold(render, RENDER_GUARDS, "the unit command buttons")
         and guardsHold(click, { [CLICK_TUNNELER_BRANCH] = CLICK_GUARD },
           "the unit command button clicks")

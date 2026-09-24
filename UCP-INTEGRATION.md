@@ -2,7 +2,7 @@
 
 The native tunneler behaviours already belong to this repository at `a23619c`.
 This contribution does not copy the older Unit Behaviour Fixes idle-response
-patch or AI Swapper's starting-troop hook. Version1.6.5 adds standard package
+patch or AI Swapper's starting-troop hook. Version1.6.6 adds standard package
 inputs, declared dependencies, root description, nine UI catalogs/descriptions
 and a localized existing category. UI defaults now match the existing native
 fallbacks: denial120 seconds, spread damage60. Explicit saved values still win.
@@ -36,7 +36,7 @@ is scanned/guarded at installation, preserving original hook ownership.
 
 ## Checks and limitations
 
-`python -m unittest discover -s bench -p test_integration.py -v` passes both
+`python -m unittest discover -s bench -p test_integration.py -v` passes four
 tests when SHC_GAME_DIR points to the licensed local SHC/Extreme pair. Catalog
 keys, all option/runtime defaults, manifest inputs, root/English description and
 Lua compilation are checked. The real-image Lua lifecycle cases verify delayed
@@ -48,6 +48,10 @@ The original broad emulator bench has not been rerun for this packaging change.
 Its author-specific FASM/temp paths and missing `t` import remain separate bench
 portability work. The narrow tests reuse its host with explicit fixtures and do
 not launch or modify the games. No executable files are distributed.
+
+The binding review in [UCP-NATIVE-REVIEW.md](UCP-NATIVE-REVIEW.md) records the
+stock framework API reuse, strengthened signatures and corrected OFF/failure
+paths, with the remaining lifecycle limitations kept explicit.
 
 Human translation review, installed GUI/RTL layouts, native text encoding,
 combined in-game/save validation, full binding/variant/performance review and
