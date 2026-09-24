@@ -74,6 +74,10 @@ tries is told the ground is too unstable.
 not only plain wall - and workshops, houses and farms never can. Tunnels may pass beneath the
 town to reach what lies behind it, but never beneath a keep.
 
+**A stockpile is not a wall.** The game marks a stockpile's footprint with the same bit as a
+wall, but it cannot be damaged. Tunnels are never aimed at one, never collapse under one, and a
+stockpile standing on the way to the campfire does not count as a fortification blocking it.
+
 **Diggers are left alone.** A tunneller digging its entrance or its tunnel cannot be picked by
 the mouse or a drag box, is passed over by the orders you give a group, and enemy archers do
 not shoot at it. It is back to normal the moment it is above ground.

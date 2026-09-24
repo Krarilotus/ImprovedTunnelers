@@ -181,7 +181,7 @@ class Fixture:
         offsets = dict(owner=0x96, x=0xC4, y=0xC6, tile=0xD4, uid=0x98, state=0x2C0,
                        looking=0x3FC, siege=0x432, path_len=0xFC, stage=0xF6,
                        kind=0x8E, alive=0x8C, dying=0x2A0, dest_x=0xC8, dest_y=0xCA,
-                       dest_tile=0xD8)
+                       dest_tile=0xD8, behaviour=0x42A)
         for name, value in fields.items():
             off = offsets[name]
             if name in ('tile', 'uid', 'dest_tile'):
@@ -254,6 +254,12 @@ def scenario(extreme):
     cpu = h.run(arrive, until=carry_on)
     check('zone laid on a wall tile', f.zone(0), (150, 200, 3, 5000 + f.duration))
     check('and the collapse carries on as usual', cpu.eip, carry_on)
+
+    h.put32(f.tile_flags + 4 * tile, 0x100 | 0x2)        # a stockpile: wall bit and all
+    h.put32(f.control + 0x08, 0)                         # (retargeting off: no search)
+    h.run(arrive, until=carry_on)
+    check('a stockpile is empty ground: no zone laid', f.zone(1)[3], 0)
+    h.put32(f.control + 0x08, 1)
 
     h.put32(f.tile_flags + 4 * tile, 0)
     h.put16(f.building_tiles + 2 * tile, 12)             # a building instead

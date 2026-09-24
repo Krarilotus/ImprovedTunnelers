@@ -480,6 +480,14 @@ local DENIAL_STACK_RADIUS = 2
 -- ground under them is never touched, since for a wall that height is its strength.
 local WALL_FAMILY_FLAGS = 0x100 | 0x200 | 0x800
 
+-- The same flag word's stockpile bit. The game marks a stockpile's whole footprint with it
+-- and with the wall bit (clearStockpileFootprintTiles takes the two away together), which
+-- makes a stockpile look like a stretch of wall to anything that only asks for the wall
+-- bit - but it cannot be damaged. Tunnels are never aimed at it, never collapse under it,
+-- and a route to the campfire running beneath it is not blocked by it. (In ROUTE, not a
+-- local of its own: the main chunk is at Lua's ceiling of two hundred locals.)
+ROUTE.stockpileFlag = 0x2
+
 -- ... and the two of them the game's own damage routine does not sort into its wall loop
 -- by itself, so that a tunnel could never do anything but take them away outright.
 local STAIR_FAMILY_FLAGS = 0x200 | 0x800
@@ -1086,6 +1094,7 @@ return {
         -- One tile of it: the ground goes back, and what stands about is shaken.
         local step = core.allocateAssembly(templates.queue_step, {
           WALL_FAMILY = WALL_FAMILY_FLAGS,
+          STOCKPILE = ROUTE.stockpileFlag,
           FORTIFIED_ADDRESS = fortified,
           TYPE_LIMIT = BUILDING_TYPE_LIMIT,
           TUNNEL_DAMAGE = TUNNEL_DAMAGE,
@@ -1204,6 +1213,8 @@ return {
       -- AI's included, never see it - except for the single run one of the routines below
       -- asks it for.
       local filter = core.allocateAssembly(templates.aim_filter, {
+        STOCKPILE = ROUTE.stockpileFlag,
+        TILE_FLAGS_ADDRESS = tileFlags,
         BUILDING_TILE_ADDRESS = buildingTiles,
         CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
         TICKS_ADDRESS = ticks,
@@ -1237,6 +1248,7 @@ return {
         ALG_RESULT_ADDRESS = algResult,
       })
       local stands = core.allocateAssembly(templates.stands, {
+        STOCKPILE = ROUTE.stockpileFlag,
         TILE_FLAGS_ADDRESS = tileFlags,
         BUILDING_TILE_ADDRESS = buildingTiles,
         WALL_FAMILY = WALL_FAMILY_FLAGS,
@@ -1286,6 +1298,7 @@ return {
           DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
           TILE_FLAGS_ADDRESS = tileFlags,
           WALL_FAMILY = WALL_FAMILY_FLAGS,
+          STOCKPILE = ROUTE.stockpileFlag,
           WALL_OWNER_ADDRESS = readAddress(search + ROUTE.wallOwnerOperand),
           BUILDING_TILE_ADDRESS = buildingTiles,
           BUILDING_STRIDE = SEARCH_STRIDE,
@@ -1370,6 +1383,7 @@ return {
             UNIT_MOVE_STATUS = unitField(UNIT_MOVE_STATUS),
             TILE_FLAGS_ADDRESS = tileFlags,
             WALL_FAMILY = WALL_FAMILY_FLAGS,
+            STOCKPILE = ROUTE.stockpileFlag,
             WALL_OWNER_ADDRESS = readAddress(search + ROUTE.wallOwnerOperand),
             BUILDING_TILE_ADDRESS = buildingTiles,
             BUILDING_STRIDE = SEARCH_STRIDE,
@@ -1514,6 +1528,7 @@ return {
         TILE_FLAGS_ADDRESS = tileFlags,
         BUILDING_TILE_ADDRESS = buildingTiles,
         WALL_FAMILY = WALL_FAMILY_FLAGS,
+        STOCKPILE = ROUTE.stockpileFlag,
         RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
         LAST_REDIRECT_ADDRESS = control + C.LAST_REDIRECT,
         REDIRECT_ADDRESS = redirect,
