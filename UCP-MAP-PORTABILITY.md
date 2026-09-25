@@ -1,4 +1,4 @@
-# Map portability and tunnel terrain ? 1.7.2
+# Map portability and tunnel terrain - 1.7.2
 
 **1.7.1 has a reported terrain regression and is superseded by 1.7.2.**
 Its center-only assignment did not clear the full native digging footprint. The
