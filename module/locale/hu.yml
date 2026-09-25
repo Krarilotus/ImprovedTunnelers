@@ -1,74 +1,54 @@
-denial_group: Építési tilalom a rés megnyitása után
-denial_group_descr: Sikeres omlás után a rés átmenetileg beépíthetetlen a játékos és az MI számára. További
-  alagutak meghosszabbítják a tilalmat; üres föld alatti omlás nem hoz létre tilalmat. A játék szokásos
-  ellenségközelségi sugarait használja.
-denial_enabled: Építés tiltása a friss rés körül
-denial_enabled_tooltip: 'Kikapcsolva: nincs további építési tilalom az omlás után.'
-denial_message: Az építési tilalom okának megjelenítése
-denial_message_tooltip: A Text Resource Modifier a játék nyelvén jelzi az instabil talajt. Ha ez nem érhető
-  el, az eredeti üzenet marad.
-denial_seconds: Tilalom időtartama (másodperc)
-denial_seconds_tooltip: 'Normál sebességű játékidő, játékütemekben számolva. Egy újabb alagút hozzáadja
-  ezt az időt. Alapérték: 120.'
-retarget_group: Az alagutak útvonala
-retarget_group_descr: Egy ostrom alagútjai közös réshez tartanak, majd közös útvonalon haladnak az ellenséges
-  tábortűz felé. Megkerülik a vártorony épületét, és szükség esetén új célpontot keresnek. Alagutanként
-  ütemenként legfeljebb egy keresés történik.
-retarget_enabled: Alagutak egyesítése és folytatása a résen túl
-retarget_enabled_tooltip: 'Kikapcsolva: minden alagút megtartja eredeti célpontját akkor is, ha azt már
-  lerombolták.'
-retarget_range: Alagút hatótávolsága (mező)
-retarget_range_tooltip: 'A találkozási pont és további célok keresési távolsága. A távoli alagutak külön
-  csoportot alkotnak. Alapérték: 80.'
-retarget_max: Átirányítások felső határa alagutanként
-retarget_max_tooltip: 'Hányszor kaphat új célt az üres helyre érkező alagút. Alapérték: 10.'
-targets_under: Ásás a város alatt
-targets_under_tooltip: Engedélyezi az áthaladást a közönséges épületek alatt. Célpontok továbbra is az
-  erődítmények; a vártorony épületét megkerüli.
-digging_unselectable: Az ásó alagútásók ne legyenek kijelölhetők
-digging_unselectable_tooltip: Az egér, a kijelölőkeret és a csoportparancsok kihagyják az ásó egységeket.
-  A felszínen ismét kijelölhetők.
-digging_untargetable: Az ásó alagútásók ne legyenek támadhatók
-digging_untargetable_tooltip: A játék szokásos célpontellenőrzése figyelmen kívül hagyja az ásó alagútásókat.
-collapse_damage: Omlási sebzés
-collapse_damage_tooltip: 'A célpont sebzése a játék normál rendszerével. A túlélő épületek megtartják
-  a sérülést. Alapérték: 2500.'
-collapse_spread: Alagút melletti épületek sebzése
-collapse_spread_tooltip: A rengés a szomszédos közönséges épületeket sebzi, az erődítményeket nem. A közvetlenül
-  aláásott erődítmények a szokásos útvonalsebzést kapják.
-collapse_speed: Omlás sebessége (mező ütemenként)
-collapse_speed_tooltip: 'Új alagútmezők és sebzésmeghívások maximális száma szimulációs ütemenként. Alapérték: 2. A sűrű területek tovább tarthatnak; a processzor sebessége és a diagnosztika nem módosítja a korlátot.'
-collapse_spread_radius: Rengés hatótávolsága (mező)
-collapse_spread_radius_tooltip: 'Az alagút két oldalán a közönséges épületeket érintő távolság. Alapérték:
-  2.'
-collapse_spread_damage: Alagút melletti sebzés
-collapse_spread_damage_tooltip: 'A rengés hatósugarában álló közönséges épületek sebzése. Erődítményeket
-  nem sebez tovább. Alapérték: 60.'
+denial_group: Építés a rés megnyitása után
+denial_enabled: Építési és javítási várakozás (tick)
+denial_enabled_tooltip: 'Rövid ideig tiltja az építést és a faljavítást a rés körül. Alapérték: 100 tick (normál sebességen
+  2,5 másodperc). Maximum: 2400 tick. Újabb omlások hosszabbítják. Kikapcsolva azonnal lehet újjáépíteni.'
+denial_message: Építési tiltás magyarázata
+denial_message_tooltip: Üzenetet mutat, ha egy rés miatt nem lehet építeni.
+terrain_group: Alagutak talaja
+terrain_enabled: Talaj helyreállítása ásás után
+terrain_enabled_tooltip: Visszaállítja a befejezett alagutak körüli eredeti talajmagasságot. Alapból bekapcsolva. Kikapcsolva
+  az eredeti játék helyreállítását használja.
+retarget_group: Alagútútvonalak
+retarget_enabled: Továbbásás a réseken át
+retarget_enabled_tooltip: Összehangolja az alagutakat, és új célt keres, ha az előző megsemmisült.
+retarget_range: Keresési távolság (mező)
+retarget_range_tooltip: 'A következő cél keresési távolsága. Alapérték: 80.'
+retarget_max: Új célok maximális száma
+retarget_max_tooltip: 'Hányszor haladhat tovább egy alagút másik cél felé. Alapérték: 10.'
 targets_group: Alagútcélpontok
-targets_group_descr: A kapuk és tornyok is célpontok lehetnek. A közönséges épületek és készletraktárak
-  nem válnak célponttá. A vártorony védett marad.
 targets_enabled: Tornyok és kapuk célzása
-targets_enabled_tooltip: 'Kikapcsolva: az eredeti célválasztás, falak és három kis torony.'
-ui_group: Támadási parancs alagútásóknak
-ui_group_descr: Egy hellyel eltolja az alagútgombot, és hozzáadja a normál támadásgombot. Mindkét gomb
-  képe, súgója és parancsa megmarad.
-ui_enabled: Alagútgomb áthelyezése és támadás hozzáadása
-ui_enabled_tooltip: 'Kikapcsolva: a játék eredeti parancspanelje.'
-raids_group: Alagútásók az MI portyáiban
-raids_group_descr: A RaidUnit1-8 alagútásói a buzogányosok és lándzsások portyázó csoportjához csatlakoznak.
-  A felszínen harcolnak; az ostromalagutak külön maradnak. Alagútásócéh nélkül az MI a következő portyázó
-  egységet választja.
-raids_enabled: Alagútásók engedélyezése az MI portyáiban
-raids_enabled_tooltip: 'Kikapcsolva: az eredeti viselkedés, amely nem osztja portyázó csoportba az alagútásókat.'
-stances_group: Harci viselkedés
-stances_group_descr: A tétlen vagy várakozó alagútásók csoportjuk védekező vagy támadó beállítása szerint
-  reagálnak. A mozgás és ásás megtartja saját parancsait. A reakciótávolságot a játék adja.
-stances_enabled: Védekező és támadó beállítás követése
-stances_enabled_tooltip: 'Kikapcsolva: eredeti viselkedés, automatikus reakció nélkül.'
+targets_enabled_tooltip: Minden torony és kapu lehet alagútcélpont.
+ui_group: Alagútásó-parancsok és omlási sebzés
+targets_under: Ásás városi épületek alatt
+targets_under_tooltip: Engedélyezi az útvonalat a közönséges épületek alatt. A várközpont kivétel.
+digging_unselectable: Ásó egységek kihagyása kijelöléskor
+digging_unselectable_tooltip: A csapatkijelölés és a csoportparancs ne szakítsa meg az ásást.
+digging_untargetable: Föld alatti alagútásók védelme
+digging_untargetable_tooltip: Az ellenség nem célozhatja az alagútásókat ásás közben.
+collapse_damage: Célpont sebzése
+collapse_damage_tooltip: 'A fal, torony vagy kapu sebzése az alagút végén. Alapérték: 2500.'
+collapse_spread: Közeli épületek sebzése
+collapse_spread_tooltip: Sebzi az alagút melletti közönséges épületeket. A szomszédos erődítmények kivételek.
+collapse_speed: Omlási munka tickenként
+collapse_speed_tooltip: 'Korlátozza az új alagútmezők és sebzések számát tickenként. Kisebb értéknél több tickre oszlik a
+  munka. Alapérték: 2.'
+collapse_spread_radius: Sebzési sugár (mező)
+collapse_spread_radius_tooltip: 'A sebzés hatótávolsága az alagút mellett. Alapérték: 2.'
+collapse_spread_damage: Közeli épületek sebzése
+collapse_spread_damage_tooltip: 'Minden hatótávon belüli közönséges épület sebzése. Alapérték: 60.'
+ui_enabled: „Támadás ide” gomb hozzáadása
+ui_enabled_tooltip: Megtartja az ásás gombot, és külön épülettámadási parancsot ad hozzá.
+stances_group: Alagútásók viselkedése
+stances_enabled: Védekező és támadó mód engedélyezése
+stances_enabled_tooltip: A tétlen alagútásók reagálnak a közeli ellenségre az ásási és mozgási parancsok megszakítása nélkül.
+raids_group: Alagútásók az MI portyáin
+raids_enabled: Portyázó alagútásók engedélyezése
+raids_enabled_tooltip: Az MI portyabeállításaiban kiválasztott alagútásók csatlakoznak a portyázó csapatokhoz.
 diagnostics_group: Diagnosztika
-diagnostics_group_descr: Az érkezés, keresés és építés műszaki eseményeit az ucp3.log fájlba írja. Normál
-  játékhoz maradjon kikapcsolva.
-diagnostics_enabled: Alagutak diagnosztikai naplózása
-diagnostics_enabled_tooltip: 'Alapérték: kikapcsolva. Eseményeket és másodpercenként legfeljebb egy közeli
-  építési kísérletet naplóz.'
-module_name: Fejlesztett alagútásók
+diagnostics_enabled: Diagnosztikai üzenetek írása
+diagnostics_enabled_tooltip: Alagúttevékenység naplózása hibakereséshez. Alapból kikapcsolva.
+balance_changes: Balance Changes
+bugfixes: Bugfixes
+ai: AI
+improvements: Improvements
+misc: Miscellaneous

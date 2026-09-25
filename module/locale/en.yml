@@ -1,199 +1,54 @@
-module_name: Improved Tunnelers
-denial_group: Building denial after a breach
-denial_group_descr: |
-  When a tunnel brings a wall or a tower down, the ground around the hole is denied to
-  builders for a while, exactly as if an enemy soldier were standing in it: the same
-  circle the game already uses for enemy units, read from the game's own values, so
-  anything the Exe Value Patcher or a balance mod does to those ranges applies here too.
-
-  It stops a breach being sealed the moment it appears. Neither the player nor the AI can
-  drop a wall, a tower, a gatehouse or any other building back into the gap until the
-  denial runs out, and the AI's tile-by-tile wall repair is held off in the same way.
-
-  The denial only goes down when the tunnel really took something away. A tunnel that
-  arrives under bare ground denies nothing.
-
-  Two tunnels through the same breach stack: the second collapse does not lay a second
-  circle, it adds its own time to the one already there, so thirty seconds becomes sixty,
-  then ninety. It takes a tunnel each time, and the circle stays where the first one put
-  it.
-denial_enabled: Deny building around a fresh breach
-denial_enabled_tooltip: Turn the whole denial off and tunnels collapse exactly as they do in the unmodified game.
-denial_message: Say why building is refused
-denial_message_tooltip: |
-  A player who tries to build in a fresh breach is told "The ground is too unstable to build
-  here right now" instead of the game's "enemy units are too close". Needs the Text Resource
-  Modifier module. It follows the game language; unavailable translations keep the game's own message.
-denial_seconds: Denial time (seconds)
-denial_seconds_tooltip: |
-  How long the ground stays denied, in seconds of game time at normal speed. It is counted
-  in game ticks, so it is the same for everyone in a multiplayer game whatever speed each
-  machine is set to, and a second tunnel through the same breach adds this time again.
-  Default 120.
-
-retarget_group: Where tunnels go
-retarget_group_descr: |
-  In the unmodified game every tunnel is aimed once, at whatever piece of wall is nearest to
-  it, and keeps that target whatever happens. Six tunnels make six holes, and a tunnel whose
-  wall someone else takes down first arrives under bare earth and is spent for nothing.
-
-  With this on, a player's tunnels meet. The first tunnel dug in at a castle aims where the
-  game would have aimed it, and that piece of fortification becomes the meeting point. Every
-  tunnel dug in after it goes for that same spot if it can reach it, so they open one road in.
-
-  The first tunnel to get there brings it down. The first one to arrive on the rubble after it
-  lays out the route from the hole to the enemy's campfire, once, round the keep - which cannot
-  be tunnelled. From then on the meeting point is the first fortification on that route still
-  standing: each tunnel that arrives on the rubble is sent along the route to it, the one that
-  gets there brings it down, and the next goes one further. Only when the whole route is open
-  do tunnels take the nearest fortification instead, to widen the way. Following the route costs
-  no search at all; laying it out costs one, once per siege.
-
-  Tunnels arriving together are spread along the route: where a wall is several tiles thick,
-  each is sent at a tile of its own instead of all coming up under the same one. And if the
-  game will not lay a tunnel's way to its new target, the tunnel waits a moment and tries
-  another rather than collapsing into empty ground.
-
-  No tunnel passes under a standing enemy fortification: one that comes under a wall, gate
-  or tower on its way collapses there, even when the route called the way open.
-
-  Choosing the next target is spread over ticks: a tunnel runs at most one search a tick and
-  waits where it stands in between, and a refused path no longer sets off the game's
-  whole-map rebuild.
-
-  A tunnel that is sent on is not a new tunnel: it carries on from where it stands, and when
-  it finally comes up under its target it collapses exactly as any tunnel does, with the same
-  damage - and the whole tunnel behind it, back to the entrance, comes down with it.
-retarget_enabled: Tunnels meet, and go on through the breach
-retarget_enabled_tooltip: Off means every tunnel digs at the wall nearest to it and collapses into empty ground if that wall is already gone, the way it does in the unmodified game.
-retarget_range: How far a tunnel reaches (tiles)
-retarget_range_tooltip: |
-  How far a tunnel may look for the meeting point or for its next target, in tiles. A tunnel
-  dug in further than this from the meeting point starts one of its own, so a second siege
-  somewhere else gets its own. The game's own first search reaches 80 tiles, which is where
-  this starts. Default 80.
-retarget_max: Times one tunnel may be sent on
-retarget_max_tooltip: |
-  How often a single tunnel may arrive on an empty spot and be sent on before it collapses
-  there instead. Each time is one more fortification further in. Default 10.
-
-targets_under: Tunnels may dig under the town
-targets_under_tooltip: |
-  The game's search refuses to pass under any building except the three small towers, so a
-  tunnel stops at the first workshop and never reaches what lies behind it. With this on a
-  tunnel may pass beneath the town - it still only comes up under a wall, a gate or a tower,
-  but it can get to the ones on the far side. The keep is the one exception: a tunnel is
-  never dug underneath one, it works its way around it.
-digging_unselectable: Digging tunnelers cannot be picked
-digging_unselectable_tooltip: |
-  While a tunneler is digging its entrance or its tunnel it is passed over by the mouse, by
-  a drag box and by the orders you give a group, so it is not dragged off its work and does
-  not clutter a selection. It can be picked again the moment it is above ground.
-digging_untargetable: Nothing shoots at a digging tunneler
-digging_untargetable_tooltip: |
-  A tunneler digging its entrance or its tunnel is left alone by enemy archers and soldiers,
-  through the game's own "is this worth aiming at" test - the same answer it gives for a man
-  working inside a building.
-
-collapse_damage: Damage a collapse does
-collapse_damage_tooltip: |
-  What the collapse does to the wall, gate or tower it arrived under, through the game's own
-  damage. Anything left standing keeps the damage, so the next tunnel finishes it. For scale:
-  a wooden gate has 200 hit points, a lookout tower 250, a small gatehouse 1000, a defence
-  turret 1200, a square tower 1600, and a large gatehouse or round tower 2000. Default 2500,
-  which takes anything down in one tunnel, the way the unmodified game does.
-collapse_spread: Damage what stands beside the tunnel
-collapse_spread_tooltip: |
-  A collapsing tunnel also shakes the ground around every tile it ran under, as far as the
-  reach below, not only the tiles themselves. This is for the town, not the castle: walls,
-  stairs, gates, gatehouses, towers, keeps and keep doors are never shaken by it, and a
-  fortification the tunnel ran directly underneath takes the same five points the unmodified
-  game took off it, no more. Bare ground costs nothing either. Turn it off for the unmodified
-  behaviour.
-collapse_speed: How fast a tunnel falls in (tiles a tick)
-collapse_speed_tooltip: 'Maximum new tunnel tiles and damage calls per simulation tick. Default: 2. Dense areas may take longer; CPU speed and diagnostics do not change the work allowance.'
-collapse_spread_radius: How far the shaking reaches (tiles)
-collapse_spread_radius_tooltip: |
-  How many tiles either side of the tunnel are shaken when it comes down. 1 is the tiles
-  touching it, 2 reaches a wall standing just off the tunnel's line, and so on. Only tiles
-  with a wall or a building on them cost anything. Default 2.
-collapse_spread_damage: Damage beside the tunnel
-collapse_spread_damage_tooltip: |
-  How much each ordinary building within that reach takes - workshops, houses, farms and the
-  rest. Fortifications are not shaken at all, beyond the five points the game itself took off
-  whatever the tunnel ran under, and what the tunnel arrives under takes the damage figure
-  above instead. Default 60.
-
-targets_group: What a tunnel may aim at
-targets_group_descr: |
-  A tunnel can only be aimed at a wall or at one of the three small towers in the
-  unmodified game: the search that picks its target refuses to spread under any other
-  building, so a gatehouse, a square tower or a round tower is never chosen, however
-  invitingly it sits in the wall.
-
-  With this on, the search asks the game's own "is this a gate or a tower" list instead,
-  which covers both gatehouses, the wooden gate and all five towers. They are treated
-  exactly like a wall from then on: the tunnel collapses the building above it when it
-  arrives, and if something else takes that building down first, the tunneler looks for
-  another target the same way.
-
-  Either way a tunnel is only ever aimed at a wall, a gate or a tower. Workshops, houses,
-  farms and the rest are never targets, and a tunnel that is turned aside while it is under
-  the enemy's town digs on past them to the next piece of wall.
-targets_enabled: Tunnels may aim at towers and gates
-targets_enabled_tooltip: Off leaves the target search as the unmodified game has it - walls and the three small towers only.
-
-ui_group: Attack here for tunnelers
-ui_group_descr: |
-  Tunnelers are the only soldiers with no attack-here button: the dig tunnel button sits in
-  that slot instead, so a tunneler can never be told to go and hit a particular building.
-
-  This moves the dig tunnel button one slot to the right, into the empty slot beside it,
-  and puts the ordinary attack-here button back where it belongs. Both buttons keep their
-  own picture, their own help text and their own command, so the dig tunnel button works
-  exactly as it did - it has simply moved over.
-ui_enabled: Move the dig tunnel button and add attack here
-ui_enabled_tooltip: Off leaves the command panel exactly as the game draws it.
-
-raids_group: Tunnellers in AI raids
-raids_group_descr: |
-  An AI character file may list the Tunneler among its raid units (RaidUnit1-8), and the
-  game's own code will even recruit one - but it then has no raid troop to put it in: the
-  table that sorts raid recruits into the AI's raid troops has no row for tunnellers, so
-  they stand at the guild for ever. With this on, a raid tunneller joins the same troop as
-  the AI's macemen and spearmen and goes where they go - marching with the raid, hitting
-  the buildings it is sent at and fighting whatever it meets, above ground. Siege tunnels
-  are not affected. An AI without a Tunneler's Guild simply recruits its next raid unit.
-raids_enabled: AI raids may include tunnellers
-raids_enabled_tooltip: Off leaves tunnellers listed as raid units standing at their guild, as in the unmodified game.
-stances_group: Stances
-stances_group_descr: |
-  The defensive and aggressive stance buttons are drawn for tunnelers, and setting one does
-  nothing at all: the search that makes a soldier go after a nearby enemy only looks at the
-  stance when the unit has flagged itself as free to react, and the tunneler's own code
-  never sets that flag.
-
-  With this on, a tunneler sets it in the states where it is standing about with nothing of
-  its own to do - idle, waiting, or walking back to its guild - so defensive and aggressive
-  stance make it react like any other soldier, at the ranges the game uses for every unit
-  (the stance range values the Exe Value Patcher lists).
-
-  A tunneler walking to a place you sent it to does not react on the way, so an order to go
-  somewhere is never thrown away halfway for an enemy standing near the route; it reacts the
-  moment it arrives, which is also how a patrol reacts at each of its points. It does not
-  react on its way to dig a tunnel it was ordered to dig, or while it is underground, so no
-  stance can cancel a dig order either.
-stances_enabled: Tunnelers obey defensive and aggressive stance
-stances_enabled_tooltip: Off means the stance buttons keep doing nothing for tunnelers, as in the unmodified game.
-
+denial_group: Building after a breach
+denial_enabled: Building and repair delay (ticks)
+denial_enabled_tooltip: 'Briefly prevent building and wall repairs around a breach. Default: 100 ticks (2.5 seconds at normal
+  speed). Maximum: 2400 ticks. Further collapses extend the delay. Switch off to allow immediate rebuilding.'
+denial_message: Explain blocked building
+denial_message_tooltip: Show a message when a breach prevents building.
+terrain_group: Tunnel terrain
+terrain_enabled: Restore ground after tunneling
+terrain_enabled_tooltip: Restore the original ground height around completed tunnels. On by default. Off uses the original
+  game's cleanup.
+retarget_group: Tunnel routes
+retarget_enabled: Continue through breaches
+retarget_enabled_tooltip: Coordinate tunnels and find another target when the previous one is gone.
+retarget_range: Search range (tiles)
+retarget_range_tooltip: 'How far a tunnel can look for its next target. Default: 80.'
+retarget_max: Maximum new targets
+retarget_max_tooltip: 'How often one tunnel can continue to another target. Default: 10.'
+targets_group: Tunnel targets
+targets_enabled: Target towers and gates
+targets_enabled_tooltip: Allow all towers and gates as tunnel targets.
+ui_group: Tunneler commands and collapse damage
+targets_under: Dig under town buildings
+targets_under_tooltip: Allow routes under ordinary buildings. Keeps remain excluded.
+digging_unselectable: Skip digging tunnelers in selections
+digging_unselectable_tooltip: Avoid interrupting digging when selecting or ordering troops.
+digging_untargetable: Protect underground tunnelers
+digging_untargetable_tooltip: Prevent enemies from targeting tunnelers while they dig.
+collapse_damage: Damage to the target
+collapse_damage_tooltip: 'Damage dealt to the wall, tower or gate at the tunnel''s end. Default: 2500.'
+collapse_spread: Damage nearby buildings
+collapse_spread_tooltip: Damage ordinary buildings beside the tunnel. Nearby fortifications are excluded.
+collapse_speed: Collapse work per tick
+collapse_speed_tooltip: 'Limit new tunnel tiles and damage calls each tick. Lower values spread work over more ticks. Default:
+  2.'
+collapse_spread_radius: Damage radius (tiles)
+collapse_spread_radius_tooltip: 'How far damage reaches beside the tunnel. Default: 2.'
+collapse_spread_damage: Damage to nearby buildings
+collapse_spread_damage_tooltip: 'Damage dealt to each ordinary building in range. Default: 60.'
+ui_enabled: Add an attack-here button
+ui_enabled_tooltip: Keep the dig button and add a separate building-attack command.
+stances_group: Tunneler stances
+stances_enabled: Enable defensive and aggressive stances
+stances_enabled_tooltip: Let idle tunnelers react to nearby enemies without interrupting digging or movement orders.
+raids_group: Tunnelers in AI raids
+raids_enabled: Enable raid tunnelers
+raids_enabled_tooltip: Tunnelers selected in the AI's raid settings join its raiding troops.
 diagnostics_group: Diagnostics
-diagnostics_group_descr: |
-  Writes a line to ucp3.log every time a tunnel arrives, every time it goes looking for a
-  new target and finds one or gives up, every time a denial is laid, and - at most once a
-  second - when somebody tries to build near one, saying what the module saw and what it
-  decided.
-
-  It is meant for working out why something did not happen, one match at a time. Leave it
-  off for normal play.
-diagnostics_enabled: Write what the tunneler hooks see to the log
-diagnostics_enabled_tooltip: Off for normal play. On, ucp3.log gets a line per tunnel arrival, per re-aim, per denial laid, and at most one a second for building attempts near a denial.
+diagnostics_enabled: Write diagnostic messages
+diagnostics_enabled_tooltip: Log tunneler activity for troubleshooting. Off by default.
+balance_changes: Balance Changes
+bugfixes: Bugfixes
+ai: AI
+improvements: Improvements
+misc: Miscellaneous

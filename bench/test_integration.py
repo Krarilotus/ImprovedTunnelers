@@ -37,8 +37,18 @@ class IntegrationTests(unittest.TestCase):
         defaults = lua.execute(source[:source.index('\nreturn {\n\n  enable')] + '\nreturn DEFAULTS')
         for group in options['options']:
             for option in group['children']:
-                _, section, name = option['url'].split('.')
-                self.assertEqual(option['contents']['value'], defaults[section][name], option['url'])
+                path = option['url'].split('.')[1:]
+                actual = defaults
+                for key in path: actual = actual[key]
+                expected = option['contents']['value']
+                if isinstance(expected, dict):
+                    for key, value in expected.items(): self.assertEqual(value, actual[key], option['url'])
+                else:
+                    self.assertEqual(expected, actual, option['url'])
+        slider = options['options'][0]['children'][0]
+        self.assertEqual(slider['display'], 'UCP2Slider')
+        self.assertEqual(slider['contents']['max'], 2400)
+        self.assertEqual(slider['contents']['value'], {'enabled': True, 'sliderValue': 100})
         lua.execute(source)  # Compile/load the complete entry point too.
         messages = lua.execute((MODULE / 'messages.lua').read_text(encoding='utf-8'))
         for key in ('english', 'american', 'german', 'french', 'spanish', 'turkish',
@@ -46,6 +56,23 @@ class IntegrationTests(unittest.TestCase):
             self.assertTrue(messages[key])
             self.assertTrue(messages['missingSaveState']['english' if key == 'american' else key])
         self.assertNotIn('aiSwapper', yaml.safe_load((MODULE / 'definition.yml').read_text())['dependencies'])
+
+    @unittest.skipUnless(os.environ.get('SHC_GAME_DIR'), 'licensed executable fixtures not supplied')
+    def test_denial_slider_and_terrain_save_identity(self):
+        from harness import Host
+        with patch.object(Host, 'allocate_assembly', lambda self, *_: self.allocate(16)):
+            for config, enabled, ticks in (({},1,100),
+                    ({'denial': {'enabled': False, 'sliderValue': 2400}},0,2400),
+                    ({'denial': {'enabled': True, 'sliderValue': 1}},1,1),
+                    ({'denial': {'enabled': False, 'seconds': 3}},0,120)):
+                h = Host(config=config)
+                control = h.mod[b'control']
+                self.assertEqual(h.m.u32(control),enabled)
+                self.assertEqual(h.m.u32(control+4),ticks)
+            on = Host()
+            off = Host(config={'terrain': {'enabled': False}})
+            self.assertNotEqual(on.lua.globals()[b'testState'][b'callbacks'][b'integrity'](),
+                                off.lua.globals()[b'testState'][b'callbacks'][b'integrity']())
 
     @unittest.skipUnless(os.environ.get('SHC_GAME_DIR'), 'licensed executable fixtures not supplied')
     def test_refusal_lifecycle_and_rejection(self):

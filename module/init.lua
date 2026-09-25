@@ -164,6 +164,8 @@ local TUNNELER_GUARDS = {
 -- on it, and then tells the path layer the tile has changed.
 local DAMAGE_WALK_LIVE_HEIGHT_OPERAND = 0x5B  -- cmp byte [esi + live height map], 0x10
 local DAMAGE_WALK_BASE_HEIGHT_OPERAND = 0x64  -- ... and the height the map itself gives it
+local TERRAIN = { brushCall = 0x75, zeroHeight = 0x7A, heightHook = 0x51, pathUpdate = 0x79,
+  nextTile = 0x89, walkHook = 0x41, cleanupBranch = 0x6B }
 local DAMAGE_WALK_PATH_STATE_OPERAND = 0xA5   -- mov ecx, PathFindingState
 local DAMAGE_WALK_DAMAGE_CALL = 0x9B          -- call processDamageToBuilding
 local DAMAGE_WALK_DAMAGE_CALL_SIZE = 5
@@ -174,6 +176,13 @@ local DAMAGE_WALK_X_DELTAS_OPERAND = 0xD7
 local DAMAGE_WALK_Y_DELTAS_OPERAND = 0xE1
 local DAMAGE_WALK_DIRECTIONS_OPERAND = 0xE8
 local DAMAGE_WALK_GUARDS = {
+  [TERRAIN.walkHook] = { 0xF7, 0x04, 0xB5 },
+  [0x48] = { 0x81, 0x00, 0x00, 0x20, 0x75, 0x64 },
+  [0x6B] = { 0x6A, 0xFE, 0x57, 0x55, 0x56, 0xB9 },
+  [TERRAIN.brushCall] = { 0xE8 },
+  [TERRAIN.zeroHeight] = { 0xC6, 0x86 },
+  [0x80] = { 0x00, 0xEB, 0x1D },
+  [0xA0] = { 0x57, 0x55, 0x6A, 0x01, 0xB9 },
   [DAMAGE_WALK_LIVE_HEIGHT_OPERAND - 2] = { 0x80, 0xBE },
   [DAMAGE_WALK_BASE_HEIGHT_OPERAND - 2] = { 0x80, 0xBE },
   [DAMAGE_WALK_PATH_STATE_OPERAND - 1] = { 0xB9 },
@@ -183,6 +192,25 @@ local DAMAGE_WALK_GUARDS = {
   [DAMAGE_WALK_X_DELTAS_OPERAND - 3] = { 0x03, 0x2C, 0xC5 },
   [DAMAGE_WALK_Y_DELTAS_OPERAND - 3] = { 0x03, 0x3C, 0xC5 },
   [DAMAGE_WALK_DIRECTIONS_OPERAND - 3] = { 0x03, 0x34, 0x95 },
+}
+
+-- Native nine-tile brush, reached through the verified collapse caller. Member
+-- offsets are identical in the supported SHC and Extreme layouts, not addresses.
+TERRAIN.guards = {
+  [0x00] = { 0x53, 0x8B, 0x5C, 0x24, 0x10, 0x55, 0x8B, 0x6C, 0x24, 0x0C, 0x56, 0x57, 0x8B, 0xF1 },
+  [0x1D] = { 0x6A, 0x00, 0x8B, 0xCE, 0xE8 },
+  [0x26] = { 0x8B, 0x44, 0x24, 0x14, 0x8B, 0x8C, 0x86, 0x60, 0x51, 0x16, 0x00 },
+  [0x31] = { 0xF7, 0xC1, 0x00, 0x05, 0x00, 0x10, 0x75, 0x50 },
+  [0x39] = { 0x66, 0x83, 0xBC, 0x46, 0xB0, 0x29, 0x20, 0x00, 0x00, 0x75, 0x45 },
+  [0x44] = { 0xF6, 0xC1, 0xB1, 0x75, 0x40, 0xF7, 0xC1, 0x00, 0x00, 0x30, 0x60, 0x75, 0x38 },
+  [TERRAIN.heightHook] = { 0x8A, 0x8C, 0x30, 0x30, 0xFA, 0x29, 0x00, 0x80, 0xF9, 0x10 },
+  [0x5D] = { 0x80, 0xBC, 0x30, 0x40, 0x34, 0x2B, 0x00, 0x10 },
+  [TERRAIN.pathUpdate] = { 0x50, 0x8B, 0x44, 0x24, 0x20, 0x50, 0xB9 },
+  [0x84] = { 0xE8 },
+  [TERRAIN.nextTile] = { 0x83, 0xC7, 0x01, 0x83, 0xFF, 0x09, 0x0F, 0x8C },
+  [0x95] = { 0x8B, 0x4C, 0x24, 0x1C, 0x8B, 0x54, 0x24, 0x18, 0x51, 0x52, 0x6A, 0x05, 0xB9 },
+  [0xA6] = { 0xE8 },
+  [0xAB] = { 0x5F, 0x5E, 0x5D, 0x5B, 0xC2, 0x10, 0x00 },
 }
 
 -- Offsets inside processDamageToBuilding, the game's own damage, where it sorts the tile
@@ -668,7 +696,8 @@ C.SIZE = C.ROUTES + (PLAYER_COUNT + 1) * 4 * ROUTE.size
 -- The GUI hands enable() only what it has saved, never the defaults in options.yml, so a
 -- module nobody has opened in the GUI gets an empty table. These are the real defaults.
 local DEFAULTS = {
-  denial = { enabled = true, seconds = 120, message = true },
+  denial = { enabled = true, sliderValue = 100, message = true },
+  terrain = { enabled = true },
   retarget = { enabled = true, range = DEFAULT_SEARCH_RANGE, max = 10 },
   targets = { towers_and_gates = true, under_buildings = true },
   collapse = { damage = 2500, spread = true, spread_damage = 60, spread_radius = 2,
@@ -829,8 +858,15 @@ return {
     self.stateSupport = require('state').prepare()
 
     local denialOn = setting(config, "denial", "enabled") and true or false
-    local denialSeconds = toInteger(setting(config, "denial", "seconds"),
-      DEFAULTS.denial.seconds)
+    local denialTicks = toInteger(setting(config, "denial", "sliderValue"),
+      DEFAULTS.denial.sliderValue)
+    -- Keep existing profiles' explicit duration/disabled choice when upgrading
+    -- from the old seconds control. New profiles use the standard tick slider.
+    if config.denial and config.denial.sliderValue == nil and config.denial.seconds ~= nil then
+      denialTicks = toInteger(config.denial.seconds, 0) * TICKS_PER_SECOND
+    end
+    denialTicks = math.max(1, math.min(2400, denialTicks))
+    local terrainOn = setting(config, "terrain", "enabled") and true or false
     local messageOn = setting(config, "denial", "message") and true or false
     local retargetOn = setting(config, "retarget", "enabled") and true or false
     local retargetRange = toInteger(setting(config, "retarget", "range"),
@@ -902,7 +938,7 @@ return {
     local records = control + C.RECORDS
 
     writeInteger(control + C.DENIAL_ENABLED, denialOn and 1 or 0)
-    writeInteger(control + C.DENIAL_DURATION, denialSeconds * TICKS_PER_SECOND)
+    writeInteger(control + C.DENIAL_DURATION, denialTicks)
     writeInteger(control + C.RETARGET_ENABLED, retargetOn and 1 or 0)
     writeInteger(control + C.RETARGET_RANGE, retargetRange)
     writeInteger(control + C.RETARGET_MAX, retargetMax)
@@ -1045,11 +1081,52 @@ return {
       local walk = callTarget(tunneler + TUNNELER_TUNNEL_DAMAGE_CALL)
       local tickSite = scanOptional(AOB_UPDATE_UNITS, "the game's pass over its units")
       local walkReady = guardsHold(walk, DAMAGE_WALK_GUARDS, "the tunnel collapse")
+      local brush = walkReady and callTarget(walk + TERRAIN.brushCall) or nil
+      local brushReady = brush ~= nil and guardsHold(brush, TERRAIN.guards, "the tunnel terrain brush")
+      if brushReady then
+        local nativeMap = readAddress(walk + DAMAGE_WALK_TILE_MAP_OPERAND)
+        brushReady = readAddress(walk + 0x71) == nativeMap
+          and readAddress(walk + TERRAIN.walkHook + 3) == tileFlags
+          and readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND) == nativeMap + 0x29FA30
+          and readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND) == nativeMap + 0x2B3440
+          and readAddress(walk + TERRAIN.zeroHeight + 2) == nativeMap + 0x29FA30
+          and readAddress(brush + 0x80) == readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND)
+          and readAddress(brush + 0xA2) == readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND)
+          and callTarget(brush + 0xA6) == callTarget(walk + DAMAGE_WALK_UPDATE_CALL)
+        if not brushReady then
+          log(WARNING, "improved-tunnelers: tunnel terrain brush data does not match its native caller; collapse changes are off.")
+        end
+      end
       if walkReady
+          and brushReady
           and tickSite ~= nil and guardsHold(tickSite, TICK_GUARDS, "the game's pass over its units")
           and rowTable ~= nil then
         local tileMapState = readAddress(walk + DAMAGE_WALK_TILE_MAP_OPERAND)
         local processDamage = callTarget(walk + DAMAGE_WALK_DAMAGE_CALL)
+
+        if terrainOn then
+          local restore = core.allocateAssembly(templates.restore_tunnel_height, {
+            WALL_FAMILY = WALL_FAMILY_FLAGS,
+            RETURN_ADDRESS = brush + TERRAIN.heightHook + 7,
+            UPDATE_ADDRESS = brush + TERRAIN.pathUpdate,
+            SKIP_ADDRESS = brush + TERRAIN.nextTile,
+          })
+          remember(brush + TERRAIN.heightHook, 7)
+          writeJump(brush + TERRAIN.heightHook, restore, 7)
+          -- The native cleanup walk is also called on tunneler death. Restore
+          -- each brush footprint before its center is sorted for damage, since
+          -- digging can raise neighbours even when the center has a building.
+          local restorePath = core.allocateAssembly(templates.restore_tunnel_path_tile, {
+            TILE_FLAGS_ADDRESS = tileFlags,
+            TILE_MAP_STATE_ADDRESS = tileMapState,
+            TERRAIN_BRUSH_ADDRESS = brush,
+            RETURN_ADDRESS = walk + TERRAIN.walkHook + 11,
+          })
+          remember(walk + TERRAIN.walkHook, 11)
+          writeJump(walk + TERRAIN.walkHook, restorePath, 11)
+          remember(walk + TERRAIN.cleanupBranch, 22)
+          writeJump(walk + TERRAIN.cleanupBranch, walk + 0xA0, 22)
+        end
 
         -- Stairs and crenellations are sorted out of the game's own damage before it does
         -- anything; widening that one test hands them to the wall loop instead, which
@@ -1080,13 +1157,13 @@ return {
           QUEUE_ADDRESS = queue,
           QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT,
           QUEUE_MAX = QUEUE_MAX,
-          WALL_FAMILY = WALL_FAMILY_FLAGS,
+          TERRAIN_FIX = terrainOn and 1 or 0,
           TILE_FLAGS_ADDRESS = tileFlags,
           BUILDING_TILE_ADDRESS = buildingTiles,
           LIVE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
           BASE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
-          PATH_STATE_ADDRESS = readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND),
-          UPDATE_WALK_ADDRESS = callTarget(walk + DAMAGE_WALK_UPDATE_CALL),
+          TILE_MAP_STATE_ADDRESS = tileMapState,
+          TERRAIN_BRUSH_ADDRESS = brush,
           DIRECTIONS_ADDRESS = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
           X_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_X_DELTAS_OPERAND),
           Y_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
@@ -1927,7 +2004,7 @@ return {
       pathMax = ROUTE.pathMax, pathOffset = ROUTE.pathOffset,
     }, table.concat({
       tostring(denialReady), tostring(retargetReady), tostring(targetsReady),
-      tostring(collapseReady), tostring(familyReady), tostring(aimReady),
+      tostring(collapseReady), tostring(terrainOn and collapseReady), tostring(familyReady), tostring(aimReady),
       tostring(stanceReady), tostring(raidsReady), tostring(anchor ~= nil),
       tostring(campIds ~= nil),
     }, '/'))
@@ -1935,7 +2012,7 @@ return {
     log(INFO, string.format(
       "improved-tunnelers: build denial %s%s, tunnels %s, targets %s, collapse %s, "
       .. "buttons %s, tunnelers %s, stances %s, AI raid tunnellers %s.",
-      denialReady and (denialOn and string.format("on, %d s", denialSeconds) or "off")
+      denialReady and (denialOn and string.format("on, %d ticks", denialTicks) or "off")
         or "unavailable",
       (denialReady and denialOn and messageOn)
         and ", localized refusal pending game-text initialization"

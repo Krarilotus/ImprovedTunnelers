@@ -1,76 +1,55 @@
-denial_group: Interdiction de construire après une brèche
-denial_group_descr: Après un effondrement réussi, la brèche reste temporairement interdite à la construction
-  pour le joueur et l’IA. Les tunnels suivants prolongent cette durée. Un effondrement dans le vide ne
-  crée aucune zone. Les rayons habituels de proximité ennemie s’appliquent.
-denial_enabled: Interdire de construire près d’une brèche récente
-denial_enabled_tooltip: 'Désactivé : aucune interdiction supplémentaire après l’effondrement.'
-denial_message: Expliquer le refus de construire
-denial_message_tooltip: Text Resource Modifier affiche un message sur le sol instable dans la langue du
-  jeu. Si indisponible, le message d’origine reste utilisé.
-denial_seconds: Durée de l’interdiction (secondes)
-denial_seconds_tooltip: 'Temps de jeu à vitesse normale, compté en ticks. Un autre tunnel ajoute cette
-  durée. Par défaut : 120.'
+denial_group: Construction après une brèche
+denial_enabled: Délai de construction et de réparation (ticks)
+denial_enabled_tooltip: 'Bloquer brièvement la construction et la réparation des murs près d’une brèche. Par défaut : 100
+  ticks (2,5 secondes à vitesse normale). Maximum : 2400 ticks. D’autres effondrements prolongent le délai. Désactiver permet
+  de reconstruire immédiatement.'
+denial_message: Expliquer le blocage
+denial_message_tooltip: Afficher un message quand une brèche empêche de construire.
+terrain_group: Terrain des tunnels
+terrain_enabled: Restaurer le sol après le creusement
+terrain_enabled_tooltip: Rétablir la hauteur initiale autour des tunnels terminés. Activé par défaut. Désactiver utilise le
+  nettoyage du jeu d’origine.
 retarget_group: Parcours des tunnels
-retarget_group_descr: Les tunnels d’un même siège convergent vers une brèche puis suivent une route commune
-  vers le feu de camp ennemi. Ils contournent le donjon et changent de cible si nécessaire, avec au plus
-  une recherche par tunnel et par tick.
-retarget_enabled: Regrouper les tunnels et poursuivre après la brèche
-retarget_enabled_tooltip: 'Désactivé : chaque tunnel garde sa cible initiale, même déjà détruite.'
-retarget_range: Portée des tunnels (cases)
-retarget_range_tooltip: 'Distance de recherche du point de rencontre et des cibles suivantes. Les tunnels
-  éloignés forment un autre groupe. Par défaut : 80.'
-retarget_max: Redirections maximales par tunnel
-retarget_max_tooltip: 'Nombre de redirections autorisées après l’arrivée sur une cible vide. Par défaut
-  : 10.'
-targets_under: Creuser sous la ville
-targets_under_tooltip: Autorise le passage sous les bâtiments ordinaires. Seules les fortifications sont
-  ciblées ; les donjons sont contournés.
-digging_unselectable: Ne pas sélectionner les tunneliers qui creusent
-digging_unselectable_tooltip: La souris, la sélection rectangulaire et les ordres de groupe ignorent les
-  tunneliers au travail. Ils redeviennent sélectionnables en surface.
-digging_untargetable: Ne pas attaquer les tunneliers qui creusent
-digging_untargetable_tooltip: Le contrôle normal des cibles ignore les tunneliers pendant le creusement.
-collapse_damage: Dégâts de l’effondrement
-collapse_damage_tooltip: 'Dégâts infligés à la cible par le système normal du jeu. Les bâtiments survivants
-  conservent ces dégâts. Par défaut : 2500.'
-collapse_spread: Endommager les bâtiments voisins du tunnel
-collapse_spread_tooltip: Les secousses touchent les bâtiments ordinaires voisins, pas les fortifications.
-  Les fortifications directement traversées gardent les dégâts normaux du trajet.
-collapse_speed: Vitesse d’effondrement (cases par tick)
-collapse_speed_tooltip: 'Nombre maximal de nouvelles cases de tunnel et d’appels de dégâts par tick de simulation. Par défaut : 2. Les zones denses peuvent prendre plus longtemps ; le processeur et les diagnostics ne changent pas cette limite.'
-collapse_spread_radius: Portée des secousses (cases)
-collapse_spread_radius_tooltip: 'Distance de part et d’autre du tunnel affectant les bâtiments ordinaires.
-  Par défaut : 2.'
-collapse_spread_damage: Dégâts à côté du tunnel
-collapse_spread_damage_tooltip: 'Dégâts aux bâtiments ordinaires dans la portée des secousses. Aucun dégât
-  supplémentaire aux fortifications. Par défaut : 60.'
+retarget_enabled: Continuer après une brèche
+retarget_enabled_tooltip: Coordonner les tunnels et chercher une autre cible si la précédente a disparu.
+retarget_range: Portée de recherche (cases)
+retarget_range_tooltip: 'Distance de recherche de la prochaine cible. Par défaut : 80.'
+retarget_max: Nombre maximal de nouvelles cibles
+retarget_max_tooltip: 'Nombre de fois qu’un tunnel peut poursuivre vers une autre cible. Par défaut : 10.'
 targets_group: Cibles des tunnels
-targets_group_descr: Étend les cibles aux portes et aux tours. Les bâtiments ordinaires et les réserves
-  ne deviennent pas des cibles. Les donjons restent protégés.
-targets_enabled: Autoriser les tours et les portes comme cibles
-targets_enabled_tooltip: 'Désactivé : choix d’origine, limité aux murs et aux trois petites tours.'
-ui_group: Ordre d’attaque pour les tunneliers
-ui_group_descr: Décale le bouton de tunnel d’une place et ajoute le bouton d’attaque normal. Chaque bouton
-  conserve son image, son aide et sa commande.
-ui_enabled: Déplacer le bouton de tunnel et ajouter l’attaque
-ui_enabled_tooltip: 'Désactivé : panneau de commandes d’origine.'
+targets_enabled: Viser les tours et les portes
+targets_enabled_tooltip: Autoriser toutes les tours et portes comme cibles.
+ui_group: Commandes et dégâts des tunnels
+targets_under: Creuser sous les bâtiments civils
+targets_under_tooltip: Autoriser les passages sous les bâtiments ordinaires. Les donjons restent exclus.
+digging_unselectable: Ignorer les tunneliers en train de creuser
+digging_unselectable_tooltip: Éviter d’interrompre le creusement lors des sélections et ordres de groupe.
+digging_untargetable: Protéger les tunneliers sous terre
+digging_untargetable_tooltip: Empêcher les ennemis de viser les tunneliers pendant le creusement.
+collapse_damage: Dégâts à la cible
+collapse_damage_tooltip: 'Dégâts au mur, à la tour ou à la porte au bout du tunnel. Par défaut : 2500.'
+collapse_spread: Endommager les bâtiments proches
+collapse_spread_tooltip: Toucher les bâtiments ordinaires voisins. Les fortifications voisines sont exclues.
+collapse_speed: Travail d’effondrement par tick
+collapse_speed_tooltip: 'Limiter les nouvelles cases et les dégâts traités par tick. Une valeur basse étale le travail. Par
+  défaut : 2.'
+collapse_spread_radius: Rayon des dégâts (cases)
+collapse_spread_radius_tooltip: 'Portée des dégâts autour du tunnel. Par défaut : 2.'
+collapse_spread_damage: Dégâts aux bâtiments proches
+collapse_spread_damage_tooltip: 'Dégâts à chaque bâtiment ordinaire à portée. Par défaut : 60.'
+ui_enabled: Ajouter le bouton « Attaquer ici »
+ui_enabled_tooltip: Conserver le bouton de creusement et ajouter une commande d’attaque des bâtiments.
+stances_group: Postures des tunneliers
+stances_enabled: Activer les postures défensive et agressive
+stances_enabled_tooltip: Les tunneliers inactifs réagissent aux ennemis proches sans interrompre le creusement ou les déplacements.
 raids_group: Tunneliers dans les raids de l’IA
-raids_group_descr: Les tunneliers de RaidUnit1-8 rejoignent le groupe de raid des massiers et lanciers.
-  Ils combattent en surface ; les tunnels de siège restent séparés. Sans guilde des tunneliers, l’IA choisit
-  son unité de raid suivante.
-raids_enabled: Autoriser les tunneliers dans les raids de l’IA
-raids_enabled_tooltip: 'Désactivé : absence d’affectation des tunneliers aux groupes de raid, comme à
-  l’origine.'
-stances_group: Postures
-stances_group_descr: Les tunneliers inactifs ou en attente réagissent selon la posture défensive ou agressive
-  de leur groupe. Les déplacements et travaux conservent leurs ordres. Les portées de réaction viennent
-  du jeu.
-stances_enabled: Respecter les postures défensive et agressive
-stances_enabled_tooltip: 'Désactivé : comportement d’origine sans réaction automatique liée à la posture.'
+raids_enabled: Activer les tunneliers de raid
+raids_enabled_tooltip: Les tunneliers choisis dans les réglages de raid de l’IA rejoignent ses troupes de raid.
 diagnostics_group: Diagnostic
-diagnostics_group_descr: Écrit les événements techniques d’arrivée, de recherche et de construction dans
-  ucp3.log. Laisser désactivé en jeu normal.
-diagnostics_enabled: Journaliser le diagnostic des tunnels
-diagnostics_enabled_tooltip: 'Par défaut : désactivé. Journalise les événements et au plus une tentative
-  de construction proche par seconde.'
-module_name: Tunneliers améliorés
+diagnostics_enabled: Écrire les messages de diagnostic
+diagnostics_enabled_tooltip: Consigner l’activité des tunnels pour rechercher les problèmes. Désactivé par défaut.
+balance_changes: Balance Changes
+bugfixes: Bugfixes
+ai: AI
+improvements: Improvements
+misc: Miscellaneous

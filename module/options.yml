@@ -2,19 +2,24 @@ meta:
   version: 1.0.0
 options:
 - display: GroupBox
-  category: ['{{module_name}}']
+  category: ['{{balance_changes}}']
   header: '{{denial_group}}'
-  text: '{{denial_group_descr}}'
   hasHeader: true
   children:
-  - url: improved-tunnelers.denial.enabled
-    name: improved-tunnelers-denial-enabled
-    text: '{{denial_enabled}}'
-    tooltip: '{{denial_enabled_tooltip}}'
-    display: Switch
+  - url: improved-tunnelers.denial
+    name: improved-tunnelers-denial-duration
+    header: '{{denial_enabled}}'
+    text: '{{denial_enabled_tooltip}}'
+    hasHeader: true
+    display: UCP2Slider
     contents:
-      type: boolean
-      value: true
+      value:
+        enabled: true
+        sliderValue: 100
+      min: 1
+      max: 2400
+      step: 1
+      decimals: 0
   - url: improved-tunnelers.denial.message
     name: improved-tunnelers-denial-message
     text: '{{denial_message}}'
@@ -23,22 +28,24 @@ options:
     contents:
       type: boolean
       value: true
-  - url: improved-tunnelers.denial.seconds
-    name: improved-tunnelers-denial-seconds
-    text: '{{denial_seconds}}'
-    tooltip: '{{denial_seconds_tooltip}}'
-    display: Number
-    contents:
-      type: integer
-      value: 120
-      min: 1
-      max: 300
-      step: 1
 
 - display: GroupBox
-  category: ['{{module_name}}']
+  category: ['{{bugfixes}}']
+  header: '{{terrain_group}}'
+  hasHeader: true
+  children:
+  - url: improved-tunnelers.terrain.enabled
+    name: improved-tunnelers-terrain-enabled
+    text: '{{terrain_enabled}}'
+    tooltip: '{{terrain_enabled_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+
+- display: GroupBox
+  category: ['{{balance_changes}}']
   header: '{{retarget_group}}'
-  text: '{{retarget_group_descr}}'
   hasHeader: true
   children:
   - url: improved-tunnelers.retarget.enabled
@@ -73,9 +80,8 @@ options:
       step: 1
 
 - display: GroupBox
-  category: ['{{module_name}}']
+  category: ['{{balance_changes}}']
   header: '{{targets_group}}'
-  text: '{{targets_group_descr}}'
   hasHeader: true
   children:
   - url: improved-tunnelers.targets.towers_and_gates
@@ -88,9 +94,8 @@ options:
       value: true
 
 - display: GroupBox
-  category: ['{{module_name}}']
+  category: ['{{balance_changes}}']
   header: '{{ui_group}}'
-  text: '{{ui_group_descr}}'
   hasHeader: true
   children:
   - url: improved-tunnelers.targets.under_buildings
@@ -175,9 +180,8 @@ options:
       value: true
 
 - display: GroupBox
-  category: ['{{module_name}}']
+  category: ['{{bugfixes}}']
   header: '{{stances_group}}'
-  text: '{{stances_group_descr}}'
   hasHeader: true
   children:
   - url: improved-tunnelers.stances.enabled
@@ -190,9 +194,8 @@ options:
       value: true
 
 - display: GroupBox
-  category: ['{{module_name}}']
+  category: ['{{ai}}', '{{improvements}}']
   header: '{{raids_group}}'
-  text: '{{raids_group_descr}}'
   hasHeader: true
   children:
   - url: improved-tunnelers.raids.enabled
@@ -205,9 +208,8 @@ options:
       value: true
 
 - display: GroupBox
-  category: ['{{module_name}}']
+  category: ['{{misc}}']
   header: '{{diagnostics_group}}'
-  text: '{{diagnostics_group_descr}}'
   hasHeader: true
   children:
   - url: improved-tunnelers.diagnostics.enabled

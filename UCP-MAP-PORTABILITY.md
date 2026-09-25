@@ -1,46 +1,25 @@
-# Map portability audit and correction — 1.7.1
+# Map portability and tunnel terrain ? 1.7.2
 
-A converted scenario must not need Improved Tunnelers merely to keep its terrain
-usable. A matching module/configuration remains necessary to resume its exact
-saved battle or replay, including pending damage, claims and denial timers.
+**1.7.1 has a reported terrain regression and is superseded by 1.7.2.**
+Its center-only assignment did not clear the full native digging footprint. The
+old synthetic terrain test was insufficient and has been replaced by execution of
+the actual native brush and coordinate helper. See [the terrain review](UCP-TERRAIN-RESET.md).
 
-## Defect and focused correction
+Completed tunnels now use the game's nine-tile brush before the native path is
+released. With the terrain fix enabled (the default), its cleanup restores original
+terrain height instead of subtracting two and forcing the center to zero. Existing
+native exclusions/path updates remain, with stairs and crenellations protected too.
+Positive digging is unchanged. The extra damage queue does not write terrain.
 
-Previously `collapse_target` queued a tunnel and cleared its native path length.
-`queue_step` later lowered the raised ground. Discarding private state for a `.map`,
-or opening without the module, could therefore abandon terrain repair. A full
-512-entry queue also stopped walking the remaining native path, leaving its ground
-behind. The unknown file section itself was not the problem.
+The native path remains available for cleanup even when the damage queue is full.
+Queue saturation can still drop extra building damage; it cannot stop this ground
+cleanup. Overlapping active tunnels share native terrain data: this is not a new
+per-tunnel terrain ownership system. No additional saved field or map section was added.
 
-`queue_fill` now restores **bare tunnel tiles** to their native base height and
-calls the already resolved native `updateWalkAndPathLayer` before the path is
-released. It visits the remaining path even when no more damage entries fit.
-Walls/buildings retain their native height/hit points; ground is never raised.
-`queue_step` handles delayed damage and no longer lowers neighbouring active
-tunnels. Damage allowance/order and ordinary save/replay restoration are unchanged.
-
-Visible difference: empty tunnel ground returns immediately, while building damage
-still progresses over ticks. Terrain/path work moves to completion; expensive
-building damage stays bounded per tick. No claim of zero performance impact is
-made without a game measurement. The pre-existing damage queue capacity is not
-expanded; saturation can still omit excess damage, but can no longer omit terrain
-repair. This is not a redesign of collapse scheduling or siege tactics.
-
-## Framework reuse and native world data
-
-- Reuse the existing `applyTunnelDamageAlongPathPlan` instruction-derived height
-  arrays, path owner and relative call target already validated in `init.lua`.
-  No additional AoB, hook, fixed runtime address, save projection or file converter.
-- The original game owns in-progress tunnel paths. Extended plans retain the
-  original packed nibble format and 800-step capacity; no new unit type/state or
-  module pointer is written into native unit records.
-- The selection field is native data too: original `UpdateTunneler` repairs a zero
-  value on its next update. Removing this module does not require its stance hook
-  to keep units permanently selectable. This is assembly inspection, not UI testing.
-- Map Extensions 1.1.5 `initializeOnMap` discards this provider's old battle state
-  and removes its identity requirement for `.map`, including if it is absent.
-  `.sav` and Recorder snapshot restoration stay strict. Other providers retain
-  their contracts. The owner branch and AIC/Recorder code are unchanged here.
+Exact saved-battle/replay continuation still requires matching packages/settings.
+Map Extensions 1.1.5 initializes fresh module state for renamed `.map` scenarios,
+including when this provider is absent. Other providers retain their own contracts.
+The native packed tunnel path remains game-owned, including in-progress tunnels.
 
 ## Reader compatibility evidence
 
@@ -71,23 +50,19 @@ this stock size limit. This module's snapshot is bounded to about 53 KB, but thi
 audit does not promise stock loading for oversized files or other mods' formats.
 Do not turn the section-dispatch result into an unlimited-format claim.
 
-## Checks and remaining acceptance
+## Verification and remaining acceptance
 
-- Existing four integration and four state tests pass.
-- Three FASM/Unicorn queue tests pass: deterministic damage, no deferred terrain
-  writes, and immediate repair with full/non-full queues and normal/quiet fills.
-  The 800-step bound, base-height preservation, wall/building protection and
-  volatile-register clobbering are exercised; native path/damage callees are stubs.
-- The six-fixture stock dispatch test above passes. Python stays in `bench/`,
-  outside the module allowlist. All nine module descriptions remain brief player
-  overviews; technical details and test instructions belong in the review/bundle.
+Sixteen focused module tests pass: five Lua/default/localization tests, four saved
+state tests, two deterministic damage-queue tests, four native terrain tests and
+one stock section-dispatch test. The native terrain and stock-dispatch tests cover
+six fixture files (two distinct SHC/Extreme code layouts). The terrain tests execute
+the game's brush and coordinate helper; downstream path calls are recorded stubs,
+not a full pathfinding or rendering simulation. Python remains outside the package.
 
-Still perform a short **single-player** acceptance check with a newly created
-1.7.1 save during delayed damage: copy/rename to `.map`; open, edit, save and start
-it with (a) module enabled, (b) Improved Tunnelers absent but Map Extensions 1.1.5
-present, and (c) both absent. Test completed bare tunnels and still-active tunnels;
-compare ordinary save/replay continuation separately with matching packages.
-Check walking/building on the completed tunnel footprint. No native editor,
-whole-game replay, new variant or frame-time acceptance is claimed here.
-Old-save migration remains out of scope; this does not repair ground abandoned
-in an already exported 1.7.0 scenario. Multiplayer testing remains player-owned.
+Still check a new single-player match in normal Crusader and Extreme: completed,
+overlapping and active tunnels; raised ground; walls and buildings; save/reload;
+matching-setup replay; and a copied save renamed to `.map`, edited and played both
+with and without the modules. Check walking/building and pauses at completion.
+Actual game/editor/replay, installed GUI and measured performance acceptance have
+not been performed for 1.7.2. No old-save migration is promised. Multiplayer testing
+remains player-owned. Stock size limits and other modules' requirements still apply.

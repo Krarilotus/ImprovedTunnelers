@@ -1,72 +1,54 @@
-denial_group: Gedikten sonra inşaat engeli
-denial_group_descr: Başarılı bir çöküşten sonra gedik hem oyuncu hem de yapay zekâ için geçici olarak
-  inşaata kapanır. Aynı yerdeki başka tüneller süreyi uzatır; boş zemindeki çöküş engel oluşturmaz. Oyunun
-  normal düşman yakınlığı yarıçapları kullanılır.
-denial_enabled: Yeni gedik çevresinde inşaatı engelle
-denial_enabled_tooltip: 'Kapalı: çöküşten sonra ek inşaat engeli uygulanmaz.'
-denial_message: İnşaatın neden reddedildiğini göster
-denial_message_tooltip: Text Resource Modifier, oyun dilinde zeminin kararsız olduğunu bildirir. Kullanılamıyorsa
-  özgün mesaj korunur.
-denial_seconds: Engel süresi (saniye)
-denial_seconds_tooltip: 'Normal hızdaki oyun süresi, oyun adımlarıyla sayılır. Başka bir tünel aynı süreyi
-  ekler. Varsayılan: 120.'
-retarget_group: Tünellerin güzergâhı
-retarget_group_descr: Aynı kuşatmanın tünelleri bir gedikte birleşip düşman kamp ateşine ortak bir yol
-  izler. İç kaleyi dolaşır, gerektiğinde yeni hedef seçerler. Her tünel bir oyun adımında en fazla bir
-  arama yapar.
-retarget_enabled: Tünelleri birleştir ve gedikten ilerlet
-retarget_enabled_tooltip: 'Kapalı: her tünel, yıkılmış olsa bile ilk hedefini korur.'
-retarget_range: Tünel menzili (kare)
-retarget_range_tooltip: 'Buluşma noktası ve sonraki hedefler için arama mesafesi. Uzak tüneller başka
-  grup oluşturur. Varsayılan: 80.'
-retarget_max: Tünel başına azami yönlendirme
-retarget_max_tooltip: 'Boş bir hedefe varınca bir tünelin kaç kez yönlendirilebileceği. Varsayılan: 10.'
-targets_under: Şehrin altından kaz
-targets_under_tooltip: Sıradan binaların altından geçilebilir. Hedefler sur ve tahkimatlardır; iç kale
-  dolaşılır.
-digging_unselectable: Kazan lağımcılar seçilmesin
-digging_unselectable_tooltip: Fare, seçim kutusu ve grup emirleri kazan lağımcıları atlar. Yüzeye çıktıklarında
-  yeniden seçilebilirler.
-digging_untargetable: Kazan lağımcılar hedef alınmasın
-digging_untargetable_tooltip: Oyunun normal hedef denetimi kazı yapan lağımcıları yok sayar.
-collapse_damage: Çöküş hasarı
-collapse_damage_tooltip: 'Hedefe oyunun normal hasar sistemiyle verilen hasar. Ayakta kalan binalar hasarı
-  korur. Varsayılan: 2500.'
-collapse_spread: Tünel yanındaki binalara hasar ver
-collapse_spread_tooltip: Sarsıntı yakındaki sıradan binaları etkiler, tahkimatları etkilemez. Doğrudan
-  altından geçilen tahkimatlar normal güzergâh hasarını alır.
-collapse_speed: Çöküş hızı (oyun adımı başına kare)
-collapse_speed_tooltip: 'Simülasyon adımı başına en fazla yeni tünel karesi ve hasar çağrısı. Varsayılan: 2. Yoğun alanlar daha uzun sürebilir; CPU hızı ve tanılama bu sınırı değiştirmez.'
-collapse_spread_radius: Sarsıntı menzili (kare)
-collapse_spread_radius_tooltip: 'Tünelin iki yanında sıradan binaların etkilendiği mesafe. Varsayılan:
-  2.'
-collapse_spread_damage: Tünel yanındaki hasar
-collapse_spread_damage_tooltip: 'Sarsıntı menzilindeki sıradan binaların aldığı hasar. Tahkimatlara ek
-  hasar verilmez. Varsayılan: 60.'
+denial_group: Gedikten sonra inşaat
+denial_enabled: İnşaat ve onarım bekleme süresi (tik)
+denial_enabled_tooltip: 'Gediğin çevresinde inşaatı ve duvar onarımını kısa süre engeller. Varsayılan: 100 tik (normal hızda
+  2,5 saniye). En fazla: 2400 tik. Yeni çökmeler süreyi uzatır. Kapatıldığında hemen yeniden inşa edilebilir.'
+denial_message: İnşaat engelini açıkla
+denial_message_tooltip: Bir gedik inşaatı engellediğinde mesaj gösterir.
+terrain_group: Tünel zemini
+terrain_enabled: Kazıdan sonra zemini düzelt
+terrain_enabled_tooltip: Biten tünellerin çevresindeki zemini eski yüksekliğine getirir. Varsayılan olarak açık. Kapalıyken
+  oyunun özgün temizliği kullanılır.
+retarget_group: Tünel yolları
+retarget_enabled: Gediklerden devam et
+retarget_enabled_tooltip: Tünelleri koordine eder ve önceki hedef yok olmuşsa yeni hedef arar.
+retarget_range: Arama menzili (kare)
+retarget_range_tooltip: 'Sonraki hedefin aranacağı uzaklık. Varsayılan: 80.'
+retarget_max: En fazla yeni hedef
+retarget_max_tooltip: 'Bir tünelin başka hedefe kaç kez devam edebileceği. Varsayılan: 10.'
 targets_group: Tünel hedefleri
-targets_group_descr: Kapıları ve kuleleri hedef listesine ekler. Sıradan binalar ve stok alanları hedef
-  olmaz. İç kale korunur.
-targets_enabled: Kuleleri ve kapıları hedeflemeye izin ver
-targets_enabled_tooltip: 'Kapalı: yalnızca duvarlar ve üç küçük kule için özgün hedef seçimi.'
-ui_group: Lağımcılar için saldırı emri
-ui_group_descr: Tünel düğmesini bir yuva kaydırıp normal saldırı düğmesini ekler. İki düğmenin resimleri,
-  yardımları ve emirleri korunur.
-ui_enabled: Tünel düğmesini taşı ve saldırı ekle
-ui_enabled_tooltip: 'Kapalı: oyunun özgün emir paneli korunur.'
-raids_group: Yapay zekâ baskınlarında lağımcılar
-raids_group_descr: RaidUnit1-8 içindeki lağımcılar gürzcü ve mızrakçı baskın grubuna katılır. Yüzeyde
-  savaşırlar; kuşatma tünelleri ayrıdır. Lağımcı loncası yoksa yapay zekâ sonraki baskın birimini seçer.
-raids_enabled: Yapay zekâ baskınlarında lağımcılara izin ver
-raids_enabled_tooltip: 'Kapalı: baskın lağımcılarının gruba atanmadığı özgün davranış.'
-stances_group: Duruşlar
-stances_group_descr: Boşta veya bekleyen lağımcılar gruplarının savunmacı ya da saldırgan duruşuna göre
-  tepki verir. Hareket ve kazı işleri kendi emirlerini korur. Tepki mesafeleri oyundan alınır.
-stances_enabled: Savunmacı ve saldırgan duruşlara uy
-stances_enabled_tooltip: 'Kapalı: duruşa bağlı otomatik tepki olmadan özgün davranış.'
+targets_enabled: Kuleleri ve kapıları hedefle
+targets_enabled_tooltip: Tüm kule ve kapıların tünel hedefi olmasına izin verir.
+ui_group: Tünelci komutları ve çökme hasarı
+targets_under: Şehir binalarının altından kaz
+targets_under_tooltip: Sıradan binaların altından geçmeye izin verir. Ana kale hariçtir.
+digging_unselectable: Kazı yapan tünelcileri seçimde atla
+digging_unselectable_tooltip: Asker seçimi veya grup emirleriyle kazının kesilmesini önler.
+digging_untargetable: Yeraltındaki tünelcileri koru
+digging_untargetable_tooltip: Kazı sırasında düşmanların tünelcileri hedeflemesini önler.
+collapse_damage: Hedefe verilen hasar
+collapse_damage_tooltip: 'Tünelin ucundaki duvara, kuleye veya kapıya verilen hasar. Varsayılan: 2500.'
+collapse_spread: Yakındaki binalara hasar ver
+collapse_spread_tooltip: Tünelin yanındaki sıradan binalara hasar verir. Yakındaki tahkimatlar hariçtir.
+collapse_speed: Tik başına çökme işi
+collapse_speed_tooltip: 'Tik başına yeni tünel karelerini ve hasar işlemlerini sınırlar. Düşük değer işi zamana yayar. Varsayılan:
+  2.'
+collapse_spread_radius: Hasar yarıçapı (kare)
+collapse_spread_radius_tooltip: 'Tünelin çevresindeki hasar menzili. Varsayılan: 2.'
+collapse_spread_damage: Yakındaki binalara verilen hasar
+collapse_spread_damage_tooltip: 'Menzildeki her sıradan binaya verilen hasar. Varsayılan: 60.'
+ui_enabled: «Buraya saldır» düğmesi ekle
+ui_enabled_tooltip: Kazı düğmesini korur ve ayrı bir bina saldırı komutu ekler.
+stances_group: Tünelci duruşları
+stances_enabled: Savunmacı ve saldırgan duruşları aç
+stances_enabled_tooltip: Boştaki tünelciler kazı veya hareket emirlerini kesmeden yakındaki düşmanlara tepki verir.
+raids_group: Yapay zekâ baskınlarında tünelciler
+raids_enabled: Baskın tünelcilerini aç
+raids_enabled_tooltip: Yapay zekânın baskın ayarlarında seçilen tünelciler baskın birliklerine katılır.
 diagnostics_group: Tanılama
-diagnostics_group_descr: Varış, arama ve inşaat olaylarını teknik ayrıntılarıyla ucp3.log dosyasına yazar.
-  Normal oyun için kapalı tutun.
-diagnostics_enabled: Tünel tanılamasını günlüğe yaz
-diagnostics_enabled_tooltip: 'Varsayılan: kapalı. Tünel olaylarını ve saniyede en fazla bir yakındaki
-  inşaat denemesini kaydeder.'
-module_name: Geliştirilmiş Lağımcılar
+diagnostics_enabled: Tanılama mesajları yaz
+diagnostics_enabled_tooltip: Sorunları araştırmak için tünel etkinliğini kaydeder. Varsayılan olarak kapalı.
+balance_changes: Balance Changes
+bugfixes: Bugfixes
+ai: AI
+improvements: Improvements
+misc: Miscellaneous
