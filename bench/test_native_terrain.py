@@ -135,6 +135,12 @@ class NativeTerrainTests(unittest.TestCase):
                 self.brush_at(5050,50,50,-2)
                 self.brush_at(5051,51,50,-2)
                 self.assertEqual(self.heights(), baseline)
+                # Many completed tunnels sharing the same tiles: cleanup must
+                # not depend on how many height increments accumulated or on
+                # collapse order. Native calls are sequential within each tick.
+                for i in range(100): self.brush_at(5050+i%3,50+i%3,50,1)
+                for i in reversed(range(100)): self.brush_at(5050+i%3,50+i%3,50,-2)
+                self.assertEqual(self.heights(), baseline)
                 # Every native exclusion, plus stairs/crenellations: never lower
                 # a wall's height/HP or terrain under a building.
                 for flag in (1,0x10,0x20,0x80,0x100,0x200,0x400,0x800,

@@ -60,6 +60,9 @@ six SHC/Extreme fixtures (two code layouts), with downstream path functions reco
 as stubs. It demonstrates the old center-only failure, full-footprint restoration,
 unchanged positive digging, native exclusions, wall/building protection, overlapping
 completed footprints, full-queue cleanup and rejection of modified/occupied bindings.
+One stress case raises 100 overlapping footprints over the same three centers,
+then cleans them in reverse order and verifies exact original heights. This does
+not simulate visible rubble or the renderer; those remain in-game checks.
 It also executes the native path walker used by destruction callers and verifies
 that raised neighbours of a building center are restored without changing the building.
 Actual game/editor/replay, installed GUI and frame-time checks remain pending.
