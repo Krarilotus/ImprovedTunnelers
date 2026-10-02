@@ -37,8 +37,7 @@ collapse_spread: Alagút melletti épületek sebzése
 collapse_spread_tooltip: A rengés a szomszédos közönséges épületeket sebzi, az erődítményeket nem. A közvetlenül
   aláásott erődítmények a szokásos útvonalsebzést kapják.
 collapse_speed: Omlás sebessége (mező ütemenként)
-collapse_speed_tooltip: 'Az alagút a célponttól a bejárat felé omlik össze. Kisebb érték lassabb omlást
-  jelent. Alapérték: 2.'
+collapse_speed_tooltip: 'Új alagútmezők és sebzésmeghívások maximális száma szimulációs ütemenként. Alapérték: 2. A sűrű területek tovább tarthatnak; a processzor sebessége és a diagnosztika nem módosítja a korlátot.'
 collapse_spread_radius: Rengés hatótávolsága (mező)
 collapse_spread_radius_tooltip: 'Az alagút két oldalán a közönséges épületeket érintő távolság. Alapérték:
   2.'

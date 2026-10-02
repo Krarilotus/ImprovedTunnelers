@@ -111,11 +111,7 @@ collapse_spread_tooltip: |
   game took off it, no more. Bare ground costs nothing either. Turn it off for the unmodified
   behaviour.
 collapse_speed: How fast a tunnel falls in (tiles a tick)
-collapse_speed_tooltip: |
-  A tunnel comes down from the far end back towards its entrance, this many tiles each tick,
-  instead of all at once the moment the tunneler arrives. Lower is slower and prettier -
-  at 2 a long tunnel takes a couple of seconds to fall in - and higher is closer to the way
-  the game did it, which was a single frame. Default 2.
+collapse_speed_tooltip: 'Maximum new tunnel tiles and damage calls per simulation tick. Default: 2. Dense areas may take longer; CPU speed and diagnostics do not change the work allowance.'
 collapse_spread_radius: How far the shaking reaches (tiles)
 collapse_spread_radius_tooltip: |
   How many tiles either side of the tunnel are shaken when it comes down. 1 is the tiles

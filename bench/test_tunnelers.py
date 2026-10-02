@@ -1319,8 +1319,10 @@ def scenario(extreme):
     h.run(tick, until=tick_on)
     check('and then it stops at nothing left', h.u32(f.queue_count), 0)
 
-    # A tick stops between two calls of the game's damage once its time is spent, and the
-    # next one carries on with the same tile where it left off.
+    # A tick stops between two calls of the game's damage once it has made as many as the
+    # speed setting allows, however long each of them takes, and the next one carries on
+    # with the same tile where it left off. Counting calls instead of CPU time makes every
+    # machine - and a replay - do the same work each tick.
     h.put32(f.spread_radius, 2)
     h.put32(f.spread_damage, 60)
     shaken = []
@@ -1339,10 +1341,11 @@ def scenario(extreme):
     h.put32(f.queue_count, 1)
     h.put32(f.control + 0x200, 0)
     h.run(tick, until=tick_on)
-    check('a tick whose time is spent stops after one call of the damage', len(shaken), 1)
+    check('a tick stops after as many calls of the damage as the speed allows',
+          len(shaken), h.u32(f.speed))
     check('  with the tile still part way through', h.u32(f.control + 0x200), 1)
     h.run(tick, until=tick_on)
-    check('  and the next tick carries on with it', len(shaken), 2)
+    check('  and the next tick carries on with it', len(shaken), 2 * h.u32(f.speed))
     h.stub(f.process_damage, 0, 32, record=shaken)
     h.cpu.clock_offset = 0
     for _ in range(40):

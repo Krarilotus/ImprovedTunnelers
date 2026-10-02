@@ -37,8 +37,7 @@ collapse_spread: Endommager les bâtiments voisins du tunnel
 collapse_spread_tooltip: Les secousses touchent les bâtiments ordinaires voisins, pas les fortifications.
   Les fortifications directement traversées gardent les dégâts normaux du trajet.
 collapse_speed: Vitesse d’effondrement (cases par tick)
-collapse_speed_tooltip: 'Le tunnel s’effondre de la cible vers l’entrée. Une valeur faible ralentit l’effondrement.
-  Par défaut : 2.'
+collapse_speed_tooltip: 'Nombre maximal de nouvelles cases de tunnel et d’appels de dégâts par tick de simulation. Par défaut : 2. Les zones denses peuvent prendre plus longtemps ; le processeur et les diagnostics ne changent pas cette limite.'
 collapse_spread_radius: Portée des secousses (cases)
 collapse_spread_radius_tooltip: 'Distance de part et d’autre du tunnel affectant les bâtiments ordinaires.
   Par défaut : 2.'

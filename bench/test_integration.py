@@ -44,6 +44,7 @@ class IntegrationTests(unittest.TestCase):
         for key in ('english', 'american', 'german', 'french', 'spanish', 'turkish',
                     'russian', 'hungarian', 'chinese', 'persian', 'italian', 'polish'):
             self.assertTrue(messages[key])
+            self.assertTrue(messages['missingSaveState']['english' if key == 'american' else key])
         self.assertNotIn('aiSwapper', yaml.safe_load((MODULE / 'definition.yml').read_text())['dependencies'])
 
     @unittest.skipUnless(os.environ.get('SHC_GAME_DIR'), 'licensed executable fixtures not supplied')

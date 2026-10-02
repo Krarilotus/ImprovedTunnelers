@@ -5,7 +5,7 @@ execute the injected code in the x86 interpreter.
 Nothing here is a stand-in for the module: the module's own init.lua and templates.lua are
 loaded unchanged.
 """
-import os, sys, struct
+import os, sys, struct, hashlib
 import lupa.lua54 as lupa
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -64,6 +64,7 @@ class Host:
         c[b'readSmallInteger'] = lambda a: struct.unpack('<h', self.m.read(int(a), 2))[0]
         c[b'readByte'] = lambda a: struct.unpack('<b', self.m.read(int(a), 1))[0]
         c[b'readBytes'] = lambda a, n: lua.table_from(list(self.m.read(int(a), int(n))))
+        c[b'readString'] = lambda a, n: self.m.read(int(a), int(n))
         # The game's own code and data sit in a read-only image in the running game: only
         # the writeCode* calls may touch them, and a plain write there is an access
         # violation the moment the module is enabled. The bench has no page protection of
@@ -100,8 +101,22 @@ class Host:
         hooks = lua.table()
         hooks[b'registerHookCallback'] = lambda phase, callback: self.after_init.append(callback)
         g[b'hooks'] = hooks
+        registry = lua.table()
+        g[b'modules'] = registry
+        g[b'allActiveExtensions'] = lua.table_from([self.to_lua({
+            'name': b'improved-tunnelers', 'path': MODULE.replace('\\', '/').encode()})])
+        g[b'sha'] = lua.table_from({b'sha256': lambda value: hashlib.sha256(value).hexdigest().encode()})
+        lua.execute(b'''
+          modules['map-extensions'] = {
+            requiredStateVersion = function() return 1 end,
+            requiredStateMapPolicyVersion = function() return 1 end,
+            getNativeSaveInterface = function() return {failureHandling=1, readContext=1} end,
+            registerSection = function(_, name, callbacks, options)
+              testState = {name=name, callbacks=callbacks, options=options}
+            end,
+          }
+        ''')
         if texts:
-            registry = lua.table()
             trm = lua.table()
             def set_text(_self, group, index, text):
                 self.texts.append((int(group), int(index), text.decode('utf-8')))

@@ -37,8 +37,7 @@ collapse_spread: Dañar edificios junto al túnel
 collapse_spread_tooltip: Los temblores afectan a edificios normales vecinos, no a fortificaciones. Las
   fortificaciones atravesadas directamente conservan el daño normal del recorrido.
 collapse_speed: Velocidad de derrumbe (casillas por tick)
-collapse_speed_tooltip: 'El túnel se derrumba desde el objetivo hacia la entrada. Un valor bajo es más
-  lento. Predeterminado: 2.'
+collapse_speed_tooltip: 'Máximo de nuevas casillas de túnel y llamadas de daño por tick de simulación. Predeterminado: 2. Las zonas densas pueden tardar más; la velocidad de la CPU y el diagnóstico no cambian este límite.'
 collapse_spread_radius: Alcance del temblor (casillas)
 collapse_spread_radius_tooltip: 'Distancia a ambos lados del túnel que afecta a edificios normales. Predeterminado:
   2.'

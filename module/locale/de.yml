@@ -38,8 +38,7 @@ collapse_spread: Gebäude neben dem Tunnel beschädigen
 collapse_spread_tooltip: Erschütterungen beschädigen gewöhnliche Gebäude neben dem Tunnel. Befestigungen
   sind ausgenommen; direkt untergrabene Befestigungen behalten den normalen Pfadschaden.
 collapse_speed: Einsturzgeschwindigkeit (Felder pro Tick)
-collapse_speed_tooltip: 'Der Tunnel stürzt vom Ziel zurück zum Eingang ein. Kleine Werte sind langsamer.
-  Standard: 2.'
+collapse_speed_tooltip: 'Maximale Anzahl neuer Tunnelfelder und Schadensaufrufe pro Simulationstick. Standard: 2. Dicht bebaute Bereiche können länger dauern; CPU-Geschwindigkeit und Diagnosemodus ändern dieses Limit nicht.'
 collapse_spread_radius: Reichweite der Erschütterung (Felder)
 collapse_spread_radius_tooltip: 'Abstand beiderseits des Tunnels, in dem gewöhnliche Gebäude Schaden erhalten.
   Standard: 2.'
