@@ -54,7 +54,8 @@ class IntegrationTests(unittest.TestCase):
         for key in ('english', 'american', 'german', 'french', 'spanish', 'turkish',
                     'russian', 'hungarian', 'chinese', 'persian', 'italian', 'polish'):
             self.assertTrue(messages[key])
-            self.assertTrue(messages['missingSaveState']['english' if key == 'american' else key])
+            for state in ('missingSaveState', 'incompatibleSaveState', 'damagedSaveState'):
+                self.assertTrue(messages[state]['english' if key == 'american' else key])
         self.assertNotIn('aiSwapper', yaml.safe_load((MODULE / 'definition.yml').read_text())['dependencies'])
 
     @unittest.skipUnless(os.environ.get('SHC_GAME_DIR'), 'licensed executable fixtures not supplied')
@@ -70,10 +71,12 @@ class IntegrationTests(unittest.TestCase):
                 control = h.mod[b'control']
                 self.assertEqual(h.m.u32(control),enabled)
                 self.assertEqual(h.m.u32(control+4),ticks)
+            # Ground restoration does not change what saved collapse work means,
+            # so the setting can differ between saving and loading.
             on = Host()
             off = Host(config={'terrain': {'enabled': False}})
-            self.assertNotEqual(on.lua.globals()[b'testState'][b'callbacks'][b'integrity'](),
-                                off.lua.globals()[b'testState'][b'callbacks'][b'integrity']())
+            self.assertEqual(on.lua.globals()[b'testState'][b'callbacks'][b'integrity'](),
+                             off.lua.globals()[b'testState'][b'callbacks'][b'integrity']())
 
     @unittest.skipUnless(os.environ.get('SHC_GAME_DIR'), 'licensed executable fixtures not supplied')
     def test_refusal_lifecycle_and_rejection(self):

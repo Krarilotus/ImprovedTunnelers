@@ -1201,6 +1201,7 @@ def scenario(extreme):
     def whole_tile():
         """The step does one neighbour a call; run it until the tile is done."""
         r = h.u32(f.spread_radius)
+        h.put32(f.control + 0x2CC, r)                        # STEP_RADIUS, as the tick sets it
         h.put32(f.control + 0x258, -r & 0xFFFFFFFF)          # STEP_DX
         h.put32(f.control + 0x25C, -r & 0xFFFFFFFF)          # STEP_DY
         h.put32(f.control + 0x200, 1)                        # STEP_ACTIVE

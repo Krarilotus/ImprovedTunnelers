@@ -10,4 +10,4 @@ dependencies:
   framework: ^3.0.7
   frontend: ^1.0.2
   textResourceModifier: ^0.3.0
-  map-extensions: ^1.1.5
+  map-extensions: ^1.1.6

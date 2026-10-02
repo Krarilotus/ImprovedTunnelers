@@ -43,7 +43,7 @@ class QueueTests(unittest.TestCase):
                 subprocess.run([os.environ['FASM_EXE'], str(asm), str(binary)], check=True, capture_output=True)
                 cls.code.append((origin, binary.read_bytes()))
 
-    def run_queue(self, clock_step, diagnostics, populated=True, resume=False):
+    def run_queue(self, clock_step, diagnostics, populated=True, resume=False, radius_after=None):
         v = self.v
         vm = Uc(UC_ARCH_X86, UC_MODE_32)
         vm.mem_map(0x100000, 0x20000)
@@ -82,7 +82,8 @@ class QueueTests(unittest.TestCase):
                 uc.reg_write(UC_X86_REG_EDX, (clock >> 32) & 0xFFFFFFFF)
                 uc.reg_write(UC_X86_REG_EIP, address+2)
         vm.hook_add(UC_HOOK_CODE, instruction)
-        state_names = ('QUEUE_COUNT','STEP_ACTIVE','STEP_TILE','STEP_X','STEP_Y','STEP_FLAGS','STEP_DX','STEP_DY')
+        state_names = ('QUEUE_COUNT','STEP_ACTIVE','STEP_TILE','STEP_X','STEP_Y','STEP_FLAGS','STEP_DX','STEP_DY',
+                       'STEP_RADIUS')
         for tick in range(40):
             before = len(damage)
             vm.reg_write(UC_X86_REG_ESP, 0x70FFF0)
@@ -98,14 +99,25 @@ class QueueTests(unittest.TestCase):
                 # only queue + STEP_* survive, diagnostic/scratch values do not.
                 for name in names_for_scratch(v): word(v[name], 0)
                 for name, value in zip(state_names, current): word(v[name+'_ADDRESS'], value)
+                # The loading setup may use another spread radius.
+                if radius_after is not None: word(v['RADIUS_ADDRESS'], radius_after)
             if current[:2] == (0, 0): break
         else: self.fail('queue failed to drain')
-        self.assertEqual(len(damage), 50 if populated else 0)
+        if radius_after is None:
+            self.assertEqual(len(damage), 50 if populated else 0)
         self.assertEqual(len(walks), 2)
         # Deferred damage no longer owns terrain repair or lowers neighbouring
         # active tunnels. Discarding this queue cannot strand a terrain change.
         self.assertEqual(bytes(vm.mem_read(v['LIVE_HEIGHT_ADDRESS']+4*400+4, 1)), b'\x02')
         return frames
+
+    def test_changed_radius_applies_from_next_tile(self):
+        expected = self.run_queue(100, 0)[-1][1]
+        damage = self.run_queue(100, 0, resume=True, radius_after=0)[-1][1]
+        # The partial tile at (8, 8) still completes its 5x5 spread; the next
+        # queued tile at (4, 4) uses the loaded radius 0: only its own tile.
+        self.assertEqual(damage[:25], expected[:25])
+        self.assertEqual([call[1:3] for call in damage[25:]], [(4, 4)])
 
     def test_clock_diagnostics_and_partial_work(self):
         expected = self.run_queue(100, 0)
@@ -117,6 +129,84 @@ class QueueTests(unittest.TestCase):
 
     def test_empty_tiles_keep_tile_limit(self):
         self.assertEqual(len(self.run_queue(10_000_000, 1, populated=False)), 1)
+
+
+@unittest.skipUnless(os.environ.get('FASM_EXE'), 'FASM_EXE not supplied')
+class StanceSelectionTests(unittest.TestCase):
+    def test_switching_off_returns_hidden_tunnelers_after_digging(self):
+        script = LuaRuntime().execute((MODULE/'templates.lua').read_text(encoding='utf-8'))['stance']
+        names = sorted(set(re.findall(r'\b[A-Z][A-Z0-9_]+\b', script)))
+        v = {name: 0x200000+i*4 for i, name in enumerate(names)}
+        v.update(UNIT_STATE=0x300000, UNIT_SELECTABLE=0x300010, UNIT_LOOKING_AROUND=0x300020,
+                 RETURN_ADDRESS=0x111000)
+        with tempfile.TemporaryDirectory() as temp:
+            asm, binary = Path(temp)/'stance.asm', Path(temp)/'stance.bin'
+            asm.write_text('use32\norg 0x100000\n'+''.join(f'{k}=0x{value:X}\n' for k, value in v.items())
+                           + script, encoding='ascii')
+            subprocess.run([os.environ['FASM_EXE'], str(asm), str(binary)], check=True, capture_output=True)
+            code = binary.read_bytes()
+        unit = 2*1168  # The current unit's fields, as UNIT_* + index * 1168.
+        for hide in (1, 0):
+            for state in (3, 4, 8, 9, 0, 1, 5, 0x65):
+                for before in (0, 1, 7):
+                    vm = Uc(UC_ARCH_X86, UC_MODE_32)
+                    vm.mem_map(0x100000, 0x20000)
+                    vm.mem_map(0x200000, 0x200000)
+                    vm.mem_map(0x700000, 0x10000)
+                    vm.mem_write(0x100000, code)
+                    vm.mem_write(v['CURRENT_UNIT_ADDRESS'], struct.pack('<I', 2))
+                    vm.mem_write(v['HIDE_ENABLED_ADDRESS'], struct.pack('<I', hide))
+                    vm.mem_write(v['UNIT_STATE']+unit, struct.pack('<H', state))
+                    vm.mem_write(v['UNIT_SELECTABLE']+unit, struct.pack('<H', before))
+                    vm.reg_write(UC_X86_REG_ESP, 0x70FFF0)
+                    vm.reg_write(UC_X86_REG_ECX, 0x12345678)
+                    vm.emu_start(0x100000, v['RETURN_ADDRESS'], count=200)
+                    after = struct.unpack('<H', vm.mem_read(v['UNIT_SELECTABLE']+unit, 2))[0]
+                    digging = state in (3, 4, 8, 9)
+                    # ON is unchanged. OFF leaves digging tunnelers and the game's own
+                    # non-zero values alone, and only shows one that ON had hidden.
+                    want = (0 if digging else 1) if hide else (before if digging or before else 1)
+                    with self.subTest(hide=hide, state=state, before=before):
+                        self.assertEqual(after, want)
+                        self.assertEqual(vm.reg_read(UC_X86_REG_EIP), v['RETURN_ADDRESS'])
+                        self.assertEqual(struct.unpack('<I', vm.mem_read(0x70FFF0-4, 4))[0], 0x12345678)
+
+
+@unittest.skipUnless(os.environ.get('FASM_EXE') and os.environ.get('SHC_GAME_DIR'),
+                     'FASM_EXE and licensed fixtures required')
+class InitPayloadTests(unittest.TestCase):
+    def test_init_assembles_collapse_payloads_with_their_own_radius(self):
+        import json
+        from unittest.mock import patch
+        import harness
+        from shc import Exe
+        root = Path(os.environ['SHC_GAME_DIR'])
+        fixtures = [root/'Stronghold Crusader.exe', root/'Stronghold_Crusader_Extreme.exe']
+        if os.environ.get('SHC_FIXTURE_MATRIX'):
+            fixtures += [Path(os.environ['SHC_WORKSPACE'])/item['file'] for item in
+                         json.loads(Path(os.environ['SHC_FIXTURE_MATRIX']).read_text())]
+        for fixture in fixtures:
+            seen = {}
+            def assemble(host, script, values):
+                script = script.decode()
+                values = {k.decode(): int(v) & 0xFFFFFFFF for k, v in values.items()}
+                name = 'tick' if 'tick_next:' in script else 'step' if 'step_next:' in script else None
+                if name is None: return host.allocate(16)
+                with tempfile.TemporaryDirectory() as temp:
+                    asm, binary = Path(temp)/'payload.asm', Path(temp)/'payload.bin'
+                    asm.write_text('use32\norg 0x10000000\n' + ''.join(
+                        f'{k}=0x{value:X}\n' for k, value in values.items()) + script, encoding='ascii')
+                    # FASM refuses any symbol init.lua does not supply.
+                    subprocess.run([os.environ['FASM_EXE'], str(asm), str(binary)], check=True, capture_output=True)
+                seen[name] = values
+                return host.allocate(16)
+            with self.subTest(fixture=fixture.name), patch.object(harness, 'exe', return_value=Exe(str(fixture))), \
+                    patch.object(harness.Host, 'allocate_assembly', assemble):
+                control = harness.Host().mod[b'control']
+                self.assertEqual(seen['tick']['STEP_RADIUS_ADDRESS'], control + 0x2CC)
+                self.assertEqual(seen['tick']['RADIUS_ADDRESS'], control + 0xC4)
+                self.assertEqual(seen['step']['STEP_RADIUS_ADDRESS'], control + 0x2CC)
+                self.assertNotIn('RADIUS_ADDRESS', seen['step'])
 
 
 def names_for_scratch(values):
