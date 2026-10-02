@@ -1211,11 +1211,14 @@ def scenario(extreme):
         raise AssertionError('the step never finished its tile')
 
     fall_in()
-    check('the ground goes back to the height the map gives it',
-          h.m.read(f.live_height + stile, 1)[0], 8)
-    check('  and so does the ground around it',
+    # The ground is no longer put back here: the game's own cleanup brush restores the
+    # whole tunnel footprint when the tunnel is filled, before this queue runs (that
+    # brush is executed in bench/test_native_terrain.py). This step only shakes.
+    check('the step leaves the ground to the native cleanup',
+          h.m.read(f.live_height + stile, 1)[0], 12)
+    check('  around it as well',
           [h.m.read(f.live_height + 99 * 400 + 201, 1)[0],
-           h.m.read(f.live_height + 101 * 400 + 199, 1)[0]], [8, 8])
+           h.m.read(f.live_height + 101 * 400 + 199, 1)[0]], [12, 12])
     check('  while a cliff is left alone', h.m.read(f.live_height + 99 * 400 + 199, 1)[0], 20)
     check('a workshop within reach is shaken', len(hits), 1)
     check('  for the set amount', hits[0][1][3], h.u32(f.spread_damage))
@@ -1252,8 +1255,8 @@ def scenario(extreme):
     h.put8(f.live_height + wall_tile, 12)
     h.put8(f.base_height + wall_tile, 8)
     fall_in()
-    check('  while bare ground beside them is put back',
-          h.m.read(f.live_height + wall_tile, 1)[0], 8)
+    check('  and bare ground beside them too',
+          h.m.read(f.live_height + wall_tile, 1)[0], 12)
 
     print('  and what the shaking leaves standing')
     h.put16(f.building_tiles + 2 * workshop_tile, 0)
@@ -1294,7 +1297,7 @@ def scenario(extreme):
     hits.clear()
     h.put32(f.step_flags, 1 | (5 << 8))                     # a quiet fill
     whole_tile()
-    check('a quiet fill puts the ground back', h.m.read(f.live_height + stile, 1)[0], 8)
+    check('a quiet fill leaves the ground to the cleanup too', h.m.read(f.live_height + stile, 1)[0], 12)
     check('  and damages nothing', len(hits), 0)
 
     print(' and the tick that works through it')

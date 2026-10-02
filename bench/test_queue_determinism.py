@@ -102,6 +102,9 @@ class QueueTests(unittest.TestCase):
         else: self.fail('queue failed to drain')
         self.assertEqual(len(damage), 50 if populated else 0)
         self.assertEqual(len(walks), 2)
+        # Deferred damage no longer owns terrain repair or lowers neighbouring
+        # active tunnels. Discarding this queue cannot strand a terrain change.
+        self.assertEqual(bytes(vm.mem_read(v['LIVE_HEIGHT_ADDRESS']+4*400+4, 1)), b'\x02')
         return frames
 
     def test_clock_diagnostics_and_partial_work(self):

@@ -2189,11 +2189,43 @@ jmp RETURN_ADDRESS
 -- tunnel apart a few tiles at a time instead, starting at the target and running back to
 -- the entrance.
 --
--- The first walks a tunneler's path plan and writes each tile into a queue: where it is,
--- and who is bringing it down. Nothing else happens here, so a collapse costs no more than
--- a few dozen writes.
+-- The first walks the native path before its owner releases it. Restore bare ground and
+-- its native walk layer immediately: an optional damage queue must never be the only
+-- owner of terrain repair when a save is used as a map without this module. Walls and
+-- buildings keep their native height/hit points. Expensive damage remains queued.
 -- The plan it walks is the whole tunnel from its entrance, however many times the tunnel was
 -- sent on along the way - extend_plan keeps it so.
+-- Correct only the native -2 cleanup mode. The native brush still chooses tiles,
+-- excludes unsuitable terrain/buildings and updates path linkages/walkability.
+-- Positive digging executes the displaced instruction and original code unchanged.
+local restore_tunnel_height = [[
+cmp dword [esp+0x20], -2
+jne restore_original
+test ecx, WALL_FAMILY
+jnz SKIP_ADDRESS
+mov cl, byte [eax+esi+0x2B3440]
+mov byte [eax+esi+0x29FA30], cl
+jmp UPDATE_ADDRESS
+restore_original:
+mov cl, byte [eax+esi+0x29FA30]
+jmp RETURN_ADDRESS
+]]
+
+-- Run terrain cleanup for every path position, including a center under a
+-- building. Preserve the unit-state receiver for the native path advance.
+local restore_tunnel_path_tile = [[
+push ecx
+push -2
+push edi
+push ebp
+push esi
+mov ecx, TILE_MAP_STATE_ADDRESS
+call TERRAIN_BRUSH_ADDRESS
+pop ecx
+test dword [esi*4+TILE_FLAGS_ADDRESS], 0x20000081
+jmp RETURN_ADDRESS
+]]
+
 local queue_fill = [[
 mov eax, [FILL_UNIT_ADDRESS]
 imul eax, eax, 1168
@@ -2209,9 +2241,32 @@ movsx ecx, word [eax+UNIT_LADDER_Y]
 mov [FILL_Y_ADDRESS], ecx
 mov dword [FILL_STEP_ADDRESS], 0
 fill_loop:
+mov ecx, [FILL_TILE_ADDRESS]
+if TERRAIN_FIX = 0
+test dword [ecx*4+TILE_FLAGS_ADDRESS], 0x20000081
+jnz fill_ground_done
+cmp word [ecx*2+BUILDING_TILE_ADDRESS], 0
+jne fill_ground_done
+cmp byte [ecx+LIVE_HEIGHT_ADDRESS], 16
+jb fill_ground
+cmp byte [ecx+BASE_HEIGHT_ADDRESS], 16
+jae fill_ground_done
+end if
+fill_ground:
+push -2
+push dword [FILL_Y_ADDRESS]
+push dword [FILL_X_ADDRESS]
+push ecx
+mov ecx, TILE_MAP_STATE_ADDRESS
+call TERRAIN_BRUSH_ADDRESS
+if TERRAIN_FIX = 0
+  mov ecx, [FILL_TILE_ADDRESS]
+  mov byte [ecx+LIVE_HEIGHT_ADDRESS], 0
+end if
+fill_ground_done:
 mov ecx, [QUEUE_COUNT_ADDRESS]
 cmp ecx, QUEUE_MAX
-jae fill_done
+jae fill_advance
 shl ecx, 4
 add ecx, QUEUE_ADDRESS
 mov edx, [FILL_TILE_ADDRESS]
@@ -2223,6 +2278,7 @@ mov [ecx+8], edx
 mov edx, [FILL_FLAGS_ADDRESS]
 mov [ecx+12], edx
 add dword [QUEUE_COUNT_ADDRESS], 1
+fill_advance:
 mov eax, [FILL_UNIT_ADDRESS]
 imul eax, eax, 1168
 mov ecx, [FILL_STEP_ADDRESS]
@@ -2273,11 +2329,9 @@ ret
 -- nothing stands; a wall or a building on the tile is left entirely to the game, which
 -- resets the height itself the moment the thing is destroyed.
 --
--- One tile of that queue: the ground it and its neighbours stand on goes back to the height
--- the map itself says they should be - the game keeps that in a second map, which is what
--- its own "put this tile back" does, and it is why a tunnel over raised ground must never
--- simply be flattened to nothing. Then, unless this is a tunnel being quietly filled in
--- behind a tunneler that is still digging, whatever stands within reach is shaken.
+-- Terrain repair now belongs to queue_fill, before the native path is released. This
+-- queue only shakes buildings; it never writes terrain. The native brush handles
+-- the tunnel footprint at completion. Quiet fills do no damage.
 --
 -- One neighbour per call, at STEP_DX / STEP_DY, which it then moves on; when the last one
 -- is done STEP_ACTIVE goes to 0. The game's damage is the dear part of a collapse on a real
@@ -2308,15 +2362,6 @@ add ecx, eax
 mov [STEP_THIS_X_ADDRESS], eax
 mov [STEP_THIS_Y_ADDRESS], edx
 mov [STEP_THIS_TILE_ADDRESS], ecx
-test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
-jnz step_ground_done
-cmp word [ecx*2+BUILDING_TILE_ADDRESS], 0
-jne step_ground_done
-mov al, byte [ecx+BASE_HEIGHT_ADDRESS]
-cmp al, byte [ecx+LIVE_HEIGHT_ADDRESS]
-jae step_ground_done
-mov byte [ecx+LIVE_HEIGHT_ADDRESS], al
-step_ground_done:
 test dword [STEP_FLAGS_ADDRESS], 1
 jnz step_next
 mov eax, [SPREAD_DAMAGE_ADDRESS]
@@ -2799,6 +2844,8 @@ return {
   tunnel_accept = tunnel_accept,
   damage_family = damage_family,
   collapse_target = collapse_target,
+  restore_tunnel_height = restore_tunnel_height,
+  restore_tunnel_path_tile = restore_tunnel_path_tile,
   queue_fill = queue_fill,
   queue_step = queue_step,
   queue_tick = queue_tick,
