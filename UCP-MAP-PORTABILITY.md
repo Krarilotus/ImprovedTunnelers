@@ -16,7 +16,7 @@ Queue saturation can still drop extra building damage; it cannot stop this groun
 cleanup. Overlapping active tunnels share native terrain data: this is not a new
 per-tunnel terrain ownership system. No additional saved field or map section was added.
 
-Exact saved-battle/replay continuation still requires matching packages/settings.
+Saved battles need matching packages; replays also need matching settings.
 Map Extensions 1.1.5 initializes fresh module state for renamed `.map` scenarios,
 including when this provider is absent. Other providers retain their own contracts.
 The native packed tunnel path remains game-owned, including in-progress tunnels.

@@ -1,7 +1,8 @@
 # Replay and save-state correction (1.7.0; terrain follow-up 1.7.1)
 
-Requires UCP 3.0.7 and Map Extensions 1.1.5 to run this module. Saved matches need
-matching module content/settings. A scenario must remain usable without it:
+Requires UCP 3.0.7 and Map Extensions 1.1.6 (1.7.3). Saved matches need matching
+module content; since 1.7.3 settings may differ ([UCP-SAVE-SETTINGS.md](UCP-SAVE-SETTINGS.md)).
+A scenario must remain usable without it:
 [the 1.7.1 portability audit](UCP-MAP-PORTABILITY.md) verifies stock unknown-section
 dispatch and moves terrain repair out of private queued state. Native editor
 acceptance remains pending; stock file-size limits and other providers still apply.
@@ -47,8 +48,8 @@ clears previous-world data; loading a save restores it even if the tick moves
 forward. Recorder boundary capture copies at most about 53 KB; hashing is deferred
 until verification requests it, not performed each simulation tick.
 
-**Older-save migration is out of scope.** Keep exactly the same module packages/settings for a saved match
-or recording; this version does not promise playback of recordings made with
+**Older-save migration is out of scope.** Keep exactly the same module packages for a saved
+match, and the same packages/settings for a recording (Recorder freezes them); this version does not promise playback of recordings made with
 the former CPU-timed scheduler. Default-on settings and existing categories stay
 the same. All nine locales are retained; module descriptions are brief player
 overviews, with technical details kept in the review and test instructions.
@@ -77,7 +78,7 @@ keep their existing contracts. No extra editor or file-load hook is introduced.
 - Bounded capture measured about 0.09 ms per callback in the local mocked host
   over 1,000 calls. This is a codec check, not in-game performance acceptance.
 
-Run `test_integration.py`, `test_replay_state.py` and `test_queue_determinism.py`
+Run `test_integration.py`, `test_replay_state.py`, `test_save_settings.py` and `test_queue_determinism.py`
 with unittest from `bench/`. Supply `SHC_GAME_DIR`, `FASM_EXE`, `UCP_MAP_EXTENSIONS`
 and `UCP_FRAMEWORK_PROXIES` as described in those files. Tests stay outside `module/`.
 
