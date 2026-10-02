@@ -18,7 +18,7 @@ from x86emu_t import Memory, CPU, MASK
 from host import fasm, ucp_source
 
 MODULE = os.environ.get('TUNNELERS_MODULE',
-                        r'H:\shc-modding\improved-tunnelers\module')
+                        os.path.join(HERE, '..', 'module'))
 VAN_PATH = G + r'\Stronghold Crusader.exe'
 EXT_PATH = G + r'\Stronghold_Crusader_Extreme.exe'
 HEAP = 0x60000000
@@ -34,7 +34,8 @@ def exe(path):
 
 
 class Host:
-    def __init__(self, extreme=False, config=None, texts=True):
+    def __init__(self, extreme=False, config=None, texts=True, language='English',
+                 accept_text=True, after_init=True):
         self.E = exe(EXT_PATH if extreme else VAN_PATH)
         self.extreme = extreme
         self.m = Memory(self.image)
@@ -95,17 +96,26 @@ class Host:
 
         lua.execute(('package.path = [[%s\\?.lua;]] .. package.path' % MODULE).encode('mbcs'))
         self.texts = []
+        self.after_init = []
+        hooks = lua.table()
+        hooks[b'registerHookCallback'] = lambda phase, callback: self.after_init.append(callback)
+        g[b'hooks'] = hooks
         if texts:
             registry = lua.table()
             trm = lua.table()
-            trm[b'SetText'] = lambda _self, group, index, text: self.texts.append(
-                (int(group), int(index),
-                 text.decode('latin-1') if isinstance(text, bytes) else text))
+            def set_text(_self, group, index, text):
+                self.texts.append((int(group), int(index), text.decode('utf-8')))
+                return accept_text
+            trm[b'SetText'] = set_text
+            trm[b'GetLanguage'] = lambda _self: language.encode('utf-8') if language else None
             registry[b'textResourceModifier'] = trm
             g[b'modules'] = registry
 
         self.mod = lua.eval(b'dofile')((MODULE + r'\init.lua').encode('mbcs'))
         self.mod[b'enable'](self.mod, self.to_lua(config or {}))
+        if after_init:
+            for callback in self.after_init:
+                callback()
 
     # ---- lua helpers ----------------------------------------------------------------
     def to_lua(self, value):

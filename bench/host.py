@@ -1,7 +1,7 @@
 """Run a resource-grid-overlay build inside lupa with core mocked onto an emulated 32 bit
 address space, so its assembly and the game's own drawing code really execute."""
 import re, struct, hashlib, sys
-import lupa, keystone
+import lupa
 sys.path.insert(0, r'C:\Users\MONSTE~1\AppData\Local\Temp\shcw')
 sys.path.insert(0, r'C:\Users\MONSTE~1\AppData\Local\Temp\shcw\perf')
 from shc import Exe, G
@@ -35,9 +35,6 @@ SURFACE_BYTES = 4056 * 2 * 4056
 HEAP = 0x60000000
 STACK_TOP = 0x70100000
 SENTINEL = 0x7FFFFFF0
-
-KS = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_32)
-
 
 def fasm_to_keystone(script, values):
     """What core.assemble feeds FASM, turned into something keystone reads the same way."""
@@ -214,8 +211,10 @@ class Host:
             if len(code) != size:
                 raise AssertionError('fasm size differs between passes')
         else:
+            import keystone
+            assembler = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_32)
             address = self.allocate(0x4000)
-            code, _ = KS.asm(fasm_to_keystone(script, values), address)
+            code, _ = assembler.asm(fasm_to_keystone(script, values), address)
             code = bytes(code)
             self.heap = address + len(code) + 0x20
         self.m.write(address, code)

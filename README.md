@@ -4,7 +4,8 @@ A UCP3 module for Stronghold Crusader and Stronghold Crusader Extreme. Tunnels d
 same castle meet at one piece of wall, open it, and then work their way inwards towards the
 enemy's camp.
 
-What the module does, in plain English, is in `module/locale/description-en.md`.
+What the module does, in plain English, is in `FEATURES.md`. The short overview the UCP
+launcher shows is in `module/description.md` and `module/locale/description-*.md`.
 
 ## What is in here
 
