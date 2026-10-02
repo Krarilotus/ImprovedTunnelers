@@ -36,3 +36,18 @@ Every version that was published has a tag, so any build can be brought back wit
 `bench/` is a snapshot of the working copies under `%TEMP%\shcw`; it needs `lupa`,
 `keystone`, the two game exes and UCP's `fasm.dll`, and it still runs from that temp
 directory. The copy here is so the harness and its 500-odd assertions survive a temp wipe.
+
+The newer bench files are ordinary `unittest` tests, run from `bench/` with
+`python -m unittest test_integration test_queue_determinism test_replay_state test_native_terrain test_map_portability test_save_settings`.
+They need `lupa`, `unicorn`, `pefile`, `capstone` and `pyyaml`, and these variables:
+`SHC_GAME_DIR` (folder with both exes) and `FASM_EXE` (the FASM assembler). The save
+tests also need `UCP_MAP_EXTENSIONS` (a Map Extensions 1.1.6 checkout) and
+`UCP_FRAMEWORK_PROXIES` (the UCP framework's `extensions/proxies.lua`). A test skips
+itself when its files are not supplied.
+
+## UCP integration
+
+The module needs UCP 3.0.7, textResourceModifier 0.3.0 and Map Extensions 1.1.6.
+Map Extensions saves pending collapse work with the game; loading a `.map`, including
+a save renamed to `.map`, starts with fresh tunneler state. Options are in the
+launcher's usual categories, in the nine languages of `module/locale`.

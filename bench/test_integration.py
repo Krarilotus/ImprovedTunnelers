@@ -22,6 +22,8 @@ class IntegrationTests(unittest.TestCase):
     def test_locales_manifest_and_defaults(self):
         options = yaml.safe_load((MODULE / 'options.yml').read_text(encoding='utf-8'))
         keys = set(re.findall(r'{{(.*?)}}', (MODULE / 'options.yml').read_text()))
+        # Launcher discovery tags are labelled from the same catalogs.
+        keys |= {'tags.' + tag for tag in yaml.safe_load((MODULE / 'definition.yml').read_text())['tags']}
         for lang in LANGUAGES:
             catalog = yaml.safe_load((MODULE / f'locale/{lang}.yml').read_text(encoding='utf-8'))
             self.assertEqual(keys, catalog.keys())
