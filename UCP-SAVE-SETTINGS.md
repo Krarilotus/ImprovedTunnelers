@@ -62,16 +62,18 @@ Every saved field means the same thing under any setting:
 - **Skip digging tunnelers in selections** writes the native unit field +0x2A4, which
   the save keeps. Native `UpdateTunneler` only copies a global into it when it is zero
   (SHC 0x54E6FB, Extreme 0x54EB1B). Match setup resets that global to zero, and the
-  feature depends on it staying zero. So a tunneler hidden underground when the game
-  was saved could otherwise remain unselectable after loading with the switch off.
+  feature depends on it staying zero. Unlike other unit updates, `UpdateTunneler`
+  never sets it to 1 itself. So, by code reading, a tunneler hidden underground when
+  the game was saved could stay unselectable after loading with the switch off. The
+  change below is a precaution; this case was not observed in game.
   With the switch off, the stance hook now does what it does when on, once a
   tunneler is no longer digging: it sets a zero field to 1. Digging tunnelers and
   non-zero native values are left alone. Behavior with the switch on is unchanged.
 - **Protect underground tunnelers** is a targeting filter and stores nothing.
 
-Pre-existing, unchanged: the "spread to nearby tiles" switch is written to the
-control block, but no payload reads it, in upstream `main` as well. Radius and
-spread damage still decide the spread. This needs the author's decision; it is not
+Question for the author, unchanged here: by code reading, no native payload reads
+the "Damage nearby buildings" switch in any tagged version from 1.4.7 to 1.6.4;
+radius and spread damage decide the spread. This was not tested in game and is not
 part of this save fix.
 
 ## Rejections
