@@ -9,3 +9,4 @@ files:
 - src: state.lua
 - src: description.md
 - src: locale
+- src: CREDITS.md

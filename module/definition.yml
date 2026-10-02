@@ -1,13 +1,18 @@
 name: improved-tunnelers
 display-name: Improved Tunnelers
 type: module
-version: 1.7.3
+version: 1.7.4
 author: Monsterfish
 meta:
   version: 1.0.0
-game: [SHC==1.41, SHCE==1.41]
+game:
+- SHC==1.41
+- SHCE==1.41
 dependencies:
   framework: ^3.0.7
   frontend: ^1.0.2
   textResourceModifier: ^0.3.0
   map-extensions: ^1.1.6
+tags:
+- behavior
+- bugfixes
