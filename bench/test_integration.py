@@ -24,7 +24,9 @@ class IntegrationTests(unittest.TestCase):
         keys = set(re.findall(r'{{(.*?)}}', (MODULE / 'options.yml').read_text()))
         for lang in LANGUAGES:
             catalog = yaml.safe_load((MODULE / f'locale/{lang}.yml').read_text(encoding='utf-8'))
-            self.assertEqual(keys, catalog.keys())
+            self.assertTrue(keys <= catalog.keys())
+            definition = yaml.safe_load((MODULE / 'definition.yml').read_text(encoding='utf-8'))
+            self.assertTrue({f'tags.{tag}' for tag in definition['tags']} <= catalog.keys())
             self.assertTrue(all(isinstance(v, str) and v.strip() for v in catalog.values()))
             self.assertTrue((MODULE / f'locale/description-{lang}.md').read_text(encoding='utf-8').strip())
         self.assertEqual((MODULE / 'description.md').read_bytes(), (MODULE / 'locale/description-en.md').read_bytes())
