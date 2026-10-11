@@ -680,6 +680,7 @@ C.STEP_DAMAGE = 0x2A8             -- what this one tile is taking
 C.FAMILY_DAMAGE = 0x2C4           -- the damage running now is this module's, so stairs
                                   -- and crenellations take it too
 C.FAMILY_READY = 0x2C8            -- ... and the widening that lets them is in
+C.STEP_RADIUS = 0x2CC             -- the spread radius the tile being taken apart began with
 C.QUEUE = 0x2E8
 C.ZONES = C.QUEUE + QUEUE_MAX * 16
 C.RECORDS = C.ZONES + ZONE_COUNT * ZONE_SIZE
@@ -1184,7 +1185,7 @@ return {
           STEP_DAMAGE_ADDRESS = control + C.STEP_DAMAGE,
           BUILDING_STRIDE = SEARCH_STRIDE,
           BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
-          RADIUS_ADDRESS = control + C.SPREAD_RADIUS,
+          STEP_RADIUS_ADDRESS = control + C.STEP_RADIUS,
           STEP_X_ADDRESS = control + C.STEP_X,
           STEP_Y_ADDRESS = control + C.STEP_Y,
           STEP_FLAGS_ADDRESS = control + C.STEP_FLAGS,
@@ -1223,6 +1224,7 @@ return {
           STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
           DAMAGE_LEFT_ADDRESS = control + C.DAMAGE_LEFT,
           RADIUS_ADDRESS = control + C.SPREAD_RADIUS,
+          STEP_RADIUS_ADDRESS = control + C.STEP_RADIUS,
           STEP_DX_ADDRESS = control + C.STEP_DX,
           STEP_DY_ADDRESS = control + C.STEP_DY,
           STEP_THIS_TILE_ADDRESS = control + C.STEP_THIS_TILE,
@@ -2004,7 +2006,7 @@ return {
       pathMax = ROUTE.pathMax, pathOffset = ROUTE.pathOffset,
     }, table.concat({
       tostring(denialReady), tostring(retargetReady), tostring(targetsReady),
-      tostring(collapseReady), tostring(terrainOn and collapseReady), tostring(familyReady), tostring(aimReady),
+      tostring(collapseReady), tostring(familyReady), tostring(aimReady),
       tostring(stanceReady), tostring(raidsReady), tostring(anchor ~= nil),
       tostring(campIds ~= nil),
     }, '/'))

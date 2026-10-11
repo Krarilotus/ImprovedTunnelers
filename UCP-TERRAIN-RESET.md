@@ -52,8 +52,9 @@ Disabling the setting retains original cleanup.
 `queue_fill` calls that brush through the already resolved collapse owner rather
 than writing heights itself. The brush owns per-tile admission; the old center
 conditions are used only when the terrain fix is disabled.
-The settings identity includes the terrain toggle so saved-state validation can
-reject a mismatched setup. No per-frame discovery or new persistent state is added.
+Saved collapse work does not depend on the terrain toggle, so 1.7.3 no longer puts it
+in the save identity ([UCP-SAVE-SETTINGS.md](UCP-SAVE-SETTINGS.md)). No per-frame
+discovery or new persistent state is added.
 
 `bench/test_native_terrain.py` executes the actual brush and coordinate helper on
 six SHC/Extreme fixtures (two code layouts), with downstream path functions recorded

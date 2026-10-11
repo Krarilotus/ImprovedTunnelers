@@ -79,7 +79,8 @@ machine-specific `tools/publish.py` in another installation.
 
 [UCP-REPLAY-STATE.md](UCP-REPLAY-STATE.md) describes deterministic collapse work,
 the existing Map Extensions required-state API, relocated private state, focused
-tests and remaining native acceptance. Map Extensions 1.1.5 is a prerequisite.
+tests and remaining native acceptance. Map Extensions 1.1.6 is a prerequisite;
+[UCP-SAVE-SETTINGS.md](UCP-SAVE-SETTINGS.md) covers loading with changed settings.
 Renaming `.sav` to `.map` remains an editable-scenario workflow: the owner
 initializes fresh tunneler state for maps instead of restoring battle work.
 Older-save migration is not in scope; no released legacy save contract is claimed.

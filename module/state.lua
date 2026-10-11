@@ -1,7 +1,20 @@
 -- Only this module's persistent simulation data belongs here. Map Extensions owns
 -- save hooks, map/save discrimination, required-provider admission and Recorder access.
 local M = {}
-local path, format = 'tunnelers.bin', 'improved-tunnelers-state-1'
+-- Format 2 adds the partial tile's own radius (STEP_RADIUS). Settings are not
+-- saved: a save loads with the current ones, and Recorder freezes them for replays.
+local path, format = 'tunnelers.bin', 'improved-tunnelers-state-2'
+
+-- A short message in the game's language. Map Extensions shows the first line and
+-- logs the rest; level 0 keeps source positions out of that line.
+local function reject(key, detail)
+  local messages = require('messages')[key]
+  local text = modules and modules.textResourceModifier
+  local ok, language = pcall(function() return text:GetLanguage() end)
+  local message = ok and type(language) == 'string' and messages[language:lower()]
+  error('Improved Tunnelers: ' .. (message or messages.english)
+    .. (detail and '\n' .. detail or ''), 0)
+end
 
 function M.prepare()
   local owner = modules and modules['map-extensions']
@@ -38,19 +51,14 @@ function M.attach(module, C, layout, capabilities)
   local ranges = {
     {C.LAST_TICK, 4}, {C.LAST_REDIRECT, 4}, {C.FAIL_SPOT, 8},
     {C.RING_CURSOR, 4}, {C.REFUSED_CURSOR, 4}, {C.REFUSED, layout.refused * 8},
-    {C.STEP_ACTIVE, 4}, {C.STEP_TILE, 24}, {C.QUEUE_COUNT, 4},
+    {C.STEP_ACTIVE, 4}, {C.STEP_TILE, 24}, {C.STEP_RADIUS, 4}, {C.QUEUE_COUNT, 4},
     {C.QUEUE, C.ZONES - C.QUEUE}, {C.ZONES, C.RECORDS - C.ZONES},
     {C.RECORDS, C.LINES - C.RECORDS}, {C.LINES, C.PLAN_BUFFER - C.LINES},
     {C.ROUTES, layout.lines * layout.routeSize},
   }
+  -- What the saved bytes mean: their format, the code that lays them out and the
+  -- native consumers that finish the saved work. Settings are not part of it.
   local identity = format .. '\0' .. support.fingerprint .. capabilities
-    .. core.readString(control, C.DIAGNOSTICS)
-    .. core.readString(control + C.COLLAPSE_DAMAGE, 12)
-    .. core.readString(control + C.HIDE_SELECT, 8)
-    .. core.readString(control + C.UNDER_BUILDINGS, 4)
-    .. core.readString(control + C.SPREAD_RADIUS, 4)
-    .. core.readString(control + C.SPEED, 4)
-    .. core.readString(control + C.FAMILY_READY, 4)
   local offsets, length = {}, #identity
   for _, range in ipairs(ranges) do
     for offset = 0, range[2] - 4, 4 do offsets[range[1] + offset] = length + offset + 1 end
@@ -92,11 +100,14 @@ function M.attach(module, C, layout, capabilities)
     return table.concat(parts)
   end
   local function validate(bytes)
-    assert(type(bytes) == 'string' and #bytes == length and bytes:sub(1, #identity) == identity,
-      'Improved Tunnelers: this save requires its original module, configuration and native capabilities')
+    if type(bytes) ~= 'string' or bytes:sub(1, #identity) ~= identity then
+      reject('incompatibleSaveState', 'saved format, module code or native capabilities differ')
+    end
+    local function check(valid, detail) if not valid then reject('damagedSaveState', detail) end end
+    check(#bytes == length, 'saved state has the wrong size')
     local function bounded(offset, maximum)
       local value = word(bytes, offset)
-      assert(value <= maximum, 'Improved Tunnelers: invalid saved state at offset ' .. offset)
+      check(value <= maximum, 'invalid saved state at offset ' .. offset)
       return value
     end
     local function tile(offset) return bounded(offset, 400 * 400 - 1) end
@@ -104,19 +115,19 @@ function M.attach(module, C, layout, capabilities)
     local function queued(offset)
       tile(offset); coordinate(offset + 4); coordinate(offset + 8)
       local flags = word(bytes, offset + 12)
-      assert(flags & 0xFFFFF0FE == 0 and flags >> 8 <= 8,
-        'Improved Tunnelers: invalid saved collapse owner/flags')
+      check(flags & 0xFFFFF0FE == 0 and flags >> 8 <= 8, 'invalid saved collapse owner/flags')
     end
     bounded(C.RING_CURSOR, layout.records - 1)
     bounded(C.REFUSED_CURSOR, layout.refused - 1)
     tile(C.FAIL_SPOT)
     for i = 0, layout.refused - 1 do tile(C.REFUSED + i * 8) end
+    -- A partial tile is read with the radius it began with, not the current setting.
+    local radius = bounded(C.STEP_RADIUS, 8)
     if bounded(C.STEP_ACTIVE, 1) == 1 then
       queued(C.STEP_TILE)
-      local radius = read(C.SPREAD_RADIUS)
       for _, offset in ipairs({C.STEP_DX, C.STEP_DY}) do
         local value = string.unpack('<i4', bytes, offsets[offset])
-        assert(value >= -radius and value <= radius, 'Improved Tunnelers: invalid saved collapse cursor')
+        check(value >= -radius and value <= radius, 'invalid saved collapse cursor')
       end
     end
     for i = 0, bounded(C.QUEUE_COUNT, layout.queue) - 1 do queued(C.QUEUE + i * 16) end
@@ -136,8 +147,8 @@ function M.attach(module, C, layout, capabilities)
         local offset = route + 16 + entry * 16
         tile(offset)
         local xy = word(bytes, offset + 4)
-        assert(xy & 0xFFFF <= 399 and xy >> 16 <= 399, 'Improved Tunnelers: invalid saved route coordinates')
-        assert(tiles > 0, 'Improved Tunnelers: saved route has no path')
+        check(xy & 0xFFFF <= 399 and xy >> 16 <= 399, 'invalid saved route coordinates')
+        check(tiles > 0, 'saved route has no path')
         bounded(offset + 8, tiles - 1)
       end
       for entry = 0, tiles - 1 do tile(route + layout.pathOffset + entry * 4) end
@@ -167,12 +178,7 @@ function M.attach(module, C, layout, capabilities)
     end
   end
   local function absent(kind)
-    if kind == 'map' then return end
-    local messages = require('messages').missingSaveState
-    local text = modules and modules.textResourceModifier
-    local ok, language = pcall(function() return text:GetLanguage() end)
-    local message = ok and type(language) == 'string' and messages[language:lower()]
-    error('Improved Tunnelers: ' .. (message or messages.english))
+    if kind ~= 'map' then reject('missingSaveState') end
   end
   local observed
   local callbacks = {
@@ -197,7 +203,7 @@ function M.attach(module, C, layout, capabilities)
     end,
     validate = function(_, handle)
       if handle:exists(path) then
-        assert(module.control == control, 'This save requires Improved Tunnelers to be enabled')
+        if module.control ~= control then reject('incompatibleSaveState', 'module is disabled') end
         validate(handle:get(path))
       elseif module.control == control then absent(handle.loadKind) end
     end,

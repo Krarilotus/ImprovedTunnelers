@@ -1,20 +1,24 @@
 denial_group: Bauen nach einem Durchbruch
 denial_enabled: Bau- und Reparaturpause (Ticks)
-denial_enabled_tooltip: 'Bauen und Mauerreparaturen am Durchbruch kurz sperren. Standard: 100 Ticks (2,5 Sekunden bei normalem
-  Tempo). Maximum: 2400 Ticks. Weitere Einstürze verlängern die Pause. Ausschalten erlaubt sofortigen Wiederaufbau.'
+denial_enabled_tooltip: 'Bauen und Mauerreparaturen am Durchbruch kurz sperren. Standard:
+  100 Ticks (2,5 Sekunden bei normalem Tempo). Maximum: 2400 Ticks. Weitere Einstürze
+  verlängern die Pause. Ausschalten erlaubt sofortigen Wiederaufbau.'
 denial_message: Bausperre erklären
 denial_message_tooltip: Bei einer Bausperre am Durchbruch einen Hinweis anzeigen.
 terrain_group: Tunnelgelände
 terrain_enabled: Boden nach dem Tunnelbau wiederherstellen
-terrain_enabled_tooltip: Die ursprüngliche Bodenhöhe um fertige Tunnel wiederherstellen. Standardmäßig an. Aus verwendet die
-  Bereinigung des Originalspiels.
+terrain_enabled_tooltip: Die ursprüngliche Bodenhöhe um fertige Tunnel wiederherstellen.
+  Standardmäßig an. Aus verwendet die Bereinigung des Originalspiels.
 retarget_group: Tunnelwege
 retarget_enabled: Durch Durchbrüche weitergraben
-retarget_enabled_tooltip: Tunnel koordinieren und ein neues Ziel suchen, wenn das vorige zerstört ist.
+retarget_enabled_tooltip: Tunnel koordinieren und ein neues Ziel suchen, wenn das
+  vorige zerstört ist.
 retarget_range: Suchweite (Felder)
-retarget_range_tooltip: 'Entfernung für die Suche nach dem nächsten Ziel. Standard: 80.'
+retarget_range_tooltip: 'Entfernung für die Suche nach dem nächsten Ziel. Standard:
+  80.'
 retarget_max: Maximale neue Ziele
-retarget_max_tooltip: 'Wie oft ein Tunnel zu einem neuen Ziel weitergraben darf. Standard: 10.'
+retarget_max_tooltip: 'Wie oft ein Tunnel zu einem neuen Ziel weitergraben darf. Standard:
+  10.'
 targets_group: Tunnelziele
 targets_enabled: Türme und Tore angreifen
 targets_enabled_tooltip: Alle Türme und Tore als Tunnelziele zulassen.
@@ -22,31 +26,40 @@ ui_group: Tunnelgräberbefehle und Einsturzschaden
 targets_under: Unter Stadtgebäuden graben
 targets_under_tooltip: Wege unter normalen Gebäuden erlauben. Bergfriede bleiben ausgenommen.
 digging_unselectable: Grabende Tunnelgräber bei Auswahl überspringen
-digging_unselectable_tooltip: Graben nicht durch Truppenauswahl oder Gruppenbefehle unterbrechen.
+digging_unselectable_tooltip: Graben nicht durch Truppenauswahl oder Gruppenbefehle
+  unterbrechen.
 digging_untargetable: Tunnelgräber unter der Erde schützen
 digging_untargetable_tooltip: Feinde können grabende Tunnelgräber nicht anvisieren.
 collapse_damage: Schaden am Ziel
-collapse_damage_tooltip: 'Schaden an Mauer, Turm oder Tor am Tunnelende. Standard: 2500.'
+collapse_damage_tooltip: 'Schaden an Mauer, Turm oder Tor am Tunnelende. Standard:
+  2500.'
 collapse_spread: Benachbarte Gebäude beschädigen
-collapse_spread_tooltip: Normale Gebäude neben dem Tunnel beschädigen. Benachbarte Befestigungen bleiben verschont.
+collapse_spread_tooltip: Normale Gebäude neben dem Tunnel beschädigen. Benachbarte
+  Befestigungen bleiben verschont.
 collapse_speed: Einsturzarbeit pro Tick
-collapse_speed_tooltip: 'Neue Tunnelfelder und Schadensaufrufe pro Tick begrenzen. Kleinere Werte verteilen die Arbeit über
-  mehr Ticks. Standard: 2.'
+collapse_speed_tooltip: 'Neue Tunnelfelder und Schadensaufrufe pro Tick begrenzen.
+  Kleinere Werte verteilen die Arbeit über mehr Ticks. Standard: 2.'
 collapse_spread_radius: Schadensradius (Felder)
-collapse_spread_radius_tooltip: 'Reichweite des Schadens neben dem Tunnel. Standard: 2.'
+collapse_spread_radius_tooltip: 'Reichweite des Schadens neben dem Tunnel. Standard:
+  2.'
 collapse_spread_damage: Schaden an benachbarten Gebäuden
-collapse_spread_damage_tooltip: 'Schaden an jedem normalen Gebäude in Reichweite. Standard: 60.'
+collapse_spread_damage_tooltip: 'Schaden an jedem normalen Gebäude in Reichweite.
+  Standard: 60.'
 ui_enabled: Schaltfläche „Hier angreifen“ hinzufügen
-ui_enabled_tooltip: Grabebefehl behalten und einen eigenen Befehl zum Angriff auf Gebäude hinzufügen.
+ui_enabled_tooltip: Grabebefehl behalten und einen eigenen Befehl zum Angriff auf
+  Gebäude hinzufügen.
 stances_group: Verhalten der Tunnelgräber
 stances_enabled: Defensives und aggressives Verhalten aktivieren
-stances_enabled_tooltip: Untätige Tunnelgräber reagieren auf nahe Feinde, ohne Grab- oder Laufbefehle zu unterbrechen.
+stances_enabled_tooltip: Untätige Tunnelgräber reagieren auf nahe Feinde, ohne Grab-
+  oder Laufbefehle zu unterbrechen.
 raids_group: Tunnelgräber bei KI-Überfällen
 raids_enabled: Tunnelgräber für Überfälle aktivieren
-raids_enabled_tooltip: In den KI-Überfalleinstellungen gewählte Tunnelgräber schließen sich den Überfalltruppen an.
+raids_enabled_tooltip: In den KI-Überfalleinstellungen gewählte Tunnelgräber schließen
+  sich den Überfalltruppen an.
 diagnostics_group: Diagnose
 diagnostics_enabled: Diagnosemeldungen schreiben
-diagnostics_enabled_tooltip: Tunnelaktivität zur Fehlersuche protokollieren. Standardmäßig aus.
+diagnostics_enabled_tooltip: Tunnelaktivität zur Fehlersuche protokollieren. Standardmäßig
+  aus.
 balance_changes: Balance Changes
 bugfixes: Bugfixes
 ai: AI

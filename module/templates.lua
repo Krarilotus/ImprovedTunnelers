@@ -2333,15 +2333,16 @@ ret
 -- queue only shakes buildings; it never writes terrain. The native brush handles
 -- the tunnel footprint at completion. Quiet fills do no damage.
 --
--- One neighbour per call, at STEP_DX / STEP_DY, which it then moves on; when the last one
--- is done STEP_ACTIVE goes to 0. The game's damage is the dear part of a collapse on a real
--- map - a building it brings down sets the game rebuilding its maps - so queue_tick has to
--- be able to stop between any two of them. EAX comes back 1 when the game's damage was
+-- One neighbour per call, at STEP_DX / STEP_DY within STEP_RADIUS, which it then moves
+-- on; when the last one is done STEP_ACTIVE goes to 0. The game's damage is the dear part
+-- of a collapse on a real map - a building it brings down sets the game rebuilding its
+-- maps - so queue_tick has to be able to stop between any two of them. EAX comes back 1
+-- when the game's damage was
 -- called, else 0. EBX is kept.
 local queue_step = [[
 push ebx
 xor ebx, ebx
-cmp dword [RADIUS_ADDRESS], 0
+cmp dword [STEP_RADIUS_ADDRESS], 0
 jl step_finished
 mov edx, [STEP_Y_ADDRESS]
 add edx, [STEP_DY_ADDRESS]
@@ -2404,14 +2405,14 @@ mov ebx, 1
 step_next:
 add dword [STEP_DX_ADDRESS], 1
 mov eax, [STEP_DX_ADDRESS]
-cmp eax, [RADIUS_ADDRESS]
+cmp eax, [STEP_RADIUS_ADDRESS]
 jle step_out
-mov eax, [RADIUS_ADDRESS]
+mov eax, [STEP_RADIUS_ADDRESS]
 neg eax
 mov [STEP_DX_ADDRESS], eax
 add dword [STEP_DY_ADDRESS], 1
 mov eax, [STEP_DY_ADDRESS]
-cmp eax, [RADIUS_ADDRESS]
+cmp eax, [STEP_RADIUS_ADDRESS]
 jle step_out
 step_finished:
 mov dword [STEP_ACTIVE_ADDRESS], 0
@@ -2434,6 +2435,7 @@ ret
 -- SPEED bounds both new tunnel tiles and expensive damage calls per tick. Unlike a CPU
 -- time budget this produces the same work on every machine, including when replaying.
 -- A partial tile stays in STEP_* for the next tick; empty cells retain the tile bound.
+-- It keeps the radius it began with, so a changed setting applies from the next tile.
 local queue_tick = [[
 pushad
 cmp dword [DIAGNOSTICS_ADDRESS], 0
@@ -2513,6 +2515,7 @@ mov [STEP_Y_ADDRESS], eax
 mov eax, [ecx+12]
 mov [STEP_FLAGS_ADDRESS], eax
 mov eax, [RADIUS_ADDRESS]
+mov [STEP_RADIUS_ADDRESS], eax
 neg eax
 mov [STEP_DX_ADDRESS], eax
 mov [STEP_DY_ADDRESS], eax
@@ -2714,11 +2717,13 @@ jmp RETURN_ADDRESS
 -- each of its points. It is not set while the tunneler walks to a tunnel it has been told
 -- to dig, or while it is underground, so a stance never cancels a dig order either.
 --
+-- With "skip digging tunnelers" off, digging tunnelers are left to the game. One that
+-- this switch hid before - in a save loaded with it now off - is made selectable again
+-- once it is no longer digging, exactly as the switch itself would have done.
+--
 -- Runs before the function's own prologue, so ECX must survive; only EAX and EDX are used.
 local stance = [[
 push ecx
-cmp dword [HIDE_ENABLED_ADDRESS], 0
-je hide_done
 mov eax, [CURRENT_UNIT_ADDRESS]
 imul eax, eax, 1168
 movzx edx, word [eax+UNIT_STATE]
@@ -2730,9 +2735,16 @@ cmp dx, 8
 je hide_it
 cmp dx, 9
 je hide_it
+cmp dword [HIDE_ENABLED_ADDRESS], 0
+jne hide_shown
+cmp word [eax+UNIT_SELECTABLE], 0
+jne hide_done
+hide_shown:
 mov word [eax+UNIT_SELECTABLE], 1
 jmp hide_done
 hide_it:
+cmp dword [HIDE_ENABLED_ADDRESS], 0
+je hide_done
 mov word [eax+UNIT_SELECTABLE], 0
 hide_done:
 cmp dword [ENABLED_ADDRESS], 0

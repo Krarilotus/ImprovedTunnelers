@@ -15,7 +15,8 @@ MODULE = Path(__file__).resolve().parents[1] / 'module'
 
 
 class StateHost:
-    def __init__(self, base=0x60000000, diagnostics=0, speed=2):
+    def __init__(self, base=0x60000000, diagnostics=0, speed=2, settings=None,
+                 capabilities=b'all-tested-capabilities'):
         self.base, self.writes = base, 0
         self.lua = lua = LuaRuntime(encoding=None, unpack_returned_tuples=True)
         g = lua.globals()
@@ -42,12 +43,15 @@ class StateHost:
         self.put('SPREAD_RADIUS', 2)
         self.put('SPEED', speed)
         self.put('DIAGNOSTICS', diagnostics)
+        for name, value in (settings or {}).items(): self.put(name, value)
         g[b'state'] = lua.execute((MODULE/'state.lua').read_bytes())
         g[b'C'], g[b'layout'], g[b'base'] = self.C, self.layout, base
+        g[b'capabilities'] = capabilities
         lua.execute(b'''
           module = {control=base, stateSupport={fingerprint=string.rep('a',64),
-            owner={registerSection=function(_, name, value, options) callbacks=value end}}}
-          state.attach(module, C, layout, 'all-tested-capabilities')
+            owner={registerSection=function(_, name, value, options)
+              callbacks, sectionOptions = value, options end}}}
+          state.attach(module, C, layout, capabilities)
           function capture()
             local bytes
             callbacks:capture({put=function(_, path, value) bytes=value end})
@@ -87,6 +91,7 @@ class StateHost:
             for index, value in enumerate((1500+slot, 50+slot, 60, 8 << 8)):
                 self.put('QUEUE', value, slot*16+4*index)
         self.put('STEP_ACTIVE', 1)
+        if self.C[b'STEP_RADIUS'] is not None: self.put('STEP_RADIUS', 2)
         for index, value in enumerate((1502, 52, 60, 8 << 8, -1, 1)):
             self.put('STEP_TILE', value, 4*index)
         route = 35*self.layout[b'routeSize']
@@ -132,7 +137,13 @@ class ReplayStateTests(unittest.TestCase):
             with self.assertRaises(LuaError): h.restore(invalid)
             self.assertEqual(bytes(h.mem), before)
             self.assertEqual(h.writes, writes)
-        with self.assertRaises(LuaError): StateHost(speed=3).restore(data)
+        # Settings are not saved state: a changed speed loads. Changed code/native
+        # capabilities and a partial tile outside its own radius do not.
+        StateHost(speed=3).restore(data)
+        for radius in (9, 0):
+            h.restore(data)
+            h.put('STEP_RADIUS', radius)
+            with self.assertRaises(LuaError): StateHost().restore(h.capture())
         other = StateHost()
         other.lua.execute(b"module.stateSupport.fingerprint=string.rep('b',64); state.attach(module,C,layout,'changed')")
         with self.assertRaises(LuaError): other.restore(data)
