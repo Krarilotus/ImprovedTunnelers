@@ -1,20 +1,23 @@
 denial_group: Building after a breach
 denial_enabled: Building and repair delay (ticks)
-denial_enabled_tooltip: 'Briefly prevent building and wall repairs around a breach. Default: 100 ticks (2.5 seconds at normal
-  speed). Maximum: 2400 ticks. Further collapses extend the delay. Switch off to allow immediate rebuilding.'
+denial_enabled_tooltip: 'Briefly prevent building and wall repairs around a breach.
+  Default: 100 ticks (2.5 seconds at normal speed). Maximum: 2400 ticks. Further collapses
+  extend the delay. Switch off to allow immediate rebuilding.'
 denial_message: Explain blocked building
 denial_message_tooltip: Show a message when a breach prevents building.
 terrain_group: Tunnel terrain
 terrain_enabled: Restore ground after tunneling
-terrain_enabled_tooltip: Restore the original ground height around completed tunnels. On by default. Off uses the original
-  game's cleanup.
+terrain_enabled_tooltip: Restore the original ground height around completed tunnels.
+  On by default. Off uses the original game's cleanup.
 retarget_group: Tunnel routes
 retarget_enabled: Continue through breaches
-retarget_enabled_tooltip: Coordinate tunnels and find another target when the previous one is gone.
+retarget_enabled_tooltip: Coordinate tunnels and find another target when the previous
+  one is gone.
 retarget_range: Search range (tiles)
 retarget_range_tooltip: 'How far a tunnel can look for its next target. Default: 80.'
 retarget_max: Maximum new targets
-retarget_max_tooltip: 'How often one tunnel can continue to another target. Default: 10.'
+retarget_max_tooltip: 'How often one tunnel can continue to another target. Default:
+  10.'
 targets_group: Tunnel targets
 targets_enabled: Target towers and gates
 targets_enabled_tooltip: Allow all towers and gates as tunnel targets.
@@ -22,28 +25,36 @@ ui_group: Tunneler commands and collapse damage
 targets_under: Dig under town buildings
 targets_under_tooltip: Allow routes under ordinary buildings. Keeps remain excluded.
 digging_unselectable: Skip digging tunnelers in selections
-digging_unselectable_tooltip: Avoid interrupting digging when selecting or ordering troops.
+digging_unselectable_tooltip: Avoid interrupting digging when selecting or ordering
+  troops.
 digging_untargetable: Protect underground tunnelers
-digging_untargetable_tooltip: Prevent enemies from targeting tunnelers while they dig.
+digging_untargetable_tooltip: Prevent enemies from targeting tunnelers while they
+  dig.
 collapse_damage: Damage to the target
-collapse_damage_tooltip: 'Damage dealt to the wall, tower or gate at the tunnel''s end. Default: 2500.'
+collapse_damage_tooltip: 'Damage dealt to the wall, tower or gate at the tunnel''s
+  end. Default: 2500.'
 collapse_spread: Damage nearby buildings
-collapse_spread_tooltip: Damage ordinary buildings beside the tunnel. Nearby fortifications are excluded.
+collapse_spread_tooltip: Damage ordinary buildings beside the tunnel. Nearby fortifications
+  are excluded.
 collapse_speed: Collapse work per tick
-collapse_speed_tooltip: 'Limit new tunnel tiles and damage calls each tick. Lower values spread work over more ticks. Default:
-  2.'
+collapse_speed_tooltip: 'Limit new tunnel tiles and damage calls each tick. Lower
+  values spread work over more ticks. Default: 2.'
 collapse_spread_radius: Damage radius (tiles)
-collapse_spread_radius_tooltip: 'How far damage reaches beside the tunnel. Default: 2.'
+collapse_spread_radius_tooltip: 'How far damage reaches beside the tunnel. Default:
+  2.'
 collapse_spread_damage: Damage to nearby buildings
-collapse_spread_damage_tooltip: 'Damage dealt to each ordinary building in range. Default: 60.'
+collapse_spread_damage_tooltip: 'Damage dealt to each ordinary building in range.
+  Default: 60.'
 ui_enabled: Add an attack-here button
 ui_enabled_tooltip: Keep the dig button and add a separate building-attack command.
 stances_group: Tunneler stances
 stances_enabled: Enable defensive and aggressive stances
-stances_enabled_tooltip: Let idle tunnelers react to nearby enemies without interrupting digging or movement orders.
+stances_enabled_tooltip: Let idle tunnelers react to nearby enemies without interrupting
+  digging or movement orders.
 raids_group: Tunnelers in AI raids
 raids_enabled: Enable raid tunnelers
-raids_enabled_tooltip: Tunnelers selected in the AI's raid settings join its raiding troops.
+raids_enabled_tooltip: Tunnelers selected in the AI's raid settings join its raiding
+  troops.
 diagnostics_group: Diagnostics
 diagnostics_enabled: Write diagnostic messages
 diagnostics_enabled_tooltip: Log tunneler activity for troubleshooting. Off by default.

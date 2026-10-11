@@ -1,20 +1,23 @@
 denial_group: Gedikten sonra inşaat
 denial_enabled: İnşaat ve onarım bekleme süresi (tik)
-denial_enabled_tooltip: 'Gediğin çevresinde inşaatı ve duvar onarımını kısa süre engeller. Varsayılan: 100 tik (normal hızda
-  2,5 saniye). En fazla: 2400 tik. Yeni çökmeler süreyi uzatır. Kapatıldığında hemen yeniden inşa edilebilir.'
+denial_enabled_tooltip: 'Gediğin çevresinde inşaatı ve duvar onarımını kısa süre engeller.
+  Varsayılan: 100 tik (normal hızda 2,5 saniye). En fazla: 2400 tik. Yeni çökmeler
+  süreyi uzatır. Kapatıldığında hemen yeniden inşa edilebilir.'
 denial_message: İnşaat engelini açıkla
 denial_message_tooltip: Bir gedik inşaatı engellediğinde mesaj gösterir.
 terrain_group: Tünel zemini
 terrain_enabled: Kazıdan sonra zemini düzelt
-terrain_enabled_tooltip: Biten tünellerin çevresindeki zemini eski yüksekliğine getirir. Varsayılan olarak açık. Kapalıyken
-  oyunun özgün temizliği kullanılır.
+terrain_enabled_tooltip: Biten tünellerin çevresindeki zemini eski yüksekliğine getirir.
+  Varsayılan olarak açık. Kapalıyken oyunun özgün temizliği kullanılır.
 retarget_group: Tünel yolları
 retarget_enabled: Gediklerden devam et
-retarget_enabled_tooltip: Tünelleri koordine eder ve önceki hedef yok olmuşsa yeni hedef arar.
+retarget_enabled_tooltip: Tünelleri koordine eder ve önceki hedef yok olmuşsa yeni
+  hedef arar.
 retarget_range: Arama menzili (kare)
 retarget_range_tooltip: 'Sonraki hedefin aranacağı uzaklık. Varsayılan: 80.'
 retarget_max: En fazla yeni hedef
-retarget_max_tooltip: 'Bir tünelin başka hedefe kaç kez devam edebileceği. Varsayılan: 10.'
+retarget_max_tooltip: 'Bir tünelin başka hedefe kaç kez devam edebileceği. Varsayılan:
+  10.'
 targets_group: Tünel hedefleri
 targets_enabled: Kuleleri ve kapıları hedefle
 targets_enabled_tooltip: Tüm kule ve kapıların tünel hedefi olmasına izin verir.
@@ -22,31 +25,39 @@ ui_group: Tünelci komutları ve çökme hasarı
 targets_under: Şehir binalarının altından kaz
 targets_under_tooltip: Sıradan binaların altından geçmeye izin verir. Ana kale hariçtir.
 digging_unselectable: Kazı yapan tünelcileri seçimde atla
-digging_unselectable_tooltip: Asker seçimi veya grup emirleriyle kazının kesilmesini önler.
+digging_unselectable_tooltip: Asker seçimi veya grup emirleriyle kazının kesilmesini
+  önler.
 digging_untargetable: Yeraltındaki tünelcileri koru
-digging_untargetable_tooltip: Kazı sırasında düşmanların tünelcileri hedeflemesini önler.
+digging_untargetable_tooltip: Kazı sırasında düşmanların tünelcileri hedeflemesini
+  önler.
 collapse_damage: Hedefe verilen hasar
-collapse_damage_tooltip: 'Tünelin ucundaki duvara, kuleye veya kapıya verilen hasar. Varsayılan: 2500.'
+collapse_damage_tooltip: 'Tünelin ucundaki duvara, kuleye veya kapıya verilen hasar.
+  Varsayılan: 2500.'
 collapse_spread: Yakındaki binalara hasar ver
-collapse_spread_tooltip: Tünelin yanındaki sıradan binalara hasar verir. Yakındaki tahkimatlar hariçtir.
+collapse_spread_tooltip: Tünelin yanındaki sıradan binalara hasar verir. Yakındaki
+  tahkimatlar hariçtir.
 collapse_speed: Tik başına çökme işi
-collapse_speed_tooltip: 'Tik başına yeni tünel karelerini ve hasar işlemlerini sınırlar. Düşük değer işi zamana yayar. Varsayılan:
-  2.'
+collapse_speed_tooltip: 'Tik başına yeni tünel karelerini ve hasar işlemlerini sınırlar.
+  Düşük değer işi zamana yayar. Varsayılan: 2.'
 collapse_spread_radius: Hasar yarıçapı (kare)
 collapse_spread_radius_tooltip: 'Tünelin çevresindeki hasar menzili. Varsayılan: 2.'
 collapse_spread_damage: Yakındaki binalara verilen hasar
-collapse_spread_damage_tooltip: 'Menzildeki her sıradan binaya verilen hasar. Varsayılan: 60.'
+collapse_spread_damage_tooltip: 'Menzildeki her sıradan binaya verilen hasar. Varsayılan:
+  60.'
 ui_enabled: «Buraya saldır» düğmesi ekle
 ui_enabled_tooltip: Kazı düğmesini korur ve ayrı bir bina saldırı komutu ekler.
 stances_group: Tünelci duruşları
 stances_enabled: Savunmacı ve saldırgan duruşları aç
-stances_enabled_tooltip: Boştaki tünelciler kazı veya hareket emirlerini kesmeden yakındaki düşmanlara tepki verir.
+stances_enabled_tooltip: Boştaki tünelciler kazı veya hareket emirlerini kesmeden
+  yakındaki düşmanlara tepki verir.
 raids_group: Yapay zekâ baskınlarında tünelciler
 raids_enabled: Baskın tünelcilerini aç
-raids_enabled_tooltip: Yapay zekânın baskın ayarlarında seçilen tünelciler baskın birliklerine katılır.
+raids_enabled_tooltip: Yapay zekânın baskın ayarlarında seçilen tünelciler baskın
+  birliklerine katılır.
 diagnostics_group: Tanılama
 diagnostics_enabled: Tanılama mesajları yaz
-diagnostics_enabled_tooltip: Sorunları araştırmak için tünel etkinliğini kaydeder. Varsayılan olarak kapalı.
+diagnostics_enabled_tooltip: Sorunları araştırmak için tünel etkinliğini kaydeder.
+  Varsayılan olarak kapalı.
 balance_changes: Balance Changes
 bugfixes: Bugfixes
 ai: AI
