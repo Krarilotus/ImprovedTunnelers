@@ -1,8 +1,10 @@
-import pefile, capstone, re, struct
-G = r"H:\steam\steamapps\common\Stronghold Crusader Extreme UCP3 new"
+import pefile, capstone, re, struct, os
+G = os.environ.get('SHC_GAME_DIR', r"H:\steam\steamapps\common\Stronghold Crusader Extreme UCP3 new")
 class Exe:
     def __init__(self, path):
-        pe = pefile.PE(path, fast_load=True); self.data = open(path,'rb').read()
+        pe = pefile.PE(path, fast_load=True)
+        with open(path, 'rb') as source:
+            self.data = source.read()
         b = pe.OPTIONAL_HEADER.ImageBase
         self.secs = [(s.VirtualAddress+b, s.Misc_VirtualSize, s.PointerToRawData,
                       s.SizeOfRawData, s.Name.decode().strip('\x00')) for s in pe.sections]

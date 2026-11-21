@@ -372,6 +372,9 @@ class CPU:
             a, b = self.get(insn, ops[0]), self.get(insn, ops[1])
             self.set(insn, ops[0], b)
             self.set(insn, ops[1], a)
+        elif mn.startswith('cmov'):
+            if self.cond(mn[4:]):
+                self.set(insn, ops[0], self.get(insn, ops[1]))
         elif mn.startswith('set'):
             self.set(insn, ops[0], int(self.cond(mn[3:])))
         elif mn == 'jmp':
@@ -391,6 +394,11 @@ class CPU:
             pass
         elif mn == 'cld':
             self.df = False
+        elif mn == 'rep stosd':
+            count, start = self.r['ecx'], self.r['edi']
+            self.m.write(start, struct.pack('<I', self.r['eax']) * count)
+            self.r['edi'] = (start + 4 * count) & MASK
+            self.r['ecx'] = 0
         elif mn == 'rep movsb':
             assert not getattr(self, 'df', False)
             n = self.r['ecx']

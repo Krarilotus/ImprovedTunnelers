@@ -5,7 +5,7 @@ execute the injected code in the x86 interpreter.
 Nothing here is a stand-in for the module: the module's own init.lua and templates.lua are
 loaded unchanged.
 """
-import os, sys, struct
+import os, sys, struct, hashlib
 import lupa.lua54 as lupa
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -18,7 +18,7 @@ from x86emu_t import Memory, CPU, MASK
 from host import fasm, ucp_source
 
 MODULE = os.environ.get('TUNNELERS_MODULE',
-                        r'H:\shc-modding\improved-tunnelers\module')
+                        os.path.join(HERE, '..', 'module'))
 VAN_PATH = G + r'\Stronghold Crusader.exe'
 EXT_PATH = G + r'\Stronghold_Crusader_Extreme.exe'
 HEAP = 0x60000000
@@ -34,7 +34,8 @@ def exe(path):
 
 
 class Host:
-    def __init__(self, extreme=False, config=None, texts=True):
+    def __init__(self, extreme=False, config=None, texts=True, language='English',
+                 accept_text=True, after_init=True):
         self.E = exe(EXT_PATH if extreme else VAN_PATH)
         self.extreme = extreme
         self.m = Memory(self.image)
@@ -44,6 +45,7 @@ class Host:
         self.logs = []
         self.patched = []
         self.detours = []
+        self.assembly = {}
 
         lua = self.lua = lupa.LuaRuntime(unpack_returned_tuples=True, encoding=None)
         g = lua.globals()
@@ -63,6 +65,7 @@ class Host:
         c[b'readSmallInteger'] = lambda a: struct.unpack('<h', self.m.read(int(a), 2))[0]
         c[b'readByte'] = lambda a: struct.unpack('<b', self.m.read(int(a), 1))[0]
         c[b'readBytes'] = lambda a, n: lua.table_from(list(self.m.read(int(a), int(n))))
+        c[b'readString'] = lambda a, n: self.m.read(int(a), int(n))
         # The game's own code and data sit in a read-only image in the running game: only
         # the writeCode* calls may touch them, and a plain write there is an access
         # violation the moment the module is enabled. The bench has no page protection of
@@ -95,17 +98,40 @@ class Host:
 
         lua.execute(('package.path = [[%s\\?.lua;]] .. package.path' % MODULE).encode('mbcs'))
         self.texts = []
+        self.after_init = []
+        hooks = lua.table()
+        hooks[b'registerHookCallback'] = lambda phase, callback: self.after_init.append(callback)
+        g[b'hooks'] = hooks
+        registry = lua.table()
+        g[b'modules'] = registry
+        g[b'allActiveExtensions'] = lua.table_from([self.to_lua({
+            'name': b'improved-tunnelers', 'path': MODULE.replace('\\', '/').encode()})])
+        g[b'sha'] = lua.table_from({b'sha256': lambda value: hashlib.sha256(value).hexdigest().encode()})
+        lua.execute(b'''
+          modules['map-extensions'] = {
+            requiredStateVersion = function() return 1 end,
+            requiredStateMapPolicyVersion = function() return 1 end,
+            getNativeSaveInterface = function() return {failureHandling=1, readContext=1} end,
+            registerSection = function(_, name, callbacks, options)
+              testState = {name=name, callbacks=callbacks, options=options}
+            end,
+          }
+        ''')
         if texts:
-            registry = lua.table()
             trm = lua.table()
-            trm[b'SetText'] = lambda _self, group, index, text: self.texts.append(
-                (int(group), int(index),
-                 text.decode('latin-1') if isinstance(text, bytes) else text))
+            def set_text(_self, group, index, text):
+                self.texts.append((int(group), int(index), text.decode('utf-8')))
+                return accept_text
+            trm[b'SetText'] = set_text
+            trm[b'GetLanguage'] = lambda _self: language.encode('utf-8') if language else None
             registry[b'textResourceModifier'] = trm
             g[b'modules'] = registry
 
         self.mod = lua.eval(b'dofile')((MODULE + r'\init.lua').encode('mbcs'))
         self.mod[b'enable'](self.mod, self.to_lua(config or {}))
+        if after_init:
+            for callback in self.after_init:
+                callback()
 
     # ---- lua helpers ----------------------------------------------------------------
     def to_lua(self, value):
@@ -133,9 +159,10 @@ class Host:
 
     def scan(self, pattern, *rest):
         pattern = pattern.decode('latin-1') if isinstance(pattern, bytes) else pattern
-        hits = [h for h in self.E.find(pattern) if h is not None]
-        if not hits:
-            raise lupa.LuaError('AOBScan: no match')
+        code_start, code_size, *_ = next(section for section in self.E.secs if section[-1] == '.text')
+        hits = [hit for hit in self.E.find(pattern) if hit is not None and code_start <= hit < code_start + code_size]
+        if len(hits) != 1:
+            raise AssertionError(f'AOBScan expected one code match for {pattern}, got {hits}')
         return hits[0]
 
     def flatten(self, table):
@@ -196,6 +223,7 @@ class Host:
         self.cpu.hooks[address] = hook
 
     def allocate_assembly(self, script, values):
+        source = script
         script = script.decode('latin-1')
         values = {k.decode('latin-1'): int(v) & MASK for k, v in values.items()}
         try:
@@ -208,6 +236,7 @@ class Host:
         address = self.allocate(size)
         code = fasm(ucp_source(script, values, address))
         assert len(code) == size, 'fasm size differs between passes'
+        self.assembly[source] = address
         self.m.write(address, code)
         return address
 
