@@ -2881,7 +2881,7 @@ ret 4
 local queue_step = [[
 push ebx
 xor ebx, ebx
-cmp dword [RADIUS_ADDRESS], 0
+cmp dword [STEP_RADIUS_ADDRESS], 0
 jl step_finished
 mov edx, [STEP_Y_ADDRESS]
 add edx, [STEP_DY_ADDRESS]
@@ -2946,14 +2946,14 @@ mov ebx, 1
 step_next:
 add dword [STEP_DX_ADDRESS], 1
 mov eax, [STEP_DX_ADDRESS]
-cmp eax, [RADIUS_ADDRESS]
+cmp eax, [STEP_RADIUS_ADDRESS]
 jle step_out
-mov eax, [RADIUS_ADDRESS]
+mov eax, [STEP_RADIUS_ADDRESS]
 neg eax
 mov [STEP_DX_ADDRESS], eax
 add dword [STEP_DY_ADDRESS], 1
 mov eax, [STEP_DY_ADDRESS]
-cmp eax, [RADIUS_ADDRESS]
+cmp eax, [STEP_RADIUS_ADDRESS]
 jle step_out
 step_finished:
 mov dword [STEP_ACTIVE_ADDRESS], 0
@@ -3111,6 +3111,7 @@ mov [STEP_Y_ADDRESS], eax
 mov eax, [ecx+12]
 mov [STEP_FLAGS_ADDRESS], eax
 mov eax, [RADIUS_ADDRESS]
+mov [STEP_RADIUS_ADDRESS], eax
 neg eax
 mov [STEP_DX_ADDRESS], eax
 mov [STEP_DY_ADDRESS], eax

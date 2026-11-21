@@ -5,7 +5,7 @@ usage: python test_tunnelers.py [v|e|both]
 """
 import sys, struct
 from harness import Host, SENTINEL, STACK_TOP
-from t import VAN, EXT
+from shc import VAN, EXT
 
 UNIT = 0x490
 FAILURES = []
@@ -319,7 +319,8 @@ def scenario(extreme):
 
     # ---------------------------------------------------------- denial check
     print(' refusing to build in a zone')
-    h.put32(f.ticks, 4100)
+    probe_tick = 4000 + f.duration // 2
+    h.put32(f.ticks, probe_tick)
     h.put32(f.teams + 4 * 1, 1)      # player 1 on team 1 (the tunneler's owner)
     h.put32(f.teams + 4 * 2, 2)      # player 2 on team 2
     h.put32(f.teams + 4 * 3, 1)      # player 3 allied with player 1
@@ -336,9 +337,9 @@ def scenario(extreme):
     check('the tunneler\'s own player may build', denial(1, 10, 20, 5), 0)
     check('an ally may build', denial(3, 10, 20, 5), 0)
     h.put32(f.mine, 0)
-    denial(2, 12, 22, 5)             # still on tick 4100, still inside the circle
+    denial(2, 12, 22, 5)             # still inside the denial interval
     check('refusing marks the refusal as its own', h.u32(f.mine), 1)
-    check('  and stamps it with the tick', h.u32(f.mine_tick), 4100)
+    check('  and stamps it with the tick', h.u32(f.mine_tick), probe_tick)
     denial(1, 10, 20, 5)
     check('and anything it allows clears the mark', h.u32(f.mine), 0)
     h.put32(f.ticks, 4000 + f.duration)  # the zone has just run out
@@ -1217,7 +1218,7 @@ def scenario(extreme):
 
     print(' and the tunnel it queues to fall in behind it')
     f.fill_routine = f.module_routine(f.tunneler + 0x8DD)   # the only one it calls of ours
-    f.step_routine = f.module_routine(f.tick_site, skip=1)   # after the stopwatch report
+    f.step_routine = h.assembly[h.lua.eval(b'require("templates").queue_step')]
     h.put32(f.queue_count, 0)
     qunit = 13
     qtile = 100 * 400 + 100
@@ -1270,6 +1271,7 @@ def scenario(extreme):
     def whole_tile():
         """The step does one neighbour a call; run it until the tile is done."""
         r = h.u32(f.spread_radius)
+        h.put32(f.control + 0x214, r)                        # STEP_RADIUS
         h.put32(f.control + 0x258, -r & 0xFFFFFFFF)          # STEP_DX
         h.put32(f.control + 0x25C, -r & 0xFFFFFFFF)          # STEP_DY
         h.put32(f.control + 0x200, 1)                        # STEP_ACTIVE

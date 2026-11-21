@@ -684,6 +684,7 @@ C.DAMAGE_LEFT = 0x204             -- deterministic damage-call allowance for thi
 C.SEARCH_TICK = 0x208             -- the tick the module last ran a search of its own
 C.SAVED_ENTRANCE = 0x20C          -- the entrance whose search counter was put aside (scaled)
 C.SAVED_COUNTER = 0x210           -- ... and what that counter was before the game's search
+C.STEP_RADIUS = 0x214             -- the active tile's radius, fixed when it leaves the queue
 C.FILL_UNIT = 0x22C               -- the tunnel being written into the queue
 C.FILL_FLAGS = 0x230
 C.FILL_TILE = 0x234
@@ -1282,7 +1283,7 @@ return {
           STEP_DAMAGE_ADDRESS = control + C.STEP_DAMAGE,
           BUILDING_STRIDE = SEARCH_STRIDE,
           BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
-          RADIUS_ADDRESS = control + C.SPREAD_RADIUS,
+          STEP_RADIUS_ADDRESS = control + C.STEP_RADIUS,
           STEP_X_ADDRESS = control + C.STEP_X,
           STEP_Y_ADDRESS = control + C.STEP_Y,
           STEP_FLAGS_ADDRESS = control + C.STEP_FLAGS,
@@ -1341,6 +1342,7 @@ return {
           STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
           DAMAGE_LEFT_ADDRESS = control + C.DAMAGE_LEFT,
           RADIUS_ADDRESS = control + C.SPREAD_RADIUS,
+          STEP_RADIUS_ADDRESS = control + C.STEP_RADIUS,
           STEP_DX_ADDRESS = control + C.STEP_DX,
           STEP_DY_ADDRESS = control + C.STEP_DY,
           STEP_THIS_TILE_ADDRESS = control + C.STEP_THIS_TILE,

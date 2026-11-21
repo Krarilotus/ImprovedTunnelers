@@ -15,6 +15,15 @@ local path, format = 'tunnelers.bin', 'improved-tunnelers-state-1'
 -- the saved layout itself changes.
 local STATE_FINGERPRINT = 'c5041749cd5d181bbce5baf2762f27e7b931818fc67d938d4c454a81cda5e9cc'
 
+-- Map Extensions 1.1.6 uses the first line for its dialog and logs the detail.
+local function reject(key, detail)
+  local messages = require('messages')[key]
+  local text = modules and modules.textResourceModifier
+  local ok, language = pcall(function() return text:GetLanguage() end)
+  local message = ok and type(language) == 'string' and messages[language:lower()]
+  error('Improved Tunnelers: ' .. (message or messages.english) .. '\n' .. detail, 0)
+end
+
 function M.prepare()
   local owner = modules and modules['map-extensions']
   assert(owner and type(owner.requiredStateVersion) == 'function'
@@ -41,15 +50,16 @@ function M.attach(module, C, layout, capabilities)
     {C.RECORDS, C.LINES - C.RECORDS}, {C.LINES, C.PLAN_BUFFER - C.LINES},
     {C.ROUTES, layout.lines * layout.routeSize},
   }
-  local identity = format .. '\0' .. support.fingerprint .. capabilities
+  local key = format .. '\0' .. support.fingerprint
+  local identityPrefix = key .. capabilities
     .. core.readString(control, C.DIAGNOSTICS)
     .. core.readString(control + C.COLLAPSE_DAMAGE, 12)
     .. core.readString(control + C.HIDE_SELECT, 8)
     .. core.readString(control + C.UNDER_BUILDINGS, 4)
-    .. core.readString(control + C.SPREAD_RADIUS, 4)
-    .. core.readString(control + C.SPEED, 4)
+  local identitySuffix = core.readString(control + C.SPEED, 4)
     .. core.readString(control + C.FAMILY_READY, 4)
-  local offsets, length = {}, #identity
+  local headerSize = #identityPrefix + 4 + #identitySuffix
+  local offsets, length = {}, headerSize
   for _, range in ipairs(ranges) do
     for offset = 0, range[2] - 4, 4 do offsets[range[1] + offset] = length + offset + 1 end
     length = length + range[2]
@@ -60,8 +70,10 @@ function M.attach(module, C, layout, capabilities)
   -- data for a feature that is now switched off is simply never looked at. So a save made
   -- with other settings - including a capability string of another length - is read, and
   -- its header swapped for this game's own.
-  local key = format .. '\0' .. support.fingerprint
-  local body = length - #identity
+  local body = length - headerSize
+  -- The radius word in the original header held the configured radius. While
+  -- a tile is active, it now holds that tile's radius. Its position relative to
+  -- the body is unchanged, so existing saves need no provider migration.
   local function word(bytes, offset) return string.unpack('<I4', bytes, offsets[offset]) end
   local function replace(bytes, offset, value)
     local at = offsets[offset]
@@ -74,7 +86,8 @@ function M.attach(module, C, layout, capabilities)
     return offset // stride
   end
   local function capture()
-    local parts = {identity}
+    local radius = read(read(C.STEP_ACTIVE) == 1 and C.STEP_RADIUS or C.SPREAD_RADIUS)
+    local parts = {identityPrefix, string.pack('<I4', radius), identitySuffix}
     for _, range in ipairs(ranges) do
       local offset = range[1]
       local bytes = core.readString(control + offset, range[2])
@@ -98,12 +111,19 @@ function M.attach(module, C, layout, capabilities)
     return table.concat(parts)
   end
   local function validate(bytes)
-    assert(type(bytes) == 'string' and #bytes >= body + #key and bytes:sub(1, #key) == key,
-      'Improved Tunnelers: this save holds tunneler state in a format this version cannot read')
-    bytes = identity .. bytes:sub(#bytes - body + 1)
+    local radiusDistance = 4 + #identitySuffix
+    if type(bytes) ~= 'string' or #bytes < body + #key + radiusDistance
+        or bytes:sub(1, #key) ~= key then
+      reject('incompatibleSaveState', 'saved format or layout does not match')
+    end
+    local function check(valid, detail)
+      if not valid then reject('damagedSaveState', detail) end
+    end
+    local savedRadius = string.unpack('<I4', bytes, #bytes - body - radiusDistance + 1)
+    bytes = identityPrefix .. string.pack('<I4', savedRadius) .. identitySuffix .. bytes:sub(#bytes - body + 1)
     local function bounded(offset, maximum)
       local value = word(bytes, offset)
-      assert(value <= maximum, 'Improved Tunnelers: invalid saved state at offset ' .. offset)
+      check(value <= maximum, 'invalid saved state at offset ' .. offset)
       return value
     end
     local function tile(offset) return bounded(offset, 400 * 400 - 1) end
@@ -112,8 +132,8 @@ function M.attach(module, C, layout, capabilities)
       tile(offset); coordinate(offset + 4); coordinate(offset + 8)
       local flags = word(bytes, offset + 12)
       -- bits: 1 a quiet fill, 4 its ground is back (1.7.6), 8-11 who brings it down
-      assert(flags & 0xFFFFF0FA == 0 and flags >> 8 <= 8,
-        'Improved Tunnelers: invalid saved collapse owner/flags')
+      check(flags & 0xFFFFF0FA == 0 and flags >> 8 <= 8,
+        'invalid saved collapse owner/flags')
     end
     bounded(C.RING_CURSOR, layout.records - 1)
     bounded(C.REFUSED_CURSOR, layout.refused - 1)
@@ -121,12 +141,11 @@ function M.attach(module, C, layout, capabilities)
     for i = 0, layout.refused - 1 do tile(C.REFUSED + i * 8) end
     if bounded(C.STEP_ACTIVE, 1) == 1 then
       queued(C.STEP_TILE)
-      -- A tile part way through being shaken, with a reach set larger then than now: the
-      -- rest of that one tile is dropped rather than the save refused.
-      local radius = read(C.SPREAD_RADIUS)
+      check(savedRadius <= 8, 'invalid saved collapse radius')
       for _, offset in ipairs({C.STEP_DX, C.STEP_DY}) do
         local value = string.unpack('<i4', bytes, offsets[offset])
-        if value < -radius or value > radius then bytes = replace(bytes, C.STEP_ACTIVE, 0) end
+        check(value >= -savedRadius and value <= savedRadius,
+          'invalid saved collapse cursor')
       end
     end
     for i = 0, bounded(C.QUEUE_COUNT, layout.queue) - 1 do queued(C.QUEUE + i * 16) end
@@ -146,13 +165,13 @@ function M.attach(module, C, layout, capabilities)
         local offset = route + 16 + entry * 16
         tile(offset)
         local xy = word(bytes, offset + 4)
-        assert(xy & 0xFFFF <= 399 and xy >> 16 <= 399, 'Improved Tunnelers: invalid saved route coordinates')
-        assert(tiles > 0, 'Improved Tunnelers: saved route has no path')
+        check(xy & 0xFFFF <= 399 and xy >> 16 <= 399, 'invalid saved route coordinates')
+        check(tiles > 0, 'Improved Tunnelers: saved route has no path')
         bounded(offset + 8, tiles - 1)
       end
       for entry = 0, tiles - 1 do tile(route + layout.pathOffset + entry * 4) end
     end
-    return bytes
+    return bytes, savedRadius
   end
   -- core.writeBytes is the framework's binary writer. Small chunks avoid Lua's
   -- multiple-return stack limit; no custom native memory or save bridge is needed.
@@ -162,7 +181,8 @@ function M.attach(module, C, layout, capabilities)
     end
   end
   local function restore(bytes)
-    bytes = validate(bytes) -- All bounds and identities checked before the first write.
+    local savedRadius
+    bytes, savedRadius = validate(bytes) -- Check the entire body before any writes.
     bytes = replace(bytes, C.RING_CURSOR, control + C.RECORDS + word(bytes, C.RING_CURSOR) * 16)
     bytes = replace(bytes, C.REFUSED_CURSOR, control + C.REFUSED + word(bytes, C.REFUSED_CURSOR) * 8)
     for i = 0, layout.records - 1 do
@@ -171,6 +191,7 @@ function M.attach(module, C, layout, capabilities)
       bytes = replace(bytes, offset, line == 0 and 0 or control + C.LINES + (line - 1) * 16)
     end
     write(control, baseline) -- Scratch and diagnostic clocks never cross worlds.
+    if word(bytes, C.STEP_ACTIVE) == 1 then core.writeInteger(control + C.STEP_RADIUS, savedRadius) end
     for _, range in ipairs(ranges) do
       local at = offsets[range[1]]
       write(control + range[1], bytes:sub(at, at + range[2] - 1))
