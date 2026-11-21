@@ -266,7 +266,9 @@ class Host:
 
     # ---- convenience ------------------------------------------------------------------
     def find(self, pattern):
-        return self.scan(pattern)
+        # A fixture can deliberately select the first of several native sites.
+        # Production AOBScan calls always use the uniqueness check in scan().
+        return next(hit for hit in self.E.find(pattern) if hit is not None)
 
     def u32(self, a):
         return self.m.u32(a)
