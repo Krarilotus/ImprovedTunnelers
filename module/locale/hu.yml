@@ -51,3 +51,11 @@ bugfixes: Bugfixes
 ai: AI
 improvements: Improvements
 misc: Miscellaneous
+retarget_join: 'Csatlakozási távolság (mező)'
+retarget_join_tooltip: 'Az egy csoport első alagútjának kezdetéhez ilyen közel ásott alagutak mind annak célpontjához tartanak, és csak onnan ágaznak el. A távolabbi alagutak saját rést nyitnak. 0 = bármilyen távolság. Alapértelmezett: 15.'
+digging_trap_proof: 'Az alagútásók átkelnek a csapdákon'
+digging_trap_proof_tooltip: 'A föld alatti alagútásók nem sérülnek a csapdavermekben, és nem is hozzák működésbe őket.'
+digging_overlay: 'Saját alagutak mutatása magaslatok alatt'
+digging_overlay_tooltip: 'Ahol a saját alagutad magasabb terep alatt halad, a játék nem mutat kidudorodást a felszínen. Ezeket a mezőket pirossal jelöli, mint egy tervezett várárkot, amíg az ásás tart, és a jelölés eltűnik, amikor az alagút beomlik. A saját alagutaidat csak te látod.'
+collapse_entrance_lost: 'Lerombolt bejárat beomlasztja az alagutat'
+collapse_entrance_lost_tooltip: 'Ha a bejáratot ásás közben lerombolják, az alagút ott omlik be, ahová eljutott, és megrongálja, ami fölötte áll, mintha célba ért volna.'

@@ -51,3 +51,11 @@ bugfixes: Bugfixes
 ai: AI
 improvements: Improvements
 misc: Miscellaneous
+retarget_join: 'Anschlussabstand (Felder)'
+retarget_join_tooltip: 'Tunnel, die so nah am Start des ersten Tunnels einer Gruppe gegraben werden, zielen alle auf dessen Ziel und verzweigen erst von dort. Weiter entfernte Tunnel öffnen ihre eigene Bresche. 0 = beliebig weit. Standard: 15.'
+digging_trap_proof: 'Tunnelgräber ignorieren Fallgruben'
+digging_trap_proof_tooltip: 'Tunnelgräber unter der Erde nehmen keinen Schaden durch Fallgruben und lösen sie nicht aus.'
+digging_overlay: 'Eigene Tunnel unter Anhöhen zeigen'
+digging_overlay_tooltip: 'Wo dein Tunnel unter erhöhtem Gelände verläuft, zeigt das Spiel keine Erhebung an der Oberfläche. Diese Felder werden rot markiert, wie ein geplanter Burggraben, solange gegraben wird; die Markierung verschwindet, wenn der Tunnel einstürzt. Nur du siehst deine eigenen Tunnel.'
+collapse_entrance_lost: 'Zerstörter Eingang lässt Tunnel einstürzen'
+collapse_entrance_lost_tooltip: 'Wird der Eingang zerstört, während der Tunnel noch gegraben wird, stürzt der Tunnel an seiner Spitze ein und beschädigt, was darüber steht, als hätte er ein Ziel erreicht.'

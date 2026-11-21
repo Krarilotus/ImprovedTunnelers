@@ -438,8 +438,53 @@ mov edx, [TICKS_ADDRESS]
 mov [esi+12], edx
 mov ecx, [RECORD_ADDRESS]
 mov [ecx+8], esi
+mov edx, esi
+sub edx, LINE_ADDRESS
+shr edx, 1
+add edx, ORIGINS_ADDRESS
+mov ecx, [AIM_FROM_X_ADDRESS]
+add ecx, 1
+mov [edx], ecx
+mov ecx, [AIM_FROM_Y_ADDRESS]
+mov [edx+4], ecx
 pop edi
 pop esi
+ret
+]]
+
+-- Whether a tunnel may join the line in EBX: only when it starts near where that line began,
+-- so tunnels dug in together all go for the same spot and only branch out from there, while
+-- tunnels dug in far apart open breaches of their own. A line whose start is not known (one
+-- from a save) or a distance of 0 lets any tunnel join, as before. The distance is the larger
+-- of the x and y differences. Out: EAX 1 to join, 0 not. EAX, ECX and EDX.
+local join_near = [[
+mov eax, 1
+mov ecx, [JOIN_DISTANCE_ADDRESS]
+test ecx, ecx
+je join_out
+mov edx, ebx
+sub edx, LINE_ADDRESS
+shr edx, 1
+add edx, ORIGINS_ADDRESS
+mov ecx, [edx]
+test ecx, ecx
+je join_out
+sub ecx, 1
+sub ecx, [AIM_FROM_X_ADDRESS]
+mov eax, ecx
+neg eax
+cmovl eax, ecx
+mov ecx, [edx+4]
+sub ecx, [AIM_FROM_Y_ADDRESS]
+mov edx, ecx
+neg edx
+cmovl edx, ecx
+cmp edx, eax
+cmovg eax, edx
+cmp eax, [JOIN_DISTANCE_ADDRESS]
+mov eax, 0
+setbe al
+join_out:
 ret
 ]]
 
@@ -1066,6 +1111,9 @@ jbe place_current
 mov dword [ebx], 0
 jmp place_next
 place_current:
+call JOIN_NEAR_ADDRESS
+test eax, eax
+je place_next
 call LINE_FRONT_ADDRESS
 cmp edx, -1
 je place_later
@@ -2480,6 +2528,60 @@ mov word [eax+UNIT_PATH_LENGTH], 0
 jmp RETURN_ADDRESS
 ]]
 
+-- A tunnel whose entrance is destroyed while it is still digging. The game brings the tunnel
+-- behind it down at once (tunnel_walk queues that) and fades the tunneller out; tunnel_walk
+-- also notes where the tunneller stood, and next tick this hits whatever stands above that
+-- spot just as collapse_target does when a tunnel arrives: the module's damage figure through
+-- the game's own damage, stairs and crenellations included. Doing it a tick later keeps the
+-- game's damage from running inside the damage call that destroyed the entrance. Nothing is
+-- done where nothing stands, and another tunnel's entrance is never hit (it would bring that
+-- whole tunnel down with it).
+--
+-- In: ECX one strike {tile, x, y, owner}. Called from queue_tick, inside its pushad.
+local strike = [[
+push ebx
+mov ebx, ecx
+mov ecx, [ebx]
+test dword [ecx*4+TILE_FLAGS_ADDRESS], STOCKPILE
+jnz strike_out
+movzx eax, word [ecx*2+BUILDING_TILE_ADDRESS]
+test eax, eax
+je strike_no_building
+imul eax, eax, BUILDING_STRIDE
+cmp word [eax+BUILDING_TYPE_ADDRESS], TUNNEL_TYPE
+je strike_out
+jmp strike_damage
+strike_no_building:
+test dword [ecx*4+TILE_FLAGS_ADDRESS], WALL_FAMILY
+jz strike_out
+cmp dword [FAMILY_READY_ADDRESS], 0
+jne strike_damage
+test dword [ecx*4+TILE_FLAGS_ADDRESS], 256
+jnz strike_damage
+push dword [ebx+8]
+push dword [ebx+4]
+push ecx
+mov ecx, TILE_MAP_STATE_ADDRESS
+call RESET_TILE_ADDRESS
+jmp strike_out
+strike_damage:
+mov dword [FAMILY_ACTIVE_ADDRESS], 1
+push 0
+push 0
+push dword [ebx+12]
+push 0
+push dword [DAMAGE_ADDRESS]
+push dword [ebx+8]
+push dword [ebx+4]
+push dword [ebx]
+mov ecx, TILE_MAP_STATE_ADDRESS
+call PROCESS_DAMAGE_ADDRESS
+mov dword [FAMILY_ACTIVE_ADDRESS], 0
+strike_out:
+pop ebx
+ret
+]]
+
 -- The game brings a whole tunnel down in the one frame the tunneler reaches its target:
 -- every tile damaged and every tile's ground lowered at once. That is a visible stutter on
 -- a long tunnel, and it looks like nothing in particular. These three scripts take the
@@ -2557,9 +2659,27 @@ mov [ecx+8], edx
 mov edx, [FILL_FLAGS_ADDRESS]
 mov [ecx+12], edx
 add dword [QUEUE_COUNT_ADDRESS], 1
+if OVERLAY = 1
+mov ecx, [FILL_TILE_ADDRESS]
+cmp ecx, OVERLAY_TILES
+jae fill_advance
+movzx eax, word [MARKS_ADDRESS+ecx*4]
+cmp eax, [FILL_UNIT_ADDRESS]
+jne fill_advance
+and dword [MARKS_ADDRESS+ecx*4], 0x00FF0000
+end if
 jmp fill_advance
 fill_overflow:
 mov ecx, [FILL_TILE_ADDRESS]
+if OVERLAY = 1
+cmp ecx, OVERLAY_TILES
+jae fill_unmarked
+movzx eax, word [MARKS_ADDRESS+ecx*4]
+cmp eax, [FILL_UNIT_ADDRESS]
+jne fill_unmarked
+mov dword [MARKS_ADDRESS+ecx*4], 0
+fill_unmarked:
+end if
 if TERRAIN_FIX = 0
 test dword [ecx*4+TILE_FLAGS_ADDRESS], 0x20000081
 jnz fill_advance
@@ -2642,6 +2762,15 @@ if TERRAIN_FIX = 0
   mov byte [ecx+LIVE_HEIGHT_ADDRESS], 0
 end if
 ground_done:
+if OVERLAY = 1
+mov ecx, [esi]
+cmp ecx, OVERLAY_TILES
+jae ground_unmarked
+cmp word [MARKS_ADDRESS+ecx*4], 0
+jne ground_unmarked
+mov dword [MARKS_ADDRESS+ecx*4], 0
+ground_unmarked:
+end if
 pop esi
 ret
 ]]
@@ -2686,6 +2815,27 @@ mov [REPORT_ADDRESS+36], edx
 mov dword [REPORT_ADDRESS+28], 54
 call REPORT_PAD_ADDRESS
 walk_fill:
+mov eax, [esp+4]
+imul eax, eax, 1168
+cmp word [eax+UNIT_STATE], 3
+jne walk_queue
+cmp dword [esp], OWN_CALL_RETURN
+je walk_queue
+mov ecx, [STRIKE_COUNT_ADDRESS]
+cmp ecx, STRIKE_MAX
+jae walk_queue
+shl ecx, 4
+add ecx, STRIKES_ADDRESS
+mov edx, [eax+UNIT_TILE]
+mov [ecx], edx
+movsx edx, word [eax+UNIT_X]
+mov [ecx+4], edx
+movsx edx, word [eax+UNIT_Y]
+mov [ecx+8], edx
+movsx edx, word [eax+UNIT_OWNER]
+mov [ecx+12], edx
+add dword [STRIKE_COUNT_ADDRESS], 1
+walk_queue:
 mov eax, [esp+4]
 mov [FILL_UNIT_ADDRESS], eax
 imul eax, eax, 1168
@@ -2839,6 +2989,12 @@ ret
 -- them - a long tunnel took minutes to go back down.
 local queue_tick = [[
 pushad
+if OVERLAY = 1
+cmp dword [REBUILD_ADDRESS], 0
+je tick_marked
+call OVERLAY_REBUILD_ADDRESS
+tick_marked:
+end if
 cmp dword [DIAGNOSTICS_ADDRESS], 0
 je tick_unwatched
 rdtsc
@@ -2891,6 +3047,16 @@ mov [SW_DAMAGE_MAX_ADDRESS], eax
 mov [SW_DAMAGE_CALLS_ADDRESS], eax
 mov [SW_TILES_ADDRESS], eax
 tick_unwatched:
+mov ecx, [STRIKE_COUNT_ADDRESS]
+test ecx, ecx
+je tick_struck
+sub ecx, 1
+mov [STRIKE_COUNT_ADDRESS], ecx
+shl ecx, 4
+add ecx, STRIKES_ADDRESS
+call STRIKE_ADDRESS
+jmp tick_unwatched
+tick_struck:
 mov ebx, [SPEED_ADDRESS]
 test ebx, ebx
 jle tick_done
@@ -3130,6 +3296,30 @@ target_vanilla:
 jmp RETURN_ADDRESS
 ]]
 
+-- A killing pit lets a tunneller pass that is underground - waiting below its entrance (9),
+-- digging (3) or bringing its tunnel down (4): it takes no damage and the pit stays shut.
+-- Replaces processDamageFromKillingPit's first two instructions; ECX is the function's own
+-- this and must survive, so only EAX and EDX are used.
+local trap_proof = [[
+mov eax, [esp+4]
+imul eax, eax, 1168
+cmp word [eax+UNIT_TYPE], TUNNELER_TYPE
+jne trap_game
+movzx edx, word [eax+UNIT_STATE]
+cmp edx, 3
+je trap_skip
+cmp edx, 4
+je trap_skip
+cmp edx, 9
+je trap_skip
+trap_game:
+push esi
+mov esi, [esp+8]
+jmp RETURN_ADDRESS
+trap_skip:
+ret 4
+]]
+
 -- Hooked into the first instruction of UpdateTunneler. The stance search
 -- (findNearestEnemyAndHeadTowardsIt) only looks at a unit's tribe stance when the unit
 -- has its "standing about, free to react" flag set, and every soldier's update function
@@ -3286,6 +3476,9 @@ return {
   find_anchor = find_anchor,
   no_anchor = no_anchor,
   not_a_target = not_a_target,
+  trap_proof = trap_proof,
+  strike = strike,
+  join_near = join_near,
   stance = stance,
   render_tunnel_button = render_tunnel_button,
   tunnel_button_click = tunnel_button_click,

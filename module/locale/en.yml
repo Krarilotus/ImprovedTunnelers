@@ -51,3 +51,11 @@ bugfixes: Bugfixes
 ai: AI
 improvements: Improvements
 misc: Miscellaneous
+retarget_join: 'Join distance (tiles)'
+retarget_join_tooltip: 'Tunnels dug in this close to where a group''s first tunnel started all go for that tunnel''s target, then branch out from there. Tunnels further apart open their own breach. 0 = any distance. Default: 15.'
+digging_trap_proof: 'Tunnelers ignore killing pits'
+digging_trap_proof_tooltip: 'Tunnelers underground take no damage from killing pits and do not set them off.'
+digging_overlay: 'Show your tunnels under high ground'
+digging_overlay_tooltip: 'Where your own tunnel runs under raised ground, the game shows no bump on the surface. This marks those tiles in red, like a planned moat, while the tunnel is dug, and takes the mark away as the tunnel falls in. Only you see your own tunnels.'
+collapse_entrance_lost: 'Lost entrance collapses the tunnel'
+collapse_entrance_lost_tooltip: 'If a tunnel''s entrance is destroyed while it is still being dug, the tunnel falls in where it has got to and damages what stands above, as if it had reached a target.'

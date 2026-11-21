@@ -78,6 +78,17 @@ options:
       min: 1
       max: 30
       step: 1
+  - url: improved-tunnelers.retarget.join_distance
+    name: improved-tunnelers-retarget-join-distance
+    text: '{{retarget_join}}'
+    tooltip: '{{retarget_join_tooltip}}'
+    display: Number
+    contents:
+      type: integer
+      value: 15
+      min: 0
+      max: 80
+      step: 1
 
 - display: GroupBox
   category: ['{{balance_changes}}']
@@ -122,6 +133,22 @@ options:
     contents:
       type: boolean
       value: true
+  - url: improved-tunnelers.digging.trap_proof
+    name: improved-tunnelers-digging-trap-proof
+    text: '{{digging_trap_proof}}'
+    tooltip: '{{digging_trap_proof_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.digging.overlay
+    name: improved-tunnelers-digging-overlay
+    text: '{{digging_overlay}}'
+    tooltip: '{{digging_overlay_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
   - url: improved-tunnelers.collapse.damage
     name: improved-tunnelers-collapse-damage
     text: '{{collapse_damage}}'
@@ -136,6 +163,14 @@ options:
     name: improved-tunnelers-collapse-spread
     text: '{{collapse_spread}}'
     tooltip: '{{collapse_spread_tooltip}}'
+    display: Switch
+    contents:
+      type: boolean
+      value: true
+  - url: improved-tunnelers.collapse.entrance_lost
+    name: improved-tunnelers-collapse-entrance-lost
+    text: '{{collapse_entrance_lost}}'
+    tooltip: '{{collapse_entrance_lost_tooltip}}'
     display: Switch
     contents:
       type: boolean

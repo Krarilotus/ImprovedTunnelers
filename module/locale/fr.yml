@@ -52,3 +52,11 @@ bugfixes: Bugfixes
 ai: AI
 improvements: Improvements
 misc: Miscellaneous
+retarget_join: 'Distance de regroupement (cases)'
+retarget_join_tooltip: 'Les tunnels creusés aussi près du départ du premier tunnel d’un groupe visent tous sa cible et ne bifurquent qu’à partir de là. Les tunnels plus éloignés ouvrent leur propre brèche. 0 = toute distance. Par défaut : 15.'
+digging_trap_proof: 'Les tunneliers ignorent les fosses'
+digging_trap_proof_tooltip: 'Les tunneliers sous terre ne subissent aucun dégât des fosses meurtrières et ne les déclenchent pas.'
+digging_overlay: 'Montrer vos tunnels sous les hauteurs'
+digging_overlay_tooltip: 'Là où votre tunnel passe sous un terrain surélevé, le jeu ne montre aucune bosse en surface. Ces cases sont marquées en rouge, comme un fossé prévu, pendant le creusement, et la marque disparaît quand le tunnel s''effondre. Vous seul voyez vos tunnels.'
+collapse_entrance_lost: 'Entrée détruite : le tunnel s’effondre'
+collapse_entrance_lost_tooltip: 'Si l’entrée est détruite pendant le creusement, le tunnel s’effondre là où il est arrivé et endommage ce qui se trouve au-dessus, comme s’il avait atteint une cible.'

@@ -53,3 +53,11 @@ bugfixes: Bugfixes
 ai: AI
 improvements: Improvements
 misc: Miscellaneous
+retarget_join: 'Distancia de unión (casillas)'
+retarget_join_tooltip: 'Los túneles iniciados a esta distancia del primer túnel de un grupo van todos a su objetivo y se ramifican desde allí. Los túneles más alejados abren su propia brecha. 0 = cualquier distancia. Predeterminado: 15.'
+digging_trap_proof: 'Los excavadores ignoran los fosos de la muerte'
+digging_trap_proof_tooltip: 'Los excavadores bajo tierra no reciben daño de los fosos de la muerte ni los activan.'
+digging_overlay: 'Mostrar tus túneles bajo terreno alto'
+digging_overlay_tooltip: 'Donde tu túnel pasa bajo terreno elevado, el juego no muestra ningún bulto en la superficie. Esas casillas se marcan en rojo, como un foso planeado, mientras se cava, y la marca desaparece cuando el túnel se derrumba. Solo tú ves tus propios túneles.'
+collapse_entrance_lost: 'Entrada destruida derrumba el túnel'
+collapse_entrance_lost_tooltip: 'Si la entrada se destruye mientras el túnel aún se excava, el túnel se derrumba donde ha llegado y daña lo que hay encima, como si hubiera alcanzado un objetivo.'

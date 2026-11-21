@@ -518,6 +518,12 @@ ROUTE.guards = {
   [0x1FC] = { 0x3B, 0x56, 0x04 },                  -- cmp edx, [esi+4]: the search's number
 }
 ROUTE.buildingOwner = 0xD6                    -- who a building belongs to
+-- processDamageFromKillingPit(unitIndex), the one place a killing pit catches a unit: called
+-- from processUnitMove for every unit that steps onto a new tile. The hook replaces its
+-- first two instructions (push esi; mov esi, [esp+8]) and leaves ECX - BuildingsState - alone.
+ROUTE.killingPit = "56 8B 74 24 08 69 F6 90 04 00 00 8B 86 ? ? ? ? 0F BF 04 45 ? ? ? ? 33 D2 3B C2"
+ROUTE.killingPitHook = 5
+ROUTE.strikeMax = 16                          -- entrances that can fall in one tick
 ROUTE.tunnelType = 50                         -- BT_TUNNEL, a tunnel's entrance building
 ROUTE.groundDone = 4                          -- queue entry flag: its ground is back
 ROUTE.walkEntryGuard = { [0x00] = { 0x51, 0x53, 0x8B, 0x5C, 0x24, 0x0C } }
@@ -715,7 +721,13 @@ C.PLAN_BUFFER = C.LINES + (PLAYER_COUNT + 1) * LINE_BLOCK  -- a plan being exten
 C.ROUTE_TEMP = C.PLAN_BUFFER + PLAN_BYTES                -- a route being read out
 C.PATH_TEMP = C.ROUTE_TEMP + ROUTE.found * 12            -- ... and its path
 C.ROUTES = C.PATH_TEMP + ROUTE.pathMax * 4               -- one route to every line
-C.SIZE = C.ROUTES + (PLAYER_COUNT + 1) * 4 * ROUTE.size
+C.ORIGINS = C.ROUTES + (PLAYER_COUNT + 1) * 4 * ROUTE.size  -- where each line began: x + 1, y
+C.JOIN_DISTANCE = C.ORIGINS + (PLAYER_COUNT + 1) * 4 * 8    -- how near a line a tunnel must start
+C.STRIKE_COUNT = C.JOIN_DISTANCE + 4    -- tunnels whose entrance fell while they dug ...
+C.STRIKES = C.STRIKE_COUNT + 4          -- ... {tile, x, y, owner}, struck next tick
+C.OVERLAY_ON = C.STRIKES + ROUTE.strikeMax * 16  -- the tunnel mark is drawn (overlay.lua)
+C.OVERLAY_REBUILD = C.OVERLAY_ON + 4    -- ... and has to be rebuilt: set in the baseline, so every load does
+C.SIZE = C.OVERLAY_REBUILD + 4
 
 ---------------------------------------------------------------------------------------
 -- Defaults
@@ -725,11 +737,11 @@ C.SIZE = C.ROUTES + (PLAYER_COUNT + 1) * 4 * ROUTE.size
 local DEFAULTS = {
   denial = { enabled = true, sliderValue = 100, message = true },
   terrain = { enabled = true },
-  retarget = { enabled = true, range = DEFAULT_SEARCH_RANGE, max = 10 },
+  retarget = { enabled = true, range = DEFAULT_SEARCH_RANGE, max = 10, join_distance = 15 },
   targets = { towers_and_gates = true, under_buildings = true },
   collapse = { damage = 2500, spread = true, spread_damage = 60, spread_radius = 2,
-    tiles_per_second = 80 },
-  digging = { unselectable = true, untargetable = true },
+    tiles_per_second = 80, entrance_lost = true },
+  digging = { unselectable = true, untargetable = true, trap_proof = true, overlay = true },
   diagnostics = { enabled = false },
   ui = { enabled = true },
   stances = { enabled = true },
@@ -923,6 +935,10 @@ return {
     local spreadOn = setting(config, "collapse", "spread") and true or false
     local unselectableOn = setting(config, "digging", "unselectable") and true or false
     local untargetableOn = setting(config, "digging", "untargetable") and true or false
+    local trapProofOn = setting(config, "digging", "trap_proof") and true or false
+    local entranceLostOn = setting(config, "collapse", "entrance_lost") and true or false
+    local joinDistance = math.max(0, math.min(200,
+      toInteger(setting(config, "retarget", "join_distance"), DEFAULTS.retarget.join_distance)))
     local underOn = setting(config, "targets", "under_buildings") and true or false
     local spreadDamage = toInteger(setting(config, "collapse", "spread_damage"),
       DEFAULTS.collapse.spread_damage)
@@ -1007,11 +1023,13 @@ return {
     writeInteger(control + C.HIDE_TARGET, untargetableOn and 1 or 0)
     writeInteger(control + C.UNDER_BUILDINGS, underOn and 1 or 0)
     writeInteger(control + C.DIAGNOSTICS, diagnosticsOn and 1 or 0)
+    writeInteger(control + C.JOIN_DISTANCE, joinDistance)
     writeInteger(control + C.RING_CURSOR, records)
     writeInteger(control + C.REFUSED_CURSOR, control + C.REFUSED)
 
     self.control = control
     self.patched = {}
+    self.markReady = false
 
     -- Where the hooks report to. They fill the report block and call this pad; the pad is
     -- five NOPs and a ret with a lua detour on it, so nothing runs in the game's own code
@@ -1197,6 +1215,13 @@ return {
           familyReady = true
         end
         local queue = control + C.QUEUE
+        -- The tunnel mark (overlay.lua): its memory first, since the queue clears marks.
+        local mark = require("overlay").prepare(setting(config, "digging", "overlay") and true or false,
+          control, C)
+        mark.OVERLAY_REBUILD_ADDRESS = require("overlay").rebuildRoutine({
+          REBUILD_ADDRESS = mark.REBUILD_ADDRESS, QUEUE_ADDRESS = queue,
+          QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT, QUEUE_MAX = QUEUE_MAX,
+          GROUND_DONE = ROUTE.groundDone })
         -- The ground under one queued tile, put back as the collapse reaches it.
         local ground = core.allocateAssembly(templates.queue_ground, {
           TERRAIN_FIX = terrainOn and 1 or 0,
@@ -1209,6 +1234,9 @@ return {
           BASE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
           TILE_MAP_STATE_ADDRESS = tileMapState,
           TERRAIN_BRUSH_ADDRESS = brush,
+          OVERLAY = mark.OVERLAY,
+          OVERLAY_TILES = mark.OVERLAY_TILES,
+          MARKS_ADDRESS = mark.MARKS_ADDRESS,
         })
 
         -- Writing a tunnel into the queue; only what does not fit has its ground put back now.
@@ -1238,6 +1266,9 @@ return {
           UNIT_LADDER_X = (unitBase + UNIT_LADDER_X) & 0xFFFFFFFF,
           UNIT_LADDER_Y = (unitBase + UNIT_LADDER_Y) & 0xFFFFFFFF,
           UNIT_PREVIOUS_TILE = (unitBase + UNIT_PREVIOUS_TILE) & 0xFFFFFFFF,
+          OVERLAY = mark.OVERLAY,
+          OVERLAY_TILES = mark.OVERLAY_TILES,
+          MARKS_ADDRESS = mark.MARKS_ADDRESS,
         })
 
         -- One tile of it: what stands about is shaken.
@@ -1271,8 +1302,28 @@ return {
           STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
         })
 
+        -- A tunnel whose entrance falls while it digs strikes where it stood, next tick.
+        local strike = core.allocateAssembly(templates.strike, {
+          STOCKPILE = ROUTE.stockpileFlag,
+          WALL_FAMILY = WALL_FAMILY_FLAGS,
+          TUNNEL_TYPE = ROUTE.tunnelType,
+          BUILDING_STRIDE = SEARCH_STRIDE,
+          BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
+          TILE_FLAGS_ADDRESS = tileFlags,
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          RESET_TILE_ADDRESS = callTarget(tunneler + TUNNELER_RESET_TILE_CALL),
+          TILE_MAP_STATE_ADDRESS = tileMapState,
+          PROCESS_DAMAGE_ADDRESS = processDamage,
+          DAMAGE_ADDRESS = control + C.COLLAPSE_DAMAGE,
+          FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
+          FAMILY_READY_ADDRESS = control + C.FAMILY_READY,
+        })
+
         -- ... and the tick that works through what is queued.
         local tick = core.allocateAssembly(templates.queue_tick, {
+          STRIKE_COUNT_ADDRESS = control + C.STRIKE_COUNT,
+          STRIKES_ADDRESS = control + C.STRIKES,
+          STRIKE_ADDRESS = strike,
           DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
           REPORT_ADDRESS = report,
           REPORT_PAD_ADDRESS = reportPad,
@@ -1315,6 +1366,9 @@ return {
           UPDATE_WALK_ADDRESS = callTarget(walk + DAMAGE_WALK_UPDATE_CALL),
           RNG_ADDRESS = readAddress(tickSite + TICK_RNG_OPERAND),
           RETURN_ADDRESS = tickSite + TICK_HOOK + TICK_HOOK_SIZE,
+          OVERLAY = mark.OVERLAY,
+          REBUILD_ADDRESS = mark.REBUILD_ADDRESS,
+          OVERLAY_REBUILD_ADDRESS = mark.OVERLAY_REBUILD_ADDRESS,
         })
         remember(tickSite + TICK_HOOK, TICK_HOOK_SIZE)
         writeJump(tickSite + TICK_HOOK, tick, TICK_HOOK_SIZE)
@@ -1324,6 +1378,12 @@ return {
         -- queue as well.
         if guardsHold(walk, ROUTE.walkEntryGuard, "the game's tunnel collapse") then
           local walkHook = core.allocateAssembly(templates.tunnel_walk, {
+            STRIKE_COUNT_ADDRESS = control + C.STRIKE_COUNT,
+            STRIKES_ADDRESS = control + C.STRIKES,
+            STRIKE_MAX = entranceLostOn and ROUTE.strikeMax or 0,
+            OWN_CALL_RETURN = tunneler + TUNNELER_TUNNEL_DAMAGE_CALL + 5,
+            UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
+            UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
             FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
             FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
             FILL_ADDRESS = fill,
@@ -1367,6 +1427,28 @@ return {
         remember(tunneler + TUNNELER_COLLAPSE_HOOK, TUNNELER_COLLAPSE_HOOK_SIZE)
         writeJump(tunneler + TUNNELER_COLLAPSE_HOOK, target, TUNNELER_COLLAPSE_HOOK_SIZE)
         collapseReady = true
+
+        -- The tunnel mark: tunnellers mark where they dig, the map draws it.
+        if mark.OVERLAY == 1 then
+          self.markReady = require("overlay").install({
+            guardsHold = guardsHold, readAddress = readAddress, callTarget = callTarget,
+            remember = remember, writeJump = writeJump,
+            tunneler = tunneler, currentUnit = currentUnit, onAddress = control + C.OVERLAY_ON,
+            unitField = function(offset) return (unitBase + offset) & 0xFFFFFFFF end,
+            UNIT_TYPE = UNIT_TYPE, UNIT_LOGICAL_STATE = UNIT_LOGICAL_STATE, UNIT_UID = UNIT_UID,
+            UNIT_OWNER = UNIT_OWNER, UNIT_TILE = UNIT_TILE, UNIT_PREVIOUS_TILE = UNIT_PREVIOUS_TILE,
+            UNIT_LADDER_Y = UNIT_LADDER_Y, UNIT_PATH_INDEX = UNIT_PATH_INDEX,
+            UNIT_PATH_LENGTH = UNIT_PATH_LENGTH, UNIT_PATH_PLAN = UNIT_PATH_PLAN,
+            UNIT_TYPE_TUNNELER = UNIT_TYPE_TUNNELER, UNIT_LOGICAL_ALIVE = UNIT_LOGICAL_ALIVE,
+            liveHeight = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
+            baseHeight = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
+            directions = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
+            yDeltas = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
+          })
+          if not self.markReady then
+            writeInteger(control + C.OVERLAY_ON, 0)
+          end
+        end
       end
 
       -------------------------------------------------------------------------------
@@ -1436,6 +1518,9 @@ return {
         RECORD_ADDRESS = control + C.RECORD,
       })
       local newLine = core.allocateAssembly(templates.new_line, {
+        ORIGINS_ADDRESS = control + C.ORIGINS,
+        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
         AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
         ROUTES_ADDRESS = control + C.ROUTES,
         ROUTE_SIZE = ROUTE.size,
@@ -1754,8 +1839,18 @@ return {
         or core.allocate(ROUTE.mapTiles * 2, true)
       local traceFails = core.allocate(4, true)
 
+      -- Which lines a tunnel starting here may join.
+      local joinNear = core.allocateAssembly(templates.join_near, {
+        JOIN_DISTANCE_ADDRESS = control + C.JOIN_DISTANCE,
+        LINE_ADDRESS = lines,
+        ORIGINS_ADDRESS = control + C.ORIGINS,
+        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+      })
+
       -- The first target: lines, over the game's own answer.
       local firstAim = core.allocateAssembly(templates.place_aim, {
+        JOIN_NEAR_ADDRESS = joinNear,
         AIM_MODE_ADDRESS = control + C.AIM_MODE,
         PATH_STATE_ADDRESS = pathState,
         TRACE_FAILS_ADDRESS = traceFails,
@@ -1983,6 +2078,22 @@ return {
       aimReady = true
     end
 
+    -- Killing pits let underground tunnellers pass.
+    local trapReady = false
+    local pitSite = trapProofOn and unitBase ~= nil
+      and scanOptional(ROUTE.killingPit, "the killing pit's damage") or nil
+    if pitSite ~= nil then
+      local pit = core.allocateAssembly(templates.trap_proof, {
+        UNIT_TYPE = (unitBase + UNIT_TYPE) & 0xFFFFFFFF,
+        UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
+        TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
+        RETURN_ADDRESS = pitSite + ROUTE.killingPitHook,
+      })
+      remember(pitSite, ROUTE.killingPitHook)
+      writeJump(pitSite, pit, ROUTE.killingPitHook)
+      trapReady = true
+    end
+
     ---------------------------------------------------------------------------------
     -- 3. The attack-here button, and the dig tunnel button one slot along
     ---------------------------------------------------------------------------------
@@ -2190,6 +2301,7 @@ return {
         (anchor ~= nil) and ((campIds ~= nil) and "towards the enemy campfire"
           or "towards the enemy keep") or "to the nearest fortification",
         retargetMax, retargetRange)
+        .. (joinDistance > 0 and string.format(", joining lines begun within %d tiles", joinDistance) or "")
         or "as the game digs them") or "unavailable",
       targetsReady and (targetsOn and "walls, towers and gates" or "walls only")
         .. (underOn and ", digging under the town" or "")
@@ -2197,9 +2309,13 @@ return {
         or "unavailable",
       collapseReady and string.format("%d damage%s", collapseDamage,
         spreadOn and string.format(" and %d within %d tiles", spreadDamage, spreadRadius)
-        or "") .. string.format(", falling in at %d tiles a second", collapseSpeed) or "unavailable",
+        or "") .. string.format(", falling in at %d tiles a second", collapseSpeed)
+        .. (entranceLostOn and ", a lost entrance strikes where its tunnel had got to" or "")
+        or "unavailable",
       uiReady and (uiOn and "on" or "off") or "unavailable",
-      (aimReady and untargetableOn) and "hidden while digging" or "as the game leaves them",
+      ((aimReady and untargetableOn) and "hidden while digging" or "as the game leaves them")
+        .. (trapReady and ", safe from killing pits underground" or "")
+        .. (self.markReady and ", marked in red where they run under raised ground" or ""),
       stanceReady and (stancesOn and "on" or "off") or "unavailable",
       raidsReady and (raidsOn and "on" or "off") or "unavailable"))
     if diagnosticsOn then
@@ -2216,7 +2332,9 @@ return {
       writeInteger(self.control + C.TARGETS_ENABLED, 0)
       writeInteger(self.control + C.UI_ENABLED, 0)
       writeInteger(self.control + C.STANCE_ENABLED, 0)
+      writeInteger(self.control + C.OVERLAY_ON, 0)
     end
+    self.markReady = nil
     -- Newest first: two hooks on one address (the stopwatch over the stance) come off in
     -- the order they went on, and the game's own bytes are the last thing written back.
     local patched = self.patched or {}

@@ -51,3 +51,11 @@ bugfixes: Bugfixes
 ai: AI
 improvements: Improvements
 misc: Miscellaneous
+retarget_join: 'Katılma mesafesi (kare)'
+retarget_join_tooltip: 'Bir grubun ilk tünelinin başladığı yere bu kadar yakın kazılan tüneller onun hedefine gider ve ancak oradan ayrılır. Daha uzaktaki tüneller kendi gediklerini açar. 0 = her mesafe. Varsayılan: 15.'
+digging_trap_proof: 'Lağımcılar tuzakları yok sayar'
+digging_trap_proof_tooltip: 'Yer altındaki lağımcılar ölüm çukurlarından hasar almaz ve onları tetiklemez.'
+digging_overlay: 'Yüksek zemin altındaki tünellerini göster'
+digging_overlay_tooltip: 'Kendi tünelin yükseltilmiş zeminin altından geçtiğinde oyun yüzeyde bir kabarıklık göstermez. Bu kareler kazı sürerken planlanmış bir hendek gibi kırmızıyla işaretlenir; tünel çöktükçe işaret kalkar. Kendi tünellerini yalnızca sen görürsün.'
+collapse_entrance_lost: 'Yıkılan giriş tüneli çökertir'
+collapse_entrance_lost_tooltip: 'Tünel kazılırken girişi yıkılırsa, tünel ulaştığı yerde çöker ve üstündekine bir hedefe ulaşmış gibi hasar verir.'
