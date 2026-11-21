@@ -59,3 +59,8 @@ digging_overlay: 'Yüksek zemin altındaki tünellerini göster'
 digging_overlay_tooltip: 'Kendi tünelin yükseltilmiş zeminin altından geçtiğinde oyun yüzeyde bir kabarıklık göstermez. Bu kareler kazı sürerken planlanmış bir hendek gibi kırmızıyla işaretlenir; tünel çöktükçe işaret kalkar. Kendi tünellerini yalnızca sen görürsün.'
 collapse_entrance_lost: 'Yıkılan giriş tüneli çökertir'
 collapse_entrance_lost_tooltip: 'Tünel kazılırken girişi yıkılırsa, tünel ulaştığı yerde çöker ve üstündekine bir hedefe ulaşmış gibi hasar verir.'
+
+tags.behavior: Davranış
+tags.bugfixes: Hata düzeltmeleri
+tags.balance: Denge
+tags.interface: Arayüz

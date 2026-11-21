@@ -60,3 +60,8 @@ digging_overlay: 'Montrer vos tunnels sous les hauteurs'
 digging_overlay_tooltip: 'Là où votre tunnel passe sous un terrain surélevé, le jeu ne montre aucune bosse en surface. Ces cases sont marquées en rouge, comme un fossé prévu, pendant le creusement, et la marque disparaît quand le tunnel s''effondre. Vous seul voyez vos tunnels.'
 collapse_entrance_lost: 'Entrée détruite : le tunnel s’effondre'
 collapse_entrance_lost_tooltip: 'Si l’entrée est détruite pendant le creusement, le tunnel s’effondre là où il est arrivé et endommage ce qui se trouve au-dessus, comme s’il avait atteint une cible.'
+
+tags.behavior: Comportement
+tags.bugfixes: Corrections
+tags.balance: ?quilibrage
+tags.interface: Interface

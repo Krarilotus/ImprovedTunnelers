@@ -57,3 +57,8 @@ digging_overlay: '显示高地下的己方地道'
 digging_overlay_tooltip: '当你的地道经过高地下方时，游戏不会在地面上显示隆起。挖掘期间，这些地块会像规划中的护城河一样标成红色，地道坍塌时标记随之消失。只有你能看到自己的地道。'
 collapse_entrance_lost: '入口被毁时地道坍塌'
 collapse_entrance_lost_tooltip: '如果地道仍在挖掘时入口被摧毁，地道会在挖到的位置坍塌，并像到达目标一样损坏上方的东西。'
+
+tags.behavior: 行为
+tags.bugfixes: 错误修复
+tags.balance: ??
+tags.interface: 界面

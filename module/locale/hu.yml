@@ -59,3 +59,8 @@ digging_overlay: 'Saját alagutak mutatása magaslatok alatt'
 digging_overlay_tooltip: 'Ahol a saját alagutad magasabb terep alatt halad, a játék nem mutat kidudorodást a felszínen. Ezeket a mezőket pirossal jelöli, mint egy tervezett várárkot, amíg az ásás tart, és a jelölés eltűnik, amikor az alagút beomlik. A saját alagutaidat csak te látod.'
 collapse_entrance_lost: 'Lerombolt bejárat beomlasztja az alagutat'
 collapse_entrance_lost_tooltip: 'Ha a bejáratot ásás közben lerombolják, az alagút ott omlik be, ahová eljutott, és megrongálja, ami fölötte áll, mintha célba ért volna.'
+
+tags.behavior: Viselkedés
+tags.bugfixes: Hibajavítások
+tags.balance: Egyens?ly
+tags.interface: Kezelőfelület

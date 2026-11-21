@@ -59,3 +59,8 @@ digging_overlay: 'Eigene Tunnel unter Anhöhen zeigen'
 digging_overlay_tooltip: 'Wo dein Tunnel unter erhöhtem Gelände verläuft, zeigt das Spiel keine Erhebung an der Oberfläche. Diese Felder werden rot markiert, wie ein geplanter Burggraben, solange gegraben wird; die Markierung verschwindet, wenn der Tunnel einstürzt. Nur du siehst deine eigenen Tunnel.'
 collapse_entrance_lost: 'Zerstörter Eingang lässt Tunnel einstürzen'
 collapse_entrance_lost_tooltip: 'Wird der Eingang zerstört, während der Tunnel noch gegraben wird, stürzt der Tunnel an seiner Spitze ein und beschädigt, was darüber steht, als hätte er ein Ziel erreicht.'
+
+tags.behavior: Verhalten
+tags.bugfixes: Fehlerkorrekturen
+tags.balance: Balance
+tags.interface: Oberfläche
