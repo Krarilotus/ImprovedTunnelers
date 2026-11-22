@@ -47,11 +47,11 @@ raids_enabled_tooltip: Les tunneliers choisis dans les réglages de raid de l’
 diagnostics_group: Diagnostic
 diagnostics_enabled: Écrire les messages de diagnostic
 diagnostics_enabled_tooltip: Consigner l’activité des tunnels pour rechercher les problèmes. Désactivé par défaut.
-balance_changes: Balance Changes
-bugfixes: Bugfixes
-ai: AI
-improvements: Improvements
-misc: Miscellaneous
+balance_changes: Modifications de l'équilibrage
+bugfixes: Corrections
+ai: IA
+improvements: Améliorations
+misc: Divers
 retarget_join: 'Distance de regroupement (cases)'
 retarget_join_tooltip: 'Les tunnels creusés aussi près du départ du premier tunnel d’un groupe visent tous sa cible et ne bifurquent qu’à partir de là. Les tunnels plus éloignés ouvrent leur propre brèche. 0 = toute distance. Par défaut : 15.'
 digging_trap_proof: 'Les tunneliers ignorent les fosses'
@@ -63,5 +63,5 @@ collapse_entrance_lost_tooltip: 'Si l’entrée est détruite pendant le creusem
 
 tags.behavior: Comportement
 tags.bugfixes: Corrections
-tags.balance: ?quilibrage
+tags.balance: Équilibrage
 tags.interface: Interface
