@@ -14,6 +14,9 @@ What the module does, in plain English, is in `module/locale/description-en.md`.
 | `bench/` | the emulator bench: the module's own Lua runs against the real exe image, its assembly is assembled with UCP's own fasm.dll and then executed |
 | `tools/publish.py` | copies `module/` into the game's module folder under a new version |
 
+Other modules can ask `modules["improved-tunnelers"]:raidRoleFor(unitType)`: 26 (maceman) for a
+tunneller while AI raid tunnellers are on, otherwise nil.
+
 ## Working on it
 
 1. Edit under `module/`.

@@ -478,6 +478,10 @@ ROUTE.raids = {
   guildNext = 0xAD,               -- the recruiting loop's "next unit"
   maceman = 26,
 }
+-- The unit type an AI raid takes a unit type for: a tunneller joins as a maceman would.
+function ROUTE.raids.role(unitType)
+  if unitType == UNIT_TYPE_TUNNELER then return ROUTE.raids.maceman end
+end
 ROUTE.raids.guildGuards = { [ROUTE.raids.guildNext] = { 0x8B, 0x44, 0x24, 0x28, 0x83, 0xC0, 0x01 } }
 ROUTE.raids.tribeGuards = { [ROUTE.raids.changeInto] = { 0x0F, 0xBF, 0xB7 } }
 ROUTE.traceFailed = {
@@ -2190,7 +2194,7 @@ return {
         CHANGE_INTO_OPERAND = readInteger(tribeSite + ROUTE.raids.changeInto + 3),
         ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
         TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
-        STAND_IN_TYPE = ROUTE.raids.maceman,
+        STAND_IN_TYPE = ROUTE.raids.role(UNIT_TYPE_TUNNELER),
         RETURN_ADDRESS = hook + 7,
         DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
         REPORT_ADDRESS = report,
@@ -2213,6 +2217,7 @@ return {
       writeJump(guildSite, guild, 8)
       raidsReady = true
     end
+    self.raidsOn = raidsReady and raidsOn
 
     if tunneler ~= nil and unitBase ~= nil then
       -- The stopwatch round every tunneller update, for the diagnostics.
@@ -2326,6 +2331,11 @@ return {
     end
   end,
 
+  ---Read-only: the unit type an AI raid takes unitType for, or nil for the game's own.
+  raidRoleFor = function(self, unitType)
+    return self.raidsOn and ROUTE.raids.role(unitType) or nil
+  end,
+
   ---Put the game's own bytes back and switch every hook that stays behind inert.
   disable = function(self, config)
     if self.control ~= nil then
@@ -2337,6 +2347,7 @@ return {
       writeInteger(self.control + C.OVERLAY_ON, 0)
     end
     self.markReady = nil
+    self.raidsOn = nil
     -- Newest first: two hooks on one address (the stopwatch over the stance) come off in
     -- the order they went on, and the game's own bytes are the last thing written back.
     local patched = self.patched or {}
