@@ -8,7 +8,7 @@ denial_message_tooltip: |-
 terrain_group: Alagutak talaja
 terrain_enabled: Talaj helyreállítása ásás után
 terrain_enabled_tooltip: |-
-  Visszaállítja a befejezett alagutak körüli eredeti talajmagasságot. Alapértelmezett: be. Kikapcsolva az eredeti játék helyreállítását használja.
+  Visszaállítja a befejezett alagutak körüli eredeti talajmagasságot. Kikapcsolva az eredeti játék helyreállítását használja.
 retarget_group: Alagútútvonalak
 retarget_enabled: Továbbásás a réseken át
 retarget_enabled_tooltip: |-

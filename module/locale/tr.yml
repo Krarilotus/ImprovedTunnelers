@@ -8,7 +8,7 @@ denial_message_tooltip: |-
 terrain_group: Tünel zemini
 terrain_enabled: Kazıdan sonra zemini düzelt
 terrain_enabled_tooltip: |-
-  Biten tünellerin çevresindeki zemini eski yüksekliğine getirir. Varsayılan olarak açık. Kapalıyken oyunun özgün temizliği kullanılır.
+  Biten tünellerin çevresindeki zemini eski yüksekliğine getirir. Kapalıyken oyunun özgün temizliği kullanılır.
 retarget_group: Tünel yolları
 retarget_enabled: Gediklerden devam et
 retarget_enabled_tooltip: |-

@@ -38,3 +38,10 @@ Every version that was published has a tag, so any build can be brought back wit
 `bench/` is a snapshot of the working copies under `%TEMP%\shcw`; it needs `lupa`,
 `keystone`, the two game exes and UCP's `fasm.dll`, and it still runs from that temp
 directory. The copy here is so the harness and its 500-odd assertions survive a temp wipe.
+
+## Vanilla and Recommended
+
+Every option of the module is off by default, so the module alone plays like the original
+game. Two plugins in this repository form the Improved Tunnelers family in the launcher:
+`improved-tunnelers-recommended` (offered first) switches on the recommended settings, `improved-tunnelers-vanilla`
+keeps everything off. Plugins that build on the module set the options they need themselves.

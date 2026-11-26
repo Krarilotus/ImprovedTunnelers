@@ -14,7 +14,7 @@ options:
     display: UCP2Slider
     contents:
       value:
-        enabled: true
+        enabled: false
         sliderValue: 100
       min: 1
       max: 2400
@@ -28,7 +28,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
 
 - display: GroupBox
   category: ['{{bugfixes}}']
@@ -43,7 +43,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
 
 - display: GroupBox
   category: ['{{balance_changes}}']
@@ -58,7 +58,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
   - display: GroupBox
     header: '{{retarget_range}}'
     hasHeader: true
@@ -124,7 +124,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
 
 - display: GroupBox
   category: ['{{balance_changes}}']
@@ -139,7 +139,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
   - url: improved-tunnelers.digging.unselectable
     name: improved-tunnelers-digging-unselectable
     header: '{{digging_unselectable}}'
@@ -148,7 +148,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
   - url: improved-tunnelers.digging.untargetable
     name: improved-tunnelers-digging-untargetable
     header: '{{digging_untargetable}}'
@@ -157,7 +157,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
   - url: improved-tunnelers.digging.trap_proof
     name: improved-tunnelers-digging-trap-proof
     header: '{{digging_trap_proof}}'
@@ -166,7 +166,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
   - url: improved-tunnelers.digging.overlay
     name: improved-tunnelers-digging-overlay
     header: '{{digging_overlay}}'
@@ -175,7 +175,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
   - display: GroupBox
     header: '{{collapse_damage}}'
     hasHeader: true
@@ -200,7 +200,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
   - url: improved-tunnelers.collapse.entrance_lost
     name: improved-tunnelers-collapse-entrance-lost
     header: '{{collapse_entrance_lost}}'
@@ -209,7 +209,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
   - display: GroupBox
     header: '{{collapse_speed}}'
     hasHeader: true
@@ -266,7 +266,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
 
 - display: GroupBox
   category: ['{{bugfixes}}']
@@ -281,7 +281,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
 
 - display: GroupBox
   category: ['{{ai}}', '{{improvements}}']
@@ -296,7 +296,7 @@ options:
     display: UCP2Switch
     contents:
       type: boolean
-      value: true
+      value: false
 
 - display: GroupBox
   category: ['{{misc}}']

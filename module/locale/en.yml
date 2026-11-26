@@ -6,7 +6,7 @@ denial_message: Explain blocked building
 denial_message_tooltip: Show a message when a breach prevents building.
 terrain_group: Tunnel terrain
 terrain_enabled: Restore ground after tunneling
-terrain_enabled_tooltip: Restore the original ground height around completed tunnels. On by default. Off uses the original
+terrain_enabled_tooltip: Restore the original ground height around completed tunnels. Off uses the original
   game's cleanup.
 retarget_group: Tunnel routes
 retarget_enabled: Continue through breaches

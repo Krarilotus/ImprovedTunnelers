@@ -7,7 +7,7 @@ denial_message: Expliquer le blocage
 denial_message_tooltip: Afficher un message quand une brèche empêche de construire.
 terrain_group: Terrain des tunnels
 terrain_enabled: Restaurer le sol après le creusement
-terrain_enabled_tooltip: Rétablir la hauteur initiale autour des tunnels terminés. Activé par défaut. Désactiver utilise le
+terrain_enabled_tooltip: Rétablir la hauteur initiale autour des tunnels terminés. Désactiver utilise le
   nettoyage du jeu d’origine.
 retarget_group: Parcours des tunnels
 retarget_enabled: Continuer après une brèche

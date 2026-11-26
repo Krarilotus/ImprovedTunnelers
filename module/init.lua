@@ -740,17 +740,17 @@ C.SIZE = C.OVERLAY_REBUILD + 4
 -- The GUI hands enable() only what it has saved, never the defaults in options.yml, so a
 -- module nobody has opened in the GUI gets an empty table. These are the real defaults.
 local DEFAULTS = {
-  denial = { enabled = true, sliderValue = 100, message = true },
-  terrain = { enabled = true },
-  retarget = { enabled = true, range = DEFAULT_SEARCH_RANGE, max = 10, join_distance = 15 },
-  targets = { towers_and_gates = true, under_buildings = true },
-  collapse = { damage = 2500, spread = true, spread_damage = 60, spread_radius = 2,
-    tiles_per_second = 80, entrance_lost = true },
-  digging = { unselectable = true, untargetable = true, trap_proof = true, overlay = true },
+  denial = { enabled = false, sliderValue = 100, message = false },
+  terrain = { enabled = false },
+  retarget = { enabled = false, range = DEFAULT_SEARCH_RANGE, max = 10, join_distance = 15 },
+  targets = { towers_and_gates = false, under_buildings = false },
+  collapse = { damage = 2500, spread = false, spread_damage = 60, spread_radius = 2,
+    tiles_per_second = 80, entrance_lost = false },
+  digging = { unselectable = false, untargetable = false, trap_proof = false, overlay = false },
   diagnostics = { enabled = false },
-  ui = { enabled = true },
-  stances = { enabled = true },
-  raids = { enabled = true },
+  ui = { enabled = false },
+  stances = { enabled = false },
+  raids = { enabled = false },
 }
 
 -- What each hook writes into the report block, and what the decision code at +0x1C means.

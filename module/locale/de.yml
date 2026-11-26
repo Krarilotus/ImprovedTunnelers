@@ -8,7 +8,7 @@ denial_message_tooltip: |-
 terrain_group: Tunnelgelände
 terrain_enabled: Boden nach dem Tunnelbau wiederherstellen
 terrain_enabled_tooltip: |-
-  Die ursprüngliche Bodenhöhe um fertige Tunnel wiederherstellen. Standardmäßig an. Aus verwendet die Bereinigung des Originalspiels.
+  Die ursprüngliche Bodenhöhe um fertige Tunnel wiederherstellen. Aus verwendet die Bereinigung des Originalspiels.
 retarget_group: Tunnelwege
 retarget_enabled: Durch Breschen weitergraben
 retarget_enabled_tooltip: |-

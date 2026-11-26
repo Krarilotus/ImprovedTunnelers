@@ -8,7 +8,7 @@ denial_message_tooltip: |-
 terrain_group: Terreno de los túneles
 terrain_enabled: Restaurar el suelo tras excavar
 terrain_enabled_tooltip: |-
-  Restaura la altura original alrededor de túneles terminados. Activado por defecto. Desactivado usa la limpieza del juego original.
+  Restaura la altura original alrededor de túneles terminados. Desactivado usa la limpieza del juego original.
 retarget_group: Rutas de túneles
 retarget_enabled: Continuar tras las brechas
 retarget_enabled_tooltip: |-

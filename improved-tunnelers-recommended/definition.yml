@@ -1,0 +1,16 @@
+name: improved-tunnelers-recommended
+display-name: Improved Tunnelers Recommended
+author: Monsterfish
+version: 1.0.0
+type: plugin
+game:
+- SHC==1.41
+- SHCE==1.41
+family:
+- name: improved-tunnelers
+meta:
+  version: 1.0.0
+dependencies:
+  framework: ^3.0.7
+  frontend: '>=1.0.17 <2.0.0'
+  improved-tunnelers: ^1.7.13

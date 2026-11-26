@@ -1,0 +1,62 @@
+meta:
+  version: 1.0.0
+config-sparse:
+  modules:
+    improved-tunnelers:
+      config:
+        denial:
+          contents:
+            suggested-value:
+              enabled: true
+              sliderValue: 100
+          message:
+            contents:
+              suggested-value: true
+        terrain:
+          enabled:
+            contents:
+              suggested-value: true
+        retarget:
+          enabled:
+            contents:
+              suggested-value: true
+        targets:
+          towers_and_gates:
+            contents:
+              suggested-value: true
+          under_buildings:
+            contents:
+              suggested-value: true
+        digging:
+          unselectable:
+            contents:
+              suggested-value: true
+          untargetable:
+            contents:
+              suggested-value: true
+          trap_proof:
+            contents:
+              suggested-value: true
+          overlay:
+            contents:
+              suggested-value: true
+        collapse:
+          spread:
+            contents:
+              suggested-value: true
+          entrance_lost:
+            contents:
+              suggested-value: true
+        ui:
+          enabled:
+            contents:
+              suggested-value: true
+        stances:
+          enabled:
+            contents:
+              suggested-value: true
+        raids:
+          enabled:
+            contents:
+              suggested-value: true
+  plugins: {}

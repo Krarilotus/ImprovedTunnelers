@@ -8,7 +8,7 @@ denial_message_tooltip: |-
 terrain_group: 隧道地形
 terrain_enabled: 挖掘后恢复地面
 terrain_enabled_tooltip: |-
-  恢复已完成隧道周围的原始地面高度。默认开启。关闭则使用原版清理方式。
+  恢复已完成隧道周围的原始地面高度。关闭则使用原版清理方式。
 retarget_group: 隧道路线
 retarget_enabled: 穿过缺口继续挖掘
 retarget_enabled_tooltip: |-
