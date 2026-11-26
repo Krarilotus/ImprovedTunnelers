@@ -176,6 +176,15 @@ options:
     contents:
       type: boolean
       value: false
+  - url: improved-tunnelers.collapse.enabled
+    name: improved-tunnelers-collapse-enabled
+    header: '{{collapse_enabled}}'
+    text: '{{collapse_enabled_tooltip}}'
+    hasHeader: true
+    display: UCP2Switch
+    contents:
+      type: boolean
+      value: false
   - display: GroupBox
     header: '{{collapse_damage}}'
     hasHeader: true

@@ -33,6 +33,9 @@ digging_unselectable_tooltip: |-
 digging_untargetable: 保护地下隧道工
 digging_untargetable_tooltip: |-
   挖掘期间敌人无法瞄准隧道工。
+collapse_enabled: 隧道对目标造成伤害
+collapse_enabled_tooltip: |-
+  隧道终点的城墙、塔楼或城门承受下方设定的伤害，而不是像原版游戏那样被直接摧毁。
 collapse_damage: 目标伤害
 collapse_damage_tooltip: |-
   对隧道终点的城墙、塔楼或城门造成的伤害。默认：2500。

@@ -33,6 +33,9 @@ digging_unselectable_tooltip: |-
 digging_untargetable: محافظت از تونل‌کن‌های زیر زمین
 digging_untargetable_tooltip: |-
   دشمنان هنگام حفاری نمی‌توانند تونل‌کن‌ها را هدف بگیرند.
+collapse_enabled: تونل‌ها به هدف آسیب می‌زنند
+collapse_enabled_tooltip: |-
+  دیوار، برج یا دروازهٔ انتهای تونل به جای تخریب فوری مانند بازی اصلی، آسیب تعیین‌شده در پایین را می‌گیرد.
 collapse_damage: آسیب به هدف
 collapse_damage_tooltip: |-
   آسیب به دیوار، برج یا دروازه در انتهای تونل. پیش‌فرض: ۲۵۰۰.

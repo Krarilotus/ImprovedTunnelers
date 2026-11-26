@@ -33,6 +33,9 @@ digging_unselectable_tooltip: |-
 digging_untargetable: Tunnelgräber unter der Erde schützen
 digging_untargetable_tooltip: |-
   Feinde können grabende Tunnelgräber nicht anvisieren.
+collapse_enabled: Tunnel beschädigen ihr Ziel
+collapse_enabled_tooltip: |-
+  Mauer, Turm oder Tor am Tunnelende erhalten den Schaden unten, statt wie im Originalspiel sofort abgerissen zu werden.
 collapse_damage: Schaden am Ziel
 collapse_damage_tooltip: |-
   Schaden an Mauer, Turm oder Tor am Tunnelende. Standard: 2500.

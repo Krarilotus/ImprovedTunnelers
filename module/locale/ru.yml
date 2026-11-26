@@ -33,6 +33,9 @@ digging_unselectable_tooltip: |-
 digging_untargetable: Защищать подкопщиков под землёй
 digging_untargetable_tooltip: |-
   Не позволяет врагам выбирать целью подкопщиков во время подкопа.
+collapse_enabled: Подкопы повреждают цель
+collapse_enabled_tooltip: |-
+  Стена, башня или ворота в конце подкопа получают урон, указанный ниже, а не рушатся сразу, как в оригинальной игре.
 collapse_damage: Урон цели
 collapse_damage_tooltip: |-
   Урон стене, башне или воротам в конце подкопа. По умолчанию: 2500.

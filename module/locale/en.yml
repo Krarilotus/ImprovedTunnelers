@@ -25,6 +25,8 @@ digging_unselectable: Skip digging tunnelers in selections
 digging_unselectable_tooltip: Avoid interrupting digging when selecting or ordering troops.
 digging_untargetable: Protect underground tunnelers
 digging_untargetable_tooltip: Prevent enemies from targeting tunnelers while they dig.
+collapse_enabled: Tunnels damage their target
+collapse_enabled_tooltip: 'The wall, tower or gate at the tunnel''s end takes the damage below instead of being demolished outright, as in the original game.'
 collapse_damage: Damage to the target
 collapse_damage_tooltip: 'Damage dealt to the wall, tower or gate at the tunnel''s end. Default: 2500.'
 collapse_spread: Damage nearby buildings

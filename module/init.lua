@@ -744,7 +744,7 @@ local DEFAULTS = {
   terrain = { enabled = false },
   retarget = { enabled = false, range = DEFAULT_SEARCH_RANGE, max = 10, join_distance = 15 },
   targets = { towers_and_gates = false, under_buildings = false },
-  collapse = { damage = 2500, spread = false, spread_damage = 60, spread_radius = 2,
+  collapse = { enabled = false, damage = 2500, spread = false, spread_damage = 60, spread_radius = 2,
     tiles_per_second = 80, entrance_lost = false },
   digging = { unselectable = false, untargetable = false, trap_proof = false, overlay = false },
   diagnostics = { enabled = false },
@@ -935,6 +935,7 @@ return {
       DEFAULTS.retarget.range)
     local retargetMax = toInteger(setting(config, "retarget", "max"), DEFAULTS.retarget.max)
     local targetsOn = setting(config, "targets", "towers_and_gates") and true or false
+    local collapseOn = setting(config, "collapse", "enabled") and true or false
     local collapseDamage = toInteger(setting(config, "collapse", "damage"),
       DEFAULTS.collapse.damage)
     local spreadOn = setting(config, "collapse", "spread") and true or false
@@ -961,6 +962,11 @@ return {
     local uiOn = setting(config, "ui", "enabled") and true or false
     local stancesOn = setting(config, "stances", "enabled") and true or false
     local raidsOn = setting(config, "raids", "enabled") and true or false
+    local overlayOn = setting(config, "digging", "overlay") and true or false
+    -- The collapse queue carries every feature below that works on a collapsing tunnel. A
+    -- tunnel sent on can run 800 tiles, which the game's one-call collapse freezes on.
+    local queueWanted = collapseOn or terrainOn or spreadOn or entranceLostOn or overlayOn
+      or retargetOn
     assert(spreadRadius >= 0 and spreadRadius <= 8,
       "Improved Tunnelers: collapse radius must be within the customization ranges")
 
@@ -1072,7 +1078,7 @@ return {
     -- and the tunneler is sent back to the game's own search.
 
     local denialReady, retargetReady = false, false
-    local collapseReady, familyReady = false, false
+    local collapseReady, targetReady, familyReady = false, false, false
     local teamSite = scanOptional(AOB_PLAYER_TEAMS, "the player team table")
     local enemySite = scanOptional(AOB_ENEMY_TOO_CLOSE, "the build denial check")
 
@@ -1156,7 +1162,7 @@ return {
       local walk = callTarget(tunneler + TUNNELER_TUNNEL_DAMAGE_CALL)
       local tickSite = scanOptional(AOB_UPDATE_UNITS, "the game's pass over its units")
       local walkReady = guardsHold(walk, DAMAGE_WALK_GUARDS, "the tunnel collapse")
-      local brush = walkReady and callTarget(walk + TERRAIN.brushCall) or nil
+      local brush = walkReady and queueWanted and callTarget(walk + TERRAIN.brushCall) or nil
       local brushReady = brush ~= nil and guardsHold(brush, TERRAIN.guards, "the tunnel terrain brush")
       if brushReady then
         local nativeMap = readAddress(walk + DAMAGE_WALK_TILE_MAP_OPERAND)
@@ -1221,7 +1227,7 @@ return {
         end
         local queue = control + C.QUEUE
         -- The tunnel mark (overlay.lua): its memory first, since the queue clears marks.
-        local mark = require("overlay").prepare(setting(config, "digging", "overlay") and true or false,
+        local mark = require("overlay").prepare(overlayOn,
           control, C)
         mark.OVERLAY_REBUILD_ADDRESS = require("overlay").rebuildRoutine({
           REBUILD_ADDRESS = mark.REBUILD_ADDRESS, QUEUE_ADDRESS = queue,
@@ -1408,30 +1414,33 @@ return {
         end
 
         -- ... and what the collapse does to the thing it arrived under, before the tunnel
-        -- behind it is queued to fall in.
-        local target = core.allocateAssembly(templates.collapse_target, {
-          WALL_FAMILY = WALL_FAMILY_FLAGS,
-          RESET_TILE_ADDRESS = callTarget(tunneler + TUNNELER_RESET_TILE_CALL),
-          TILE_FLAGS_ADDRESS = tileFlags,
-          BUILDING_TILE_ADDRESS = buildingTiles,
-          CURRENT_UNIT_ADDRESS = currentUnit,
-          DAMAGE_ADDRESS = control + C.COLLAPSE_DAMAGE,
-          UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
-          UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
-          UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
-          UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-          TILE_MAP_STATE_ADDRESS = tileMapState,
-          PROCESS_DAMAGE_ADDRESS = processDamage,
-          FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
-          FAMILY_READY_ADDRESS = control + C.FAMILY_READY,
-          FILL_ADDRESS = fill,
-          FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
-          FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
-          UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
-          RETURN_ADDRESS = tunneler + TUNNELER_COLLAPSE_DONE,
-        })
-        remember(tunneler + TUNNELER_COLLAPSE_HOOK, TUNNELER_COLLAPSE_HOOK_SIZE)
-        writeJump(tunneler + TUNNELER_COLLAPSE_HOOK, target, TUNNELER_COLLAPSE_HOOK_SIZE)
+        -- behind it is queued to fall in. Without it the game demolishes the target.
+        if collapseOn then
+          local target = core.allocateAssembly(templates.collapse_target, {
+            WALL_FAMILY = WALL_FAMILY_FLAGS,
+            RESET_TILE_ADDRESS = callTarget(tunneler + TUNNELER_RESET_TILE_CALL),
+            TILE_FLAGS_ADDRESS = tileFlags,
+            BUILDING_TILE_ADDRESS = buildingTiles,
+            CURRENT_UNIT_ADDRESS = currentUnit,
+            DAMAGE_ADDRESS = control + C.COLLAPSE_DAMAGE,
+            UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
+            UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
+            UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
+            UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
+            TILE_MAP_STATE_ADDRESS = tileMapState,
+            PROCESS_DAMAGE_ADDRESS = processDamage,
+            FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
+            FAMILY_READY_ADDRESS = control + C.FAMILY_READY,
+            FILL_ADDRESS = fill,
+            FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
+            FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
+            UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
+            RETURN_ADDRESS = tunneler + TUNNELER_COLLAPSE_DONE,
+          })
+          remember(tunneler + TUNNELER_COLLAPSE_HOOK, TUNNELER_COLLAPSE_HOOK_SIZE)
+          writeJump(tunneler + TUNNELER_COLLAPSE_HOOK, target, TUNNELER_COLLAPSE_HOOK_SIZE)
+          targetReady = true
+        end
         collapseReady = true
 
         -- The tunnel mark: tunnellers mark where they dig, the map draws it.
@@ -2314,11 +2323,11 @@ return {
         .. (underOn and ", digging under the town" or "")
         .. (familyReady and ", stairs and crenellations damaged as wall is" or "")
         or "unavailable",
-      collapseReady and string.format("%d damage%s", collapseDamage,
-        spreadOn and string.format(" and %d within %d tiles", spreadDamage, spreadRadius)
-        or "") .. string.format(", falling in at %d tiles a second", collapseSpeed)
+      collapseReady and (targetReady and string.format("%d damage", collapseDamage)
+        or "the game's demolition") .. (spreadOn and string.format(" and %d within %d tiles",
+        spreadDamage, spreadRadius) or "") .. string.format(", falling in at %d tiles a second", collapseSpeed)
         .. (entranceLostOn and ", a lost entrance strikes where its tunnel had got to" or "")
-        or "unavailable",
+        or (queueWanted and "unavailable" or "as the game does it"),
       uiReady and (uiOn and "on" or "off") or "unavailable",
       ((aimReady and untargetableOn) and "hidden while digging" or "as the game leaves them")
         .. (trapReady and ", safe from killing pits underground" or "")

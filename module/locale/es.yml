@@ -33,6 +33,9 @@ digging_unselectable_tooltip: |-
 digging_untargetable: Proteger zapadores bajo tierra
 digging_untargetable_tooltip: |-
   Impide que los enemigos ataquen a los zapadores mientras excavan.
+collapse_enabled: Los túneles dañan su objetivo
+collapse_enabled_tooltip: |-
+  La muralla, torre o puerta al final del túnel recibe el daño indicado abajo en lugar de derrumbarse de golpe como en el juego original.
 collapse_damage: Daño al objetivo
 collapse_damage_tooltip: |-
   Daño a la muralla, torre o puerta al final del túnel. Predeterminado: 2500.

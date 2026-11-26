@@ -41,6 +41,12 @@ config-sparse:
             contents:
               suggested-value: true
         collapse:
+          enabled:
+            contents:
+              suggested-value: true
+          damage:
+            contents:
+              suggested-value: 2500
           spread:
             contents:
               suggested-value: true

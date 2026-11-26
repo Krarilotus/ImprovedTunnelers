@@ -33,6 +33,9 @@ digging_unselectable_tooltip: |-
 digging_untargetable: Föld alatti alagútásók védelme
 digging_untargetable_tooltip: |-
   Az ellenség nem célozhatja az alagútásókat ásás közben.
+collapse_enabled: Az alagutak sebzik a célpontot
+collapse_enabled_tooltip: |-
+  Az alagút végén lévő fal, torony vagy kapu az alább megadott sebzést kapja, ahelyett hogy azonnal leomlana, mint az eredeti játékban.
 collapse_damage: Célpont sebzése
 collapse_damage_tooltip: |-
   A fal, torony vagy kapu sebzése az alagút végén. Alapértelmezett: 2500.

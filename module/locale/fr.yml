@@ -26,6 +26,8 @@ digging_unselectable: Ignorer les tunneliers en train de creuser
 digging_unselectable_tooltip: Éviter d’interrompre le creusement lors des sélections et ordres de groupe.
 digging_untargetable: Protéger les tunneliers sous terre
 digging_untargetable_tooltip: Empêcher les ennemis de viser les tunneliers pendant le creusement.
+collapse_enabled: Les tunnels endommagent leur cible
+collapse_enabled_tooltip: 'Le mur, la tour ou la porte au bout du tunnel subit les dégâts ci-dessous au lieu d''être démoli d''un coup comme dans le jeu original.'
 collapse_damage: Dégâts à la cible
 collapse_damage_tooltip: 'Dégâts au mur, à la tour ou à la porte au bout du tunnel. Par défaut : 2500.'
 collapse_spread: Endommager les bâtiments proches

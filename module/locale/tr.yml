@@ -33,6 +33,9 @@ digging_unselectable_tooltip: |-
 digging_untargetable: Yeraltındaki tünelcileri koru
 digging_untargetable_tooltip: |-
   Kazı sırasında düşmanların tünelcileri hedeflemesini önler.
+collapse_enabled: Tüneller hedefe hasar verir
+collapse_enabled_tooltip: |-
+  Tünelin ucundaki duvar, kule veya kapı, orijinal oyundaki gibi hemen yıkılmak yerine aşağıdaki hasarı alır.
 collapse_damage: Hedefe verilen hasar
 collapse_damage_tooltip: |-
   Tünelin ucundaki duvara, kuleye veya kapıya verilen hasar. Varsayılan: 2500.
