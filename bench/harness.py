@@ -83,6 +83,7 @@ class Host:
 
         c = lua.table()
         c[b'AOBScan'] = self.scan
+        c[b'AOBScanUnique'] = lambda pattern: self.scan(pattern, unique=True)
         c[b'scanForAOB'] = self.scan
         c[b'readInteger'] = lambda a: self.m.s32(int(a))
         c[b'readSmallInteger'] = lambda a: struct.unpack('<h', self.m.read(int(a), 2))[0]
@@ -118,9 +119,6 @@ class Host:
         c[b'itob'] = lambda v: lua.table_from(list(struct.pack('<I', int(v) & MASK)))
         c[b'getRelativeAddress'] = lambda f, t, o=0: (int(t) - int(f) + int(o)) & MASK
         g[b'core'] = c
-        g[b'VERBOSE'] = b'VERBOSE'
-        lua.execute(b"package.loaded.core = core")
-        g[b'utils'] = lua.eval(b'dofile')(os.environ['UCP_UTILS_LUA'].encode('mbcs'))
 
         lua.execute(('package.path = [[%s\\?.lua;]] .. package.path' % MODULE).encode('mbcs'))
         self.texts = []
@@ -183,10 +181,12 @@ class Host:
                 return bytes(page)
         return None
 
-    def scan(self, pattern, *rest):
+    def scan(self, pattern, *rest, unique=False):
         pattern = pattern.decode('latin-1') if isinstance(pattern, bytes) else pattern
         code_start, code_size, *_ = next(section for section in self.E.secs if section[-1] == '.text')
         hits = [hit for hit in self.E.find(pattern) if hit is not None and code_start <= hit < code_start + code_size]
+        if unique and len(hits) != 1:
+            return None, b'found more than once' if hits else b'not found'
         if len(hits) != 1:
             raise AssertionError(f'AOBScan expected one code match for {pattern}, got {hits}')
         return hits[0]
