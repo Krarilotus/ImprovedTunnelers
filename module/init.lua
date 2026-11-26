@@ -917,7 +917,6 @@ return {
 
   enable = function(self, config)
     config = config or {}
-    self.stateSupport = require('state').prepare()
 
     local denialOn = setting(config, "denial", "enabled") and true or false
     local denialTicks = toInteger(setting(config, "denial", "sliderValue"),
@@ -967,8 +966,16 @@ return {
     -- tunnel sent on can run 800 tiles, which the game's one-call collapse freezes on.
     local queueWanted = collapseOn or terrainOn or spreadOn or entranceLostOn or overlayOn
       or retargetOn
+    -- Where a tunnel goes, and what happens where it arrives.
+    local routingOn = denialOn or retargetOn or diagnosticsOn
     assert(spreadRadius >= 0 and spreadRadius <= 8,
       "Improved Tunnelers: collapse radius must be within the customization ranges")
+    if not (queueWanted or routingOn or targetsOn or underOn or unselectableOn or untargetableOn
+        or trapProofOn or uiOn or stancesOn or raidsOn) then
+      log(INFO, "improved-tunnelers: every option is off; the game is left unchanged.")
+      return
+    end
+    self.stateSupport = require('state').prepare()
 
     ---------------------------------------------------------------------------------
     -- Find the game code
@@ -984,11 +991,11 @@ return {
 
     -- Where each player's keep is, for aiming tunnels towards it.
     local keepIds, campIds
-    local keepSite = scanOptional(AOB_KEEP_OF_PLAYER, "the player's keep")
+    local keepSite = routingOn and scanOptional(AOB_KEEP_OF_PLAYER, "the player's keep") or nil
     if keepSite ~= nil and guardsHold(keepSite, KEEP_GUARDS, "the player's keep") then
       keepIds = readAddress(keepSite + KEEP_IDS_OPERAND)
     end
-    local campSite = scanOptional(AOB_CAMPGROUND_OF_PLAYER, "the player's campground")
+    local campSite = routingOn and scanOptional(AOB_CAMPGROUND_OF_PLAYER, "the player's campground") or nil
     if campSite ~= nil and guardsHold(campSite, CAMP_GUARDS, "the player's campground") then
       campIds = readAddress(campSite + CAMP_IDS_OPERAND)
     end
@@ -1079,8 +1086,8 @@ return {
 
     local denialReady, retargetReady = false, false
     local collapseReady, targetReady, familyReady = false, false, false
-    local teamSite = scanOptional(AOB_PLAYER_TEAMS, "the player team table")
-    local enemySite = scanOptional(AOB_ENEMY_TOO_CLOSE, "the build denial check")
+    local teamSite = routingOn and scanOptional(AOB_PLAYER_TEAMS, "the player team table") or nil
+    local enemySite = denialOn and scanOptional(AOB_ENEMY_TOO_CLOSE, "the build denial check") or nil
 
     -- The game's own target search, and the three addresses it works through, all read
     -- out of the function that drives it.
@@ -1157,12 +1164,14 @@ return {
       ANCHOR_BEST_ADDRESS = control + C.ANCHOR_BEST,
     })
 
-    local queueFill
+    local walk, walkReady
     if tunneler ~= nil and ticks ~= nil and search ~= nil then
-      local walk = callTarget(tunneler + TUNNELER_TUNNEL_DAMAGE_CALL)
+      walk = callTarget(tunneler + TUNNELER_TUNNEL_DAMAGE_CALL)
+      walkReady = guardsHold(walk, DAMAGE_WALK_GUARDS, "the tunnel collapse")
+    end
+    if walk ~= nil and queueWanted then
       local tickSite = scanOptional(AOB_UPDATE_UNITS, "the game's pass over its units")
-      local walkReady = guardsHold(walk, DAMAGE_WALK_GUARDS, "the tunnel collapse")
-      local brush = walkReady and queueWanted and callTarget(walk + TERRAIN.brushCall) or nil
+      local brush = walkReady and callTarget(walk + TERRAIN.brushCall) or nil
       local brushReady = brush ~= nil and guardsHold(brush, TERRAIN.guards, "the tunnel terrain brush")
       if brushReady then
         local nativeMap = readAddress(walk + DAMAGE_WALK_TILE_MAP_OPERAND)
@@ -1384,7 +1393,6 @@ return {
         })
         remember(tickSite + TICK_HOOK, TICK_HOOK_SIZE)
         writeJump(tickSite + TICK_HOOK, tick, TICK_HOOK_SIZE)
-        queueFill = fill
 
         -- The game's own whole-tunnel collapse, when an entrance is destroyed, goes into the
         -- queue as well.
@@ -1465,7 +1473,9 @@ return {
           end
         end
       end
+    end
 
+    if walk ~= nil and routingOn then
       -------------------------------------------------------------------------------
       -- Where a tunnel goes
       -------------------------------------------------------------------------------
@@ -2037,7 +2047,7 @@ return {
     ---------------------------------------------------------------------------------
 
     local targetsReady = false
-    if tunneler ~= nil then
+    if tunneler ~= nil and (targetsOn or underOn or retargetOn) then
       if search ~= nil then
         local targets = core.allocateAssembly(templates.tunnel_targets, {
           ENABLED_ADDRESS = control + C.TARGETS_ENABLED,
@@ -2078,7 +2088,7 @@ return {
 
     -- Nothing aims at a tunneler that is underground.
     local aimReady = false
-    local aimSite = scanOptional(AOB_WORTH_AIMING_AT, "the worth-aiming-at test")
+    local aimSite = untargetableOn and scanOptional(AOB_WORTH_AIMING_AT, "the worth-aiming-at test") or nil
     if aimSite ~= nil and unitBase ~= nil
         and guardsHold(aimSite, AIM_GUARDS, "the worth-aiming-at test") then
       local hidden = core.allocateAssembly(templates.not_a_target, {
@@ -2114,10 +2124,10 @@ return {
     ---------------------------------------------------------------------------------
 
     local uiReady = false
-    local render = scanOptional(AOB_RENDER_UNIT_BUTTONS, "the unit command buttons")
-    local click = scanOptional(AOB_UNIT_BUTTON_CLICK, "the unit command button clicks")
-    local toolbar = scanOptional(AOB_TOOLBAR_CLICK, "the toolbar button handler")
-    if uiOn and render ~= nil and click ~= nil and toolbar ~= nil
+    local render = uiOn and scanOptional(AOB_RENDER_UNIT_BUTTONS, "the unit command buttons") or nil
+    local click = uiOn and scanOptional(AOB_UNIT_BUTTON_CLICK, "the unit command button clicks") or nil
+    local toolbar = uiOn and scanOptional(AOB_TOOLBAR_CLICK, "the toolbar button handler") or nil
+    if render ~= nil and click ~= nil and toolbar ~= nil
         and guardsHold(render, RENDER_GUARDS, "the unit command buttons")
         and guardsHold(click, { [CLICK_TUNNELER_BRANCH] = CLICK_GUARD },
           "the unit command button clicks")
@@ -2172,7 +2182,7 @@ return {
     ---------------------------------------------------------------------------------
 
     local stanceReady = false
-    if tunneler ~= nil then
+    if tunneler ~= nil and (stancesOn or unselectableOn) then
       local stance = core.allocateAssembly(templates.stance, {
         ENABLED_ADDRESS = control + C.STANCE_ENABLED,
         CURRENT_UNIT_ADDRESS = currentUnit,
@@ -2192,8 +2202,8 @@ return {
     ---------------------------------------------------------------------------------
 
     local raidsReady = false
-    local tribeSite = scanOptional(ROUTE.raids.tribeAob, "the AI's raid troop lookup")
-    local guildSite = scanOptional(ROUTE.raids.guildAob, "the AI's recruiting building test")
+    local tribeSite = raidsOn and scanOptional(ROUTE.raids.tribeAob, "the AI's raid troop lookup") or nil
+    local guildSite = raidsOn and scanOptional(ROUTE.raids.guildAob, "the AI's recruiting building test") or nil
     if tribeSite ~= nil and guildSite ~= nil
         and guardsHold(guildSite, ROUTE.raids.guildGuards, "the AI's recruiting loop")
         and guardsHold(tribeSite, ROUTE.raids.tribeGuards, "the AI's raid troop lookup") then
@@ -2228,7 +2238,7 @@ return {
     end
     self.raidsOn = raidsReady and raidsOn
 
-    if tunneler ~= nil and unitBase ~= nil then
+    if diagnosticsOn and tunneler ~= nil and unitBase ~= nil then
       -- The stopwatch round every tunneller update, for the diagnostics.
       -- It calls whatever sits on the entry already - the stance hook, when that is on -
       -- or else the two instructions it replaces, so it is always the outermost.
@@ -2292,48 +2302,51 @@ return {
 
     ---------------------------------------------------------------------------------
 
-    require('state').attach(self, C, {
-      queue = QUEUE_MAX, zones = ZONE_COUNT, records = RECORD_COUNT,
-      lines = (PLAYER_COUNT + 1) * 4, refused = ROUTE.refused,
-      routeSize = ROUTE.size, entries = ROUTE.entries,
-      pathMax = ROUTE.pathMax, pathOffset = ROUTE.pathOffset,
-    }, table.concat({
-      tostring(denialReady), tostring(retargetReady), tostring(targetsReady),
-      tostring(collapseReady), tostring(terrainOn and collapseReady), tostring(familyReady), tostring(aimReady),
-      tostring(stanceReady), tostring(raidsReady), tostring(anchor ~= nil),
-      tostring(campIds ~= nil),
-    }, '/'))
+    -- Denial zones, lines and the collapse queue are the state a save carries.
+    if retargetReady or collapseReady then
+      require('state').attach(self, C, {
+        queue = QUEUE_MAX, zones = ZONE_COUNT, records = RECORD_COUNT,
+        lines = (PLAYER_COUNT + 1) * 4, refused = ROUTE.refused,
+        routeSize = ROUTE.size, entries = ROUTE.entries,
+        pathMax = ROUTE.pathMax, pathOffset = ROUTE.pathOffset,
+      }, table.concat({
+        tostring(denialReady), tostring(retargetReady), tostring(targetsReady),
+        tostring(collapseReady), tostring(terrainOn and collapseReady), tostring(familyReady), tostring(aimReady),
+        tostring(stanceReady), tostring(raidsReady), tostring(anchor ~= nil),
+        tostring(campIds ~= nil),
+      }, '/'))
+    end
 
     log(INFO, string.format(
       "improved-tunnelers: build denial %s%s, tunnels %s, targets %s, collapse %s, "
       .. "buttons %s, tunnelers %s, stances %s, AI raid tunnellers %s.",
-      denialReady and (denialOn and string.format("on, %d ticks", denialTicks) or "off")
-        or "unavailable",
-      (denialReady and denialOn and messageOn)
+      denialOn and (denialReady and string.format("on, %d ticks", denialTicks) or "unavailable")
+        or "off",
+      (denialReady and messageOn)
         and ", localized refusal pending game-text initialization"
         or "",
-      retargetReady and (retargetOn and string.format(
+      retargetOn and (retargetReady and string.format(
         "gather on lines and are sent on %s up to %d times, reaching %d tiles",
         (anchor ~= nil) and ((campIds ~= nil) and "towards the enemy campfire"
           or "towards the enemy keep") or "to the nearest fortification",
         retargetMax, retargetRange)
         .. (joinDistance > 0 and string.format(", joining lines begun within %d tiles", joinDistance) or "")
-        or "as the game digs them") or "unavailable",
+        or "unavailable") or "as the game digs them",
       targetsReady and (targetsOn and "walls, towers and gates" or "walls only")
         .. (underOn and ", digging under the town" or "")
         .. (familyReady and ", stairs and crenellations damaged as wall is" or "")
-        or "unavailable",
+        or ((targetsOn or underOn) and "unavailable" or "walls only"),
       collapseReady and (targetReady and string.format("%d damage", collapseDamage)
         or "the game's demolition") .. (spreadOn and string.format(" and %d within %d tiles",
         spreadDamage, spreadRadius) or "") .. string.format(", falling in at %d tiles a second", collapseSpeed)
         .. (entranceLostOn and ", a lost entrance strikes where its tunnel had got to" or "")
         or (queueWanted and "unavailable" or "as the game does it"),
-      uiReady and (uiOn and "on" or "off") or "unavailable",
+      uiOn and (uiReady and "on" or "unavailable") or "off",
       ((aimReady and untargetableOn) and "hidden while digging" or "as the game leaves them")
         .. (trapReady and ", safe from killing pits underground" or "")
         .. (self.markReady and ", marked in red where they run under raised ground" or ""),
-      stanceReady and (stancesOn and "on" or "off") or "unavailable",
-      raidsReady and (raidsOn and "on" or "off") or "unavailable"))
+      stancesOn and (stanceReady and "on" or "unavailable") or "off",
+      raidsOn and (raidsReady and "on" or "unavailable") or "off"))
     if diagnosticsOn then
       log(INFO, "improved-tunnelers: diagnostics are on; every tunnel dug in, every arrival "
         .. "and every building attempt near a denial writes a line to this log.")
