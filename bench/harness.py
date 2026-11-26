@@ -19,12 +19,35 @@ from host import fasm, ucp_source
 
 MODULE = os.environ.get('TUNNELERS_MODULE',
                         os.path.join(HERE, '..', 'module'))
+RECOMMENDED = os.path.join(HERE, '..', 'improved-tunnelers-recommended', 'config.yml')
 VAN_PATH = G + r'\Stronghold Crusader.exe'
 EXT_PATH = G + r'\Stronghold_Crusader_Extreme.exe'
 HEAP = 0x60000000
 STACK_TOP = 0x70100000
 SENTINEL = 0x7FFFFFF0
 _EXES = {}
+
+
+def recommended(overrides):
+    """The Recommended plugin's suggested values with `overrides` on top."""
+    import yaml
+    with open(RECOMMENDED, encoding='utf-8') as f:
+        tree = yaml.safe_load(f)['config-sparse']['modules']['improved-tunnelers']['config']
+
+    def values(node):
+        out = {}
+        for key, child in node.items():
+            if key == 'contents':
+                continue
+            value = child.get('contents', {}).get('suggested-value')
+            nested = values(child)
+            out[key] = {**value, **nested} if isinstance(value, dict) else (nested or value)
+        return out
+
+    config = values(tree)
+    for group, settings in overrides.items():
+        config[group] = {**config.get(group, {}), **settings} if isinstance(settings, dict) else settings
+    return config
 
 
 def exe(path):
@@ -128,7 +151,7 @@ class Host:
             g[b'modules'] = registry
 
         self.mod = lua.eval(b'dofile')((MODULE + r'\init.lua').encode('mbcs'))
-        self.mod[b'enable'](self.mod, self.to_lua(config or {}))
+        self.mod[b'enable'](self.mod, self.to_lua(recommended(config or {})))
         if after_init:
             for callback in self.after_init:
                 callback()

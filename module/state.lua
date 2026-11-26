@@ -71,9 +71,8 @@ function M.attach(module, C, layout, capabilities)
   -- with other settings - including a capability string of another length - is read, and
   -- its header swapped for this game's own.
   local body = length - headerSize
-  -- The radius word in the original header held the configured radius. While
-  -- a tile is active, it now holds that tile's radius. Its position relative to
-  -- the body is unchanged, so existing saves need no provider migration.
+  -- The format-1 radius word holds the active tile's radius while a tile is active and
+  -- the configured radius otherwise, at the same byte offset in every format-1 save.
   local function word(bytes, offset) return string.unpack('<I4', bytes, offsets[offset]) end
   local function replace(bytes, offset, value)
     local at = offsets[offset]
