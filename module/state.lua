@@ -15,7 +15,7 @@ local path, format = 'tunnelers.bin', 'improved-tunnelers-state-1'
 -- the saved layout itself changes.
 local STATE_FINGERPRINT = 'c5041749cd5d181bbce5baf2762f27e7b931818fc67d938d4c454a81cda5e9cc'
 
--- Map Extensions 1.1.6 uses the first line for its dialog and logs the detail.
+-- Map Extensions uses the first line for its dialog and logs the detail.
 local function reject(key, detail)
   local messages = require('messages')[key]
   local text = modules and modules.textResourceModifier
