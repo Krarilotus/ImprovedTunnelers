@@ -90,11 +90,9 @@ local AOB_RENDER_UNIT_BUTTONS = "8B 44 24 04 50 B9 ? ? ? ? E8 ? ? ? ? 85 C0 75 0
 local AOB_UNIT_BUTTON_CLICK = "57 33 FF 39 3D ? ? ? ? ? ? ? ? ? ? 39 3D ? ? ? ? ? ? ? ? ? ? A1 ? ? ? ?"
 local AOB_TOOLBAR_CLICK = "53 33 DB 39 1D ? ? ? ? 0F 85 ? ? ? ? 39 1D ? ? ? ? 0F 85 ? ? ? ? A1 ? ? ? ?"
 
--- updateUnits, where it decides whether a unit is due to look around for enemies this
--- tick. The game tick counter is the third operand there.
-local AOB_TICK_COUNTER =
-  "8B 87 50 0A 00 00 8B 8F 98 09 00 00 8B 15 ? ? ? ? 23 C8 23 D0 3B D1"
-local OFFSET_TICK_COUNTER = 14
+-- The game tick counter: mov ecx, [edi+0x998] / mov edx, [ticks] in updateUnits. The mask load
+-- before it is patched by other modules.
+local AOB_TICK_COUNTER = "8B 8F 98 09 00 00 8B 15 I(? ? ? ?)"
 
 -- Offsets inside UpdateTunneler. The function is byte for byte the same in both
 -- executables - only the addresses in its operands differ - so these hold for both.
@@ -1008,10 +1006,11 @@ return {
       unitsState = readAddress(tunneler + TUNNELER_UNITS_STATE_OPERAND)
     end
 
-    local ticks
-    local tickSite = scanOptional(AOB_TICK_COUNTER, "the game tick counter")
-    if tickSite ~= nil then
-      ticks = readAddress(tickSite + OFFSET_TICK_COUNTER)
+    local found, _, ticks = pcall(utils.AOBExtract, AOB_TICK_COUNTER)
+    if not found or not ticks then
+      ticks = nil
+      log(WARNING, "improved-tunnelers: could not find the game tick counter; the part of the module "
+        .. "that needs it is off. Another module has probably patched the same code.")
     end
 
     ---------------------------------------------------------------------------------
