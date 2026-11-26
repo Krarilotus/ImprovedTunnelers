@@ -35,7 +35,7 @@ class Fixture:
         self.render = self.h.find("8B 44 24 04 50 B9 ? ? ? ? E8 ? ? ? ? 85 C0 75 0B C7 05 ? ? ? ? ? 00 00 00")
         self.toolbar = self.h.find("53 33 DB 39 1D ? ? ? ? 0F 85 ? ? ? ? 39 1D ? ? ? ? 0F 85 ? ? ? ? A1 ? ? ? ?")
         self.teams = u32(self.h.find("8B 0C 85 ? ? ? ? 8B 44 24 30 3B 0C 85 ? ? ? ?") + 3)
-        self.ticks = u32(self.h.find("8B 87 50 0A 00 00 8B 8F 98 09 00 00") + 14)
+        self.ticks = u32(self.h.find("8B 8F 98 09 00 00 8B 15 ? ? ? ?") + 8)
         t = self.tunneler
         self.current_unit = u32(t + 3)
         self.unit_base = (u32(t + 0x14) - 0x96) & 0xFFFFFFFF

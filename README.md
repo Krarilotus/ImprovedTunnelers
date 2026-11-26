@@ -35,6 +35,8 @@ Every version that was published has a tag, so any build can be brought back wit
 
 ## The bench
 
+Set `UCP_UTILS_LUA` to the framework 3.0.8 source file `content/ucp/code/utils.lua`.
+
 `bench/` is a snapshot of the working copies under `%TEMP%\shcw`; it needs `lupa`,
 `keystone`, the two game exes and UCP's `fasm.dll`, and it still runs from that temp
 directory. The copy here is so the harness and its 500-odd assertions survive a temp wipe.
