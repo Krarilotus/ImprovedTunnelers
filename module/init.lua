@@ -1085,12 +1085,17 @@ return {
     local function writeJump(address, destination, size)
       stage(address, jumpBytes(address, destination, size))
     end
-    local function prepare(feature, build)
+    local function buildPatches(build)
       pending = {}
       local ok, result = pcall(build)
       local patches = pending
       pending = nil
-      if not ok then
+      if not ok then return nil, result end
+      return patches, result
+    end
+    local function prepare(feature, build)
+      local patches, result = buildPatches(build)
+      if not patches then
         log(ERROR, feature .. " is off. " .. tostring(result))
         return nil
       end
@@ -1999,7 +2004,11 @@ return {
 
     local collapsePatches, overlayPatches
     if collapseWanted or routePatches then
-      collapsePatches = prepare("Tunnel collapse changes", prepareCollapse)
+      local reason
+      collapsePatches, reason = buildPatches(prepareCollapse)
+      if collapseWanted and not collapsePatches then
+        log(ERROR, "Tunnel collapse changes are off. " .. tostring(reason))
+      end
       if overlayOn and collapsePatches then
         overlayPatches = prepare("The tunnel mark", prepareOverlay)
         if not overlayPatches then writeInteger(control + C.OVERLAY_ON, 0) end
@@ -2012,7 +2021,8 @@ return {
       end
       if routePatches and not collapsePatches then
         routePatches, redirect = nil, nil
-        log(ERROR, "Following up on tunnel breaches is off. The tunnel collapse queue is unavailable.")
+        log(ERROR, "Following up on tunnel breaches is off. "
+          .. (reason and tostring(reason) or "The tunnel collapse queue is unavailable."))
       end
     end
 
