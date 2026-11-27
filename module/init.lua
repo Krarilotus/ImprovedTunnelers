@@ -819,11 +819,9 @@ local writeInteger = core.writeInteger
 ---@param purpose string
 ---@return number|nil
 local function scanOptional(pattern, purpose)
-  local found, address = pcall(core.AOBScan, pattern)
-  if not found or type(address) ~= "number" or address <= 0 then
-    log(WARNING, "improved-tunnelers: could not find " .. purpose
-      .. "; the part of the module that needs it is off. Another module has probably "
-      .. "patched the same code.")
+  local address, reason = core.AOBScanUnique(pattern)
+  if type(address) ~= "number" or address <= 0 then
+    log(WARNING, "improved-tunnelers: " .. purpose .. " was " .. reason .. ".")
     return nil
   end
   return address
@@ -945,8 +943,17 @@ return {
     local underOn = setting(config, "targets", "under_buildings") and true or false
     local spreadDamage = toInteger(setting(config, "collapse", "spread_damage"),
       DEFAULTS.collapse.spread_damage)
-    local spreadRadius = toInteger(setting(config, "collapse", "spread_radius"),
-      DEFAULTS.collapse.spread_radius)
+    local spreadRadius = DEFAULTS.collapse.spread_radius
+    if spreadOn then
+      local radius = setting(config, "collapse", "spread_radius")
+      if type(radius) ~= "number" then
+        log(ERROR, "Tunnel collapse spread radius must be a number. Using the default.")
+      elseif radius >= 0 and radius <= 8 and radius % 1 == 0 then
+        spreadRadius = radius
+      else
+        log(WARNING, "Tunnel collapse spread radius must be a whole number from 0 to 8. Using the default.")
+      end
+    end
     -- Tiles a second at normal game speed. Profiles saved before 1.7.5 hold the old "tiles a
     -- tick" instead, which is the same speed at forty ticks a second.
     local collapseSpeed = toInteger(setting(config, "collapse", "tiles_per_second"),
@@ -966,14 +973,25 @@ return {
       or retargetOn
     -- Where a tunnel goes, and what happens where it arrives.
     local routingOn = denialOn or retargetOn or diagnosticsOn
-    assert(spreadRadius >= 0 and spreadRadius <= 8,
-      "Improved Tunnelers: collapse radius must be within the customization ranges")
+    local state = require('state')
+    local ok, support = pcall(state.prepare)
+    if not ok then
+      log(ERROR, "Improved Tunnelers is off. Save support is unavailable. " .. tostring(support))
+      return
+    end
+    self.stateSupport = support
+    local layout = {
+      queue = QUEUE_MAX, zones = ZONE_COUNT, records = RECORD_COUNT,
+      lines = (PLAYER_COUNT + 1) * 4, refused = ROUTE.refused,
+      routeSize = ROUTE.size, entries = ROUTE.entries,
+      pathMax = ROUTE.pathMax, pathOffset = ROUTE.pathOffset,
+    }
     if not (queueWanted or routingOn or targetsOn or underOn or unselectableOn or untargetableOn
         or trapProofOn or uiOn or stancesOn or raidsOn) then
+      state.attach(self, C, layout)
       log(INFO, "improved-tunnelers: every option is off; the game is left unchanged.")
       return
     end
-    self.stateSupport = require('state').prepare()
 
     ---------------------------------------------------------------------------------
     -- Find the game code
@@ -2336,17 +2354,14 @@ return {
 
     -- Denial zones, lines and the collapse queue are the state a save carries.
     if retargetReady or collapseReady then
-      require('state').attach(self, C, {
-        queue = QUEUE_MAX, zones = ZONE_COUNT, records = RECORD_COUNT,
-        lines = (PLAYER_COUNT + 1) * 4, refused = ROUTE.refused,
-        routeSize = ROUTE.size, entries = ROUTE.entries,
-        pathMax = ROUTE.pathMax, pathOffset = ROUTE.pathOffset,
-      }, table.concat({
+      state.attach(self, C, layout, table.concat({
         tostring(denialReady), tostring(retargetReady), tostring(targetsReady),
         tostring(collapseReady), tostring(terrainOn and collapseReady), tostring(familyReady), tostring(aimReady),
         tostring(stanceReady), tostring(raidsReady), tostring(anchor ~= nil),
         tostring(campIds ~= nil),
       }, '/'))
+    else
+      state.attach(self, C, layout)
     end
 
     log(INFO, string.format(

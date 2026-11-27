@@ -39,8 +39,12 @@ function M.prepare()
 end
 
 function M.attach(module, C, layout, capabilities)
-  local control, support = module.control, module.stateSupport
-  local baseline = core.readString(control, C.SIZE)
+  local control = capabilities and module.control
+  local support = module.stateSupport
+  local baseline = control and core.readString(control, C.SIZE)
+  local function headerField(offset, size)
+    return control and core.readString(control + offset, size) or string.rep('\0', size)
+  end
   local function read(offset) return core.readInteger(control + offset) & 0xFFFFFFFF end
   local ranges = {
     {C.LAST_TICK, 4}, {C.LAST_REDIRECT, 4}, {C.FAIL_SPOT, 8},
@@ -51,13 +55,13 @@ function M.attach(module, C, layout, capabilities)
     {C.ROUTES, layout.lines * layout.routeSize},
   }
   local key = format .. '\0' .. support.fingerprint
-  local identityPrefix = key .. capabilities
-    .. core.readString(control, C.DIAGNOSTICS)
-    .. core.readString(control + C.COLLAPSE_DAMAGE, 12)
-    .. core.readString(control + C.HIDE_SELECT, 8)
-    .. core.readString(control + C.UNDER_BUILDINGS, 4)
-  local identitySuffix = core.readString(control + C.SPEED, 4)
-    .. core.readString(control + C.FAMILY_READY, 4)
+  local identityPrefix = key .. (capabilities or '')
+    .. headerField(0, C.DIAGNOSTICS)
+    .. headerField(C.COLLAPSE_DAMAGE, 12)
+    .. headerField(C.HIDE_SELECT, 8)
+    .. headerField(C.UNDER_BUILDINGS, 4)
+  local identitySuffix = headerField(C.SPEED, 4)
+    .. headerField(C.FAMILY_READY, 4)
   local headerSize = #identityPrefix + 4 + #identitySuffix
   local offsets, length = {}, headerSize
   for _, range in ipairs(ranges) do
@@ -199,6 +203,7 @@ function M.attach(module, C, layout, capabilities)
   -- A save from before tunneler state was saved at all (1.6 and older, or the game
   -- without this module) starts with fresh tunneler state - exactly what every load did
   -- before 1.7 - instead of being refused.
+  local function active() return control ~= nil and module.control == control end
   local function absent(kind)
     if kind == 'map' then return end
     log(INFO, 'improved-tunnelers: this save holds no tunneler state; tunnels in it carry '
@@ -206,15 +211,15 @@ function M.attach(module, C, layout, capabilities)
   end
   local observed
   local callbacks = {
-    isRequired = function() return module.control == control end,
+    isRequired = active,
     initialize = function(_, context)
-      if module.control ~= control then return end
+      if not active() then return end
       absent(context and context.kind)
       write(control, baseline)
       observed = nil
     end,
     serialize = function(_, handle)
-      if module.control == control then handle:put(path, capture()) end
+      if active() then handle:put(path, capture()) end
     end,
     capture = function(_, handle) handle:put(path, capture()) end,
     integrity = function() return sha.sha256(capture()) end,
@@ -227,13 +232,13 @@ function M.attach(module, C, layout, capabilities)
     end,
     validate = function(_, handle)
       if handle:exists(path) then
-        assert(module.control == control, 'This save requires Improved Tunnelers to be enabled')
         validate(handle:get(path))
-      elseif module.control == control then absent(handle.loadKind) end
+      elseif active() then absent(handle.loadKind) end
     end,
     deserialize = function(_, handle)
+      if not active() then return end
       if handle:exists(path) then restore(handle:get(path))
-      elseif module.control == control then absent(handle.loadKind); write(control, baseline) end
+      else absent(handle.loadKind); write(control, baseline) end
       observed = nil
     end,
   }

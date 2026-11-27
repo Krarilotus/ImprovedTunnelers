@@ -317,10 +317,9 @@ function M.install(h)
   if M.memory == nil then return false end
   local mem = h.memory or M.memory
   local function scan(pattern, purpose)
-    local ok, address = pcall(core.AOBScan, pattern)
-    if not ok or type(address) ~= "number" or address <= 0 then
-      log(WARNING, "improved-tunnelers: could not find " .. purpose
-        .. "; the tunnel mark is off. Another module has probably patched the same code.")
+    local address, reason = core.AOBScanUnique(pattern)
+    if not address then
+      log(WARNING, "improved-tunnelers: " .. purpose .. " was " .. reason .. ".")
       return nil
     end
     return address
