@@ -820,10 +820,7 @@ local writeInteger = core.writeInteger
 ---@return number|nil
 local function scanOptional(pattern, purpose)
   local address, reason = core.AOBScanUnique(pattern)
-  if type(address) ~= "number" or address <= 0 then
-    log(WARNING, "improved-tunnelers: " .. purpose .. " was " .. reason .. ".")
-    return nil
-  end
+  if not address then log(INFO, "improved-tunnelers: " .. purpose .. " was " .. reason .. ".") end
   return address
 end
 
@@ -870,107 +867,87 @@ local function callTarget(address)
   return (address + 5 + relative) & 0xFFFFFFFF
 end
 
----Write a five byte jump over the instruction(s) at address, padding the rest with the
----one byte NOP so a disassembler - and anything that reads the code later - sees whole
----instructions.
----@param address number
----@param destination number
----@param size number how many bytes the jump replaces, at least 5
-local function writeJump(address, destination, size)
+local function jumpBytes(address, destination, size)
   local bytes = { 0xE9, table.unpack(core.itob(core.getRelativeAddress(address, destination, -5))) }
   for _ = 6, size do
     bytes[#bytes + 1] = 0x90
   end
-  core.writeCodeBytes(address, bytes)
+  return bytes
 end
 
----A whole number from a config value, which YAML may hand over as a float.
----@param value any
----@param fallback number
----@return number
-local function toInteger(value, fallback)
-  if type(value) ~= "number" then
-    return fallback
-  end
-  return math.tointeger(math.floor(value)) or fallback
-end
-
----A setting out of the config, falling back to this module's own default.
----@param config table
----@param group string
----@param name string
----@return any
-local function setting(config, group, name)
-  local section = config and config[group]
+local function setting(config, group, name, low, high, fallback)
+  local default = fallback
+  if default == nil then default = DEFAULTS[group][name] end
+  local section = config[group]
   local value = section and section[name]
-  if value == nil then
-    return DEFAULTS[group][name]
+  if value == nil then return default end
+  local label = "Improved Tunnelers: " .. group .. "." .. name
+  if type(value) ~= type(default) then
+    log(ERROR, label .. " must be a " .. type(default) .. ". Using the default.")
+  elseif not low or (value >= low and value <= high and value % 1 == 0) then
+    return value
+  else
+    log(WARNING, label .. " is outside the allowed values. Using the default.")
   end
-  return value
+  return default
 end
 
 return {
 
   enable = function(self, config)
-    config = config or {}
-
-    local denialOn = setting(config, "denial", "enabled") and true or false
-    local denialTicks = toInteger(setting(config, "denial", "sliderValue"),
-      DEFAULTS.denial.sliderValue)
-    -- Keep existing profiles' explicit duration/disabled choice when upgrading
-    -- from the old seconds control. New profiles use the standard tick slider.
-    if config.denial and config.denial.sliderValue == nil and config.denial.seconds ~= nil then
-      denialTicks = toInteger(config.denial.seconds, 0) * TICKS_PER_SECOND
+    if config ~= nil and type(config) ~= "table" then
+      log(ERROR, "Improved Tunnelers settings must be a table.")
     end
-    denialTicks = math.max(1, math.min(2400, denialTicks))
-    local terrainOn = setting(config, "terrain", "enabled") and true or false
-    local messageOn = setting(config, "denial", "message") and true or false
-    local retargetOn = setting(config, "retarget", "enabled") and true or false
-    local retargetRange = toInteger(setting(config, "retarget", "range"),
-      DEFAULTS.retarget.range)
-    local retargetMax = toInteger(setting(config, "retarget", "max"), DEFAULTS.retarget.max)
-    local targetsOn = setting(config, "targets", "towers_and_gates") and true or false
-    local collapseOn = setting(config, "collapse", "enabled") and true or false
-    local collapseDamage = toInteger(setting(config, "collapse", "damage"),
-      DEFAULTS.collapse.damage)
-    local spreadOn = setting(config, "collapse", "spread") and true or false
-    local unselectableOn = setting(config, "digging", "unselectable") and true or false
-    local untargetableOn = setting(config, "digging", "untargetable") and true or false
-    local trapProofOn = setting(config, "digging", "trap_proof") and true or false
-    local entranceLostOn = setting(config, "collapse", "entrance_lost") and true or false
-    local joinDistance = math.max(0, math.min(200,
-      toInteger(setting(config, "retarget", "join_distance"), DEFAULTS.retarget.join_distance)))
-    local underOn = setting(config, "targets", "under_buildings") and true or false
-    local spreadDamage = toInteger(setting(config, "collapse", "spread_damage"),
-      DEFAULTS.collapse.spread_damage)
-    local spreadRadius = DEFAULTS.collapse.spread_radius
-    if spreadOn then
-      local radius = setting(config, "collapse", "spread_radius")
-      if type(radius) ~= "number" then
-        log(ERROR, "Tunnel collapse spread radius must be a number. Using the default.")
-      elseif radius >= 0 and radius <= 8 and radius % 1 == 0 then
-        spreadRadius = radius
-      else
-        log(WARNING, "Tunnel collapse spread radius must be a whole number from 0 to 8. Using the default.")
+    local settings = {}
+    if type(config) == "table" then
+      for group in pairs(DEFAULTS) do
+        if type(config[group]) == "table" then
+          settings[group] = config[group]
+        elseif config[group] ~= nil then
+          log(ERROR, "Improved Tunnelers: " .. group .. " settings must be a table.")
+        end
       end
     end
-    -- Tiles a second at normal game speed. Profiles saved before 1.7.5 hold the old "tiles a
-    -- tick" instead, which is the same speed at forty ticks a second.
-    local collapseSpeed = toInteger(setting(config, "collapse", "tiles_per_second"),
-      DEFAULTS.collapse.tiles_per_second)
-    if config.collapse and config.collapse.tiles_per_second == nil and config.collapse.speed ~= nil then
-      collapseSpeed = toInteger(config.collapse.speed, 2) * TICKS_PER_SECOND
+    config = settings
+
+    local denialOn = setting(config, "denial", "enabled")
+    local denialTicks = setting(config, "denial", "sliderValue", 1, 2400)
+    if config.denial and config.denial.sliderValue == nil and config.denial.seconds ~= nil then
+      denialTicks = math.max(1, setting(config, "denial", "seconds", 0, 60,
+        DEFAULTS.denial.sliderValue / TICKS_PER_SECOND) * TICKS_PER_SECOND)
     end
-    collapseSpeed = math.max(1, math.min(ROUTE.collapseSpeedMax, collapseSpeed))
-    local diagnosticsOn = setting(config, "diagnostics", "enabled") and true or false
-    local uiOn = setting(config, "ui", "enabled") and true or false
-    local stancesOn = setting(config, "stances", "enabled") and true or false
-    local raidsOn = setting(config, "raids", "enabled") and true or false
-    local overlayOn = setting(config, "digging", "overlay") and true or false
+    local terrainOn = setting(config, "terrain", "enabled")
+    local messageOn = setting(config, "denial", "message")
+    local retargetOn = setting(config, "retarget", "enabled")
+    local retargetRange = setting(config, "retarget", "range", 20, 200)
+    local retargetMax = setting(config, "retarget", "max", 1, 30)
+    local targetsOn = setting(config, "targets", "towers_and_gates")
+    local collapseOn = setting(config, "collapse", "enabled")
+    local collapseDamage = setting(config, "collapse", "damage", 1, 10000)
+    local spreadOn = setting(config, "collapse", "spread")
+    local unselectableOn = setting(config, "digging", "unselectable")
+    local untargetableOn = setting(config, "digging", "untargetable")
+    local trapProofOn = setting(config, "digging", "trap_proof")
+    local entranceLostOn = setting(config, "collapse", "entrance_lost")
+    local joinDistance = setting(config, "retarget", "join_distance", 0, 80)
+    local underOn = setting(config, "targets", "under_buildings")
+    local spreadDamage = setting(config, "collapse", "spread_damage", 0, 1000)
+    local spreadRadius = spreadOn and setting(config, "collapse", "spread_radius", 0, 8)
+      or DEFAULTS.collapse.spread_radius
+    local collapseSpeed = setting(config, "collapse", "tiles_per_second", 1, ROUTE.collapseSpeedMax)
+    if config.collapse and config.collapse.tiles_per_second == nil and config.collapse.speed ~= nil then
+      collapseSpeed = setting(config, "collapse", "speed", 1, ROUTE.collapseSpeedMax / TICKS_PER_SECOND,
+        DEFAULTS.collapse.tiles_per_second / TICKS_PER_SECOND) * TICKS_PER_SECOND
+    end
+    local diagnosticsOn = setting(config, "diagnostics", "enabled")
+    local uiOn = setting(config, "ui", "enabled")
+    local stancesOn = setting(config, "stances", "enabled")
+    local raidsOn = setting(config, "raids", "enabled")
+    local overlayOn = setting(config, "digging", "overlay")
     -- The collapse queue carries every feature below that works on a collapsing tunnel. A
     -- tunnel sent on can run 800 tiles, which the game's one-call collapse freezes on.
-    local queueWanted = collapseOn or terrainOn or spreadOn or entranceLostOn or overlayOn
-      or retargetOn
+    local collapseWanted = collapseOn or terrainOn or spreadOn or entranceLostOn or overlayOn
+    local queueWanted = collapseWanted or retargetOn
     -- Where a tunnel goes, and what happens where it arrives.
     local routingOn = denialOn or retargetOn or diagnosticsOn
     local state = require('state')
@@ -988,7 +965,8 @@ return {
     }
     if not (queueWanted or routingOn or targetsOn or underOn or unselectableOn or untargetableOn
         or trapProofOn or uiOn or stancesOn or raidsOn) then
-      state.attach(self, C, layout)
+      local attached, reason = pcall(state.attach, self, C, layout)
+      if not attached then log(ERROR, "Improved Tunnelers save support is off. " .. tostring(reason)) end
       log(INFO, "improved-tunnelers: every option is off; the game is left unchanged.")
       return
     end
@@ -997,7 +975,10 @@ return {
     -- Find the game code
     ---------------------------------------------------------------------------------
 
-    local tunneler = scanOptional(AOB_UPDATE_TUNNELER, "the tunneler's update function")
+    local updateWanted = queueWanted or routingOn or targetsOn or underOn or unselectableOn
+      or untargetableOn or trapProofOn or stancesOn
+    local tunneler = updateWanted and scanOptional(AOB_UPDATE_TUNNELER, "the tunneler's update function")
+      or nil
     if tunneler ~= nil and not guardsHold(tunneler, TUNNELER_GUARDS,
         "the tunneler's update function") then
       tunneler = nil
@@ -1007,11 +988,11 @@ return {
 
     -- Where each player's keep is, for aiming tunnels towards it.
     local keepIds, campIds
-    local keepSite = routingOn and scanOptional(AOB_KEEP_OF_PLAYER, "the player's keep") or nil
+    local keepSite = retargetOn and scanOptional(AOB_KEEP_OF_PLAYER, "the player's keep") or nil
     if keepSite ~= nil and guardsHold(keepSite, KEEP_GUARDS, "the player's keep") then
       keepIds = readAddress(keepSite + KEEP_IDS_OPERAND)
     end
-    local campSite = routingOn and scanOptional(AOB_CAMPGROUND_OF_PLAYER, "the player's campground") or nil
+    local campSite = retargetOn and scanOptional(AOB_CAMPGROUND_OF_PLAYER, "the player's campground") or nil
     if campSite ~= nil and guardsHold(campSite, CAMP_GUARDS, "the player's campground") then
       campIds = readAddress(campSite + CAMP_IDS_OPERAND)
     end
@@ -1024,10 +1005,12 @@ return {
       unitsState = readAddress(tunneler + TUNNELER_UNITS_STATE_OPERAND)
     end
 
-    local tickSite, problem = core.AOBScanUnique(AOB_TICK_COUNTER)
-    local ticks = tickSite and readAddress(tickSite + 8)
-    if not ticks and (queueWanted or routingOn) then
-      log(WARNING, "improved-tunnelers: game tick counter " .. problem)
+    local tickSite = (queueWanted or routingOn)
+      and scanOptional(AOB_TICK_COUNTER, "the game tick counter")
+    local ticks = tickSite and readAddress(tickSite + 8) or nil
+    if diagnosticsOn and not (tunneler and ticks) then
+      diagnosticsOn = false
+      log(ERROR, "Tunneler diagnostics are off. The update and tick bindings could not be verified.")
     end
 
     ---------------------------------------------------------------------------------
@@ -1073,23 +1056,71 @@ return {
     -- thousand lines in seven minutes of play. So the build check reports at most one line
     -- a second; the tunnel hooks, which speak only when a tunnel arrives, are left alone.
     local report = control + C.REPORT
-    local reportPad = core.allocateCode({ 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 })
-    core.detourCode(function(registers)
-      local code = readInteger(report + 0x1C)
-      log(INFO, string.format(
-        "improved-tunnelers: %s | a=%d tile=%d flags=0x%X b=%d c=%d d=%d e=%d f=%d g=%d",
-        REPORT_WORDS[code] or ("report " .. tostring(code)),
-        readInteger(report), readInteger(report + 4), readInteger(report + 8) & 0xFFFFFFFF,
-        readInteger(report + 12), readInteger(report + 16), readInteger(report + 20),
-        readInteger(report + 24), readInteger(report + 32), readInteger(report + 36)))
-      return registers
-    end, reportPad, 5)
+    local reportPad = 0
+    if diagnosticsOn then
+      local ok, reason = pcall(function()
+        reportPad = core.allocateCode({ 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 })
+        core.detourCode(function(registers)
+          local code = readInteger(report + 0x1C)
+          log(INFO, string.format(
+            "improved-tunnelers: %s | a=%d tile=%d flags=0x%X b=%d c=%d d=%d e=%d f=%d g=%d",
+            REPORT_WORDS[code] or ("report " .. tostring(code)),
+            readInteger(report), readInteger(report + 4), readInteger(report + 8) & 0xFFFFFFFF,
+            readInteger(report + 12), readInteger(report + 16), readInteger(report + 20),
+            readInteger(report + 24), readInteger(report + 32), readInteger(report + 36)))
+          return registers
+        end, reportPad, 5)
+      end)
+      if not ok then
+        diagnosticsOn = false
+        writeInteger(control + C.DIAGNOSTICS, 0)
+        log(ERROR, "Tunneler diagnostics are off. " .. tostring(reason))
+      end
+    end
 
-    ---Remember a stretch of code before overwriting it, so disable() can put it back.
-    ---@param address number
-    ---@param size number
-    local function remember(address, size)
-      self.patched[#self.patched + 1] = { address = address, bytes = core.readBytes(address, size) }
+    local pending
+    local function stage(address, bytes)
+      pending[#pending + 1] = { address = address, bytes = core.readBytes(address, #bytes), code = bytes }
+    end
+    local function writeJump(address, destination, size)
+      stage(address, jumpBytes(address, destination, size))
+    end
+    local function prepare(feature, build)
+      pending = {}
+      local ok, result = pcall(build)
+      local patches = pending
+      pending = nil
+      if not ok then
+        log(ERROR, feature .. " is off. " .. tostring(result))
+        return nil
+      end
+      return patches, result
+    end
+    local function publish(feature, patches)
+      if not patches then return false end
+      local written = 0
+      local ok, reason = pcall(function()
+        for index, patch in ipairs(patches) do
+          written = index
+          core.writeCodeBytes(patch.address, patch.code)
+        end
+      end)
+      if not ok then
+        for index = written, 1, -1 do
+          local patch = patches[index]
+          pcall(core.writeCodeBytes, patch.address, patch.bytes)
+        end
+        log(ERROR, feature .. " is off. " .. tostring(reason))
+        return false
+      end
+      for _, patch in ipairs(patches) do
+        patch.code = nil
+        self.patched[#self.patched + 1] = patch
+      end
+      return true
+    end
+    local function install(feature, build)
+      return publish(feature, prepare(feature, build))
     end
 
     ---------------------------------------------------------------------------------
@@ -1102,13 +1133,13 @@ return {
 
     local denialReady, retargetReady = false, false
     local collapseReady, targetReady, familyReady = false, false, false
-    local teamSite = routingOn and scanOptional(AOB_PLAYER_TEAMS, "the player team table") or nil
+    local teamSite = (retargetOn or denialOn) and scanOptional(AOB_PLAYER_TEAMS, "the player team table") or nil
     local enemySite = denialOn and scanOptional(AOB_ENEMY_TOO_CLOSE, "the build denial check") or nil
 
     -- The game's own target search, and the three addresses it works through, all read
     -- out of the function that drives it.
     local finder, search = nil, nil
-    if tunneler ~= nil then
+    if tunneler ~= nil and (retargetOn or targetsOn or underOn or diagnosticsOn) then
       finder = callTarget(tunneler + TUNNELER_FIND_TARGET_CALL)
       if guardsHold(finder, FIND_GUARDS, "the tunnel target search") then
         search = callTarget(finder + FIND_SEARCH_CALL)
@@ -1125,7 +1156,7 @@ return {
 
     -- Where each row of the map starts, for working out a tile from an x and a y.
     local rowTable
-    if tunneler ~= nil then
+    if tunneler ~= nil and queueWanted then
       local setDestination = callTarget(tunneler + TUNNELER_SET_DESTINATION_CALL)
       if guardsHold(setDestination, { [ROW_TABLE_GUARD_OFFSET] = { 0x03, 0x3C, 0x85 } },
           "the map's rows") then
@@ -1140,52 +1171,13 @@ return {
     if teamSite ~= nil then
       teamTable = readAddress(teamSite + OFFSET_PLAYER_TEAMS)
     end
-    if teamTable ~= nil and unitBase ~= nil and (campIds ~= nil or keepIds ~= nil) then
-      anchor = core.allocateAssembly(templates.find_anchor, {
-        ANCHOR_ID_ADDRESS = control + C.ANCHOR_ID,
-        CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
-        ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
-        ANCHOR_FROM_ADDRESS = control + C.ANCHOR_FROM,
-        ANCHOR_TO_ADDRESS = control + C.ANCHOR_TO,
-        ANCHOR_BEST_ADDRESS = control + C.ANCHOR_BEST,
-        ANCHOR_X_ADDRESS = control + C.ANCHOR_X,
-        ANCHOR_Y_ADDRESS = control + C.ANCHOR_Y,
-        CAMP_X_ADDRESS = control + C.CAMP_X,
-        CAMP_Y_ADDRESS = control + C.CAMP_Y,
-        TEAMS_ADDRESS = teamTable,
-        PLAYER_COUNT = PLAYER_COUNT,
-        PLAYER_STRIDE = PLAYER_STRIDE,
-        BUILDING_STRIDE = SEARCH_STRIDE,
-        KEEP_IDS_ADDRESS = keepIds or campIds,
-        CAMP_IDS_ADDRESS = campIds or keepIds,
-        BUILDING_X = (buildingBase + BUILDING_X) & 0xFFFFFFFF,
-        BUILDING_Y = (buildingBase + BUILDING_Y) & 0xFFFFFFFF,
-        UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
-        UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
-        UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-        UNIT_SIEGE_TARGET = (unitBase + UNIT_SIEGE_TARGET) & 0xFFFFFFFF,
-      })
-    end
-    -- One byte a building type, 1 where the shaking leaves the building standing.
-    local fortified = core.allocate(BUILDING_TYPE_LIMIT + 1, true)
-    for kind = 0, BUILDING_TYPE_LIMIT do
-      core.writeByte(fortified + kind, 0)
-    end
-    for _, kind in ipairs(FORTIFIED_TYPES) do
-      core.writeByte(fortified + kind, 1)
-    end
-
-    -- ... and what stands in for it when those tables were not found: "no camp".
-    local anchorStub = core.allocateAssembly(templates.no_anchor, {
-      ANCHOR_BEST_ADDRESS = control + C.ANCHOR_BEST,
-    })
-
     local walk, walkReady
-    if tunneler ~= nil and ticks ~= nil and search ~= nil then
+    if tunneler ~= nil and ticks ~= nil and queueWanted then
       walk = callTarget(tunneler + TUNNELER_TUNNEL_DAMAGE_CALL)
       walkReady = guardsHold(walk, DAMAGE_WALK_GUARDS, "the tunnel collapse")
     end
-    if walk ~= nil and queueWanted then
+    local function prepareCollapse()
+      if not walkReady then error("The tunnel collapse code could not be verified.", 0) end
       local tickSite = scanOptional(AOB_UPDATE_UNITS, "the game's pass over its units")
       local brush = walkReady and callTarget(walk + TERRAIN.brushCall) or nil
       local brushReady = brush ~= nil and guardsHold(brush, TERRAIN.guards, "the tunnel terrain brush")
@@ -1200,495 +1192,458 @@ return {
           and readAddress(brush + 0xA2) == readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND)
           and callTarget(brush + 0xA6) == callTarget(walk + DAMAGE_WALK_UPDATE_CALL)
       end
-      if walkReady
-          and brushReady
-          and tickSite ~= nil and guardsHold(tickSite, TICK_GUARDS, "the game's pass over its units")
-          and rowTable ~= nil then
-        local tileMapState = readAddress(walk + DAMAGE_WALK_TILE_MAP_OPERAND)
-        local processDamage = callTarget(walk + DAMAGE_WALK_DAMAGE_CALL)
+      if not (brushReady and tickSite and rowTable
+          and guardsHold(tickSite, TICK_GUARDS, "the game's pass over its units")) then
+        error("The terrain and collapse queue bindings could not be verified.", 0)
+      end
+      local tileMapState = readAddress(walk + DAMAGE_WALK_TILE_MAP_OPERAND)
+      local processDamage = callTarget(walk + DAMAGE_WALK_DAMAGE_CALL)
 
-        if terrainOn then
-          local restore = core.allocateAssembly(templates.restore_tunnel_height, {
-            WALL_FAMILY = WALL_FAMILY_FLAGS,
-            RETURN_ADDRESS = brush + TERRAIN.heightHook + 7,
-            UPDATE_ADDRESS = brush + TERRAIN.pathUpdate,
-            SKIP_ADDRESS = brush + TERRAIN.nextTile,
-          })
-          remember(brush + TERRAIN.heightHook, 7)
-          writeJump(brush + TERRAIN.heightHook, restore, 7)
-          -- The native cleanup walk is also called on tunneler death. Restore
-          -- each brush footprint before its center is sorted for damage, since
-          -- digging can raise neighbours even when the center has a building.
-          local restorePath = core.allocateAssembly(templates.restore_tunnel_path_tile, {
-            TILE_FLAGS_ADDRESS = tileFlags,
-            TILE_MAP_STATE_ADDRESS = tileMapState,
-            TERRAIN_BRUSH_ADDRESS = brush,
-            RETURN_ADDRESS = walk + TERRAIN.walkHook + 11,
-          })
-          remember(walk + TERRAIN.walkHook, 11)
-          writeJump(walk + TERRAIN.walkHook, restorePath, 11)
-          remember(walk + TERRAIN.cleanupBranch, 22)
-          writeJump(walk + TERRAIN.cleanupBranch, walk + 0xA0, 22)
-        end
-
-        -- Stairs and crenellations are sorted out of the game's own damage before it does
-        -- anything; widening that one test hands them to the wall loop instead, which
-        -- already knows how to damage them, how to have them drawn damaged and how to
-        -- clear them away. It only holds while this module's own damage is running.
-        if guardsHold(processDamage, DAMAGE_GUARDS, "the game's own damage") then
-          local family = core.allocateAssembly(templates.damage_family, {
-            STAIR_FAMILY = STAIR_FAMILY_FLAGS,
-            FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
-            CARRY_ON_ADDRESS = processDamage + DAMAGE_WALL_CARRY_ON,
-            NOTHING_ADDRESS = processDamage + DAMAGE_NOTHING,
-          })
-          remember(processDamage + DAMAGE_WALL_TEST, DAMAGE_WALL_TEST_SIZE)
-          writeJump(processDamage + DAMAGE_WALL_TEST, family, DAMAGE_WALL_TEST_SIZE)
-          writeInteger(control + C.FAMILY_READY, 1)
-          familyReady = true
-        end
-        local queue = control + C.QUEUE
-        -- The tunnel mark (overlay.lua): its memory first, since the queue clears marks.
-        local mark = require("overlay").prepare(overlayOn,
-          control, C)
-        mark.OVERLAY_REBUILD_ADDRESS = require("overlay").rebuildRoutine({
-          REBUILD_ADDRESS = mark.REBUILD_ADDRESS, QUEUE_ADDRESS = queue,
-          QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT, QUEUE_MAX = QUEUE_MAX,
-          GROUND_DONE = ROUTE.groundDone })
-        -- The ground under one queued tile, put back as the collapse reaches it.
-        local ground = core.allocateAssembly(templates.queue_ground, {
-          TERRAIN_FIX = terrainOn and 1 or 0,
-          STEP_TILE_ADDRESS = control + C.STEP_TILE,
-          STEP_X_ADDRESS = control + C.STEP_X,
-          STEP_Y_ADDRESS = control + C.STEP_Y,
+      if terrainOn then
+        local restore = core.allocateAssembly(templates.restore_tunnel_height, {
+          WALL_FAMILY = WALL_FAMILY_FLAGS,
+          RETURN_ADDRESS = brush + TERRAIN.heightHook + 7,
+          UPDATE_ADDRESS = brush + TERRAIN.pathUpdate,
+          SKIP_ADDRESS = brush + TERRAIN.nextTile,
+        })
+        writeJump(brush + TERRAIN.heightHook, restore, 7)
+        -- The native cleanup walk is also called on tunneler death. Restore
+        -- each brush footprint before its center is sorted for damage, since
+        -- digging can raise neighbours even when the center has a building.
+        local restorePath = core.allocateAssembly(templates.restore_tunnel_path_tile, {
           TILE_FLAGS_ADDRESS = tileFlags,
-          BUILDING_TILE_ADDRESS = buildingTiles,
-          LIVE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
-          BASE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
           TILE_MAP_STATE_ADDRESS = tileMapState,
           TERRAIN_BRUSH_ADDRESS = brush,
-          OVERLAY = mark.OVERLAY,
-          OVERLAY_TILES = mark.OVERLAY_TILES,
-          MARKS_ADDRESS = mark.MARKS_ADDRESS,
+          RETURN_ADDRESS = walk + TERRAIN.walkHook + 11,
         })
+        writeJump(walk + TERRAIN.walkHook, restorePath, 11)
+        writeJump(walk + TERRAIN.cleanupBranch, walk + 0xA0, 22)
+      end
 
-        -- Writing a tunnel into the queue; only what does not fit has its ground put back now.
-        local fill = core.allocateAssembly(templates.queue_fill, {
-          FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
-          FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
-          FILL_TILE_ADDRESS = control + C.FILL_TILE,
-          FILL_X_ADDRESS = control + C.FILL_X,
-          FILL_Y_ADDRESS = control + C.FILL_Y,
-          FILL_STEP_ADDRESS = control + C.FILL_STEP,
-          FILL_LEFT_ADDRESS = control + C.FILL_LEFT,
-          QUEUE_ADDRESS = queue,
-          QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT,
-          QUEUE_MAX = QUEUE_MAX,
-          TERRAIN_FIX = terrainOn and 1 or 0,
-          TILE_FLAGS_ADDRESS = tileFlags,
-          BUILDING_TILE_ADDRESS = buildingTiles,
-          LIVE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
-          BASE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
-          TILE_MAP_STATE_ADDRESS = tileMapState,
-          TERRAIN_BRUSH_ADDRESS = brush,
-          DIRECTIONS_ADDRESS = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
-          X_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_X_DELTAS_OPERAND),
-          Y_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
-          UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
-          UNIT_PATH_PLAN = (unitBase + UNIT_PATH_PLAN) & 0xFFFFFFFF,
-          UNIT_LADDER_X = (unitBase + UNIT_LADDER_X) & 0xFFFFFFFF,
-          UNIT_LADDER_Y = (unitBase + UNIT_LADDER_Y) & 0xFFFFFFFF,
-          UNIT_PREVIOUS_TILE = (unitBase + UNIT_PREVIOUS_TILE) & 0xFFFFFFFF,
-          OVERLAY = mark.OVERLAY,
-          OVERLAY_TILES = mark.OVERLAY_TILES,
-          MARKS_ADDRESS = mark.MARKS_ADDRESS,
-        })
-
-        -- One tile of it: what stands about is shaken.
-        local step = core.allocateAssembly(templates.queue_step, {
-          WALL_FAMILY = WALL_FAMILY_FLAGS,
-          STOCKPILE = ROUTE.stockpileFlag,
-          FORTIFIED_ADDRESS = fortified,
-          TYPE_LIMIT = BUILDING_TYPE_LIMIT,
-          TUNNEL_DAMAGE = TUNNEL_DAMAGE,
-          TUNNEL_TYPE = ROUTE.tunnelType,
-          STEP_DAMAGE_ADDRESS = control + C.STEP_DAMAGE,
-          BUILDING_STRIDE = SEARCH_STRIDE,
-          BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
-          STEP_RADIUS_ADDRESS = control + C.STEP_RADIUS,
-          STEP_X_ADDRESS = control + C.STEP_X,
-          STEP_Y_ADDRESS = control + C.STEP_Y,
-          STEP_FLAGS_ADDRESS = control + C.STEP_FLAGS,
-          STEP_DX_ADDRESS = control + C.STEP_DX,
-          STEP_DY_ADDRESS = control + C.STEP_DY,
-          STEP_THIS_TILE_ADDRESS = control + C.STEP_THIS_TILE,
-          STEP_THIS_X_ADDRESS = control + C.STEP_THIS_X,
-          STEP_THIS_Y_ADDRESS = control + C.STEP_THIS_Y,
-          SPREAD_DAMAGE_ADDRESS = control + C.SPREAD_DAMAGE,
-          ROW_TABLE_ADDRESS = rowTable,
-          MAP_LIMIT = MAP_LIMIT,
-          TILE_FLAGS_ADDRESS = tileFlags,
-          BUILDING_TILE_ADDRESS = buildingTiles,
-          TILE_MAP_STATE_ADDRESS = tileMapState,
-          PROCESS_DAMAGE_ADDRESS = processDamage,
+      -- Stairs and crenellations are sorted out of the game's own damage before it does
+      -- anything; widening that one test hands them to the wall loop instead, which
+      -- already knows how to damage them, how to have them drawn damaged and how to
+      -- clear them away. It only holds while this module's own damage is running.
+      if guardsHold(processDamage, DAMAGE_GUARDS, "the game's own damage") then
+        local family = core.allocateAssembly(templates.damage_family, {
+          STAIR_FAMILY = STAIR_FAMILY_FLAGS,
           FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
-          STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
+          CARRY_ON_ADDRESS = processDamage + DAMAGE_WALL_CARRY_ON,
+          NOTHING_ADDRESS = processDamage + DAMAGE_NOTHING,
         })
+        writeJump(processDamage + DAMAGE_WALL_TEST, family, DAMAGE_WALL_TEST_SIZE)
+        writeInteger(control + C.FAMILY_READY, 1)
+        familyReady = true
+      end
+      -- One byte a building type, 1 where the shaking leaves the building standing.
+      local fortified = core.allocate(BUILDING_TYPE_LIMIT + 1, true)
+      for _, kind in ipairs(FORTIFIED_TYPES) do
+        core.writeByte(fortified + kind, 1)
+      end
 
-        -- A tunnel whose entrance falls while it digs strikes where it stood, next tick.
-        local strike = core.allocateAssembly(templates.strike, {
-          STOCKPILE = ROUTE.stockpileFlag,
-          WALL_FAMILY = WALL_FAMILY_FLAGS,
-          TUNNEL_TYPE = ROUTE.tunnelType,
-          BUILDING_STRIDE = SEARCH_STRIDE,
-          BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
-          TILE_FLAGS_ADDRESS = tileFlags,
-          BUILDING_TILE_ADDRESS = buildingTiles,
-          RESET_TILE_ADDRESS = callTarget(tunneler + TUNNELER_RESET_TILE_CALL),
-          TILE_MAP_STATE_ADDRESS = tileMapState,
-          PROCESS_DAMAGE_ADDRESS = processDamage,
-          DAMAGE_ADDRESS = control + C.COLLAPSE_DAMAGE,
-          FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
-          FAMILY_READY_ADDRESS = control + C.FAMILY_READY,
-        })
+      local queue = control + C.QUEUE
+      -- The tunnel mark (overlay.lua): its memory first, since the queue clears marks.
+      local mark = require("overlay").prepare(overlayOn,
+        control, C)
+      mark.OVERLAY_REBUILD_ADDRESS = require("overlay").rebuildRoutine({
+        REBUILD_ADDRESS = mark.REBUILD_ADDRESS, QUEUE_ADDRESS = queue,
+        QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT, QUEUE_MAX = QUEUE_MAX,
+        GROUND_DONE = ROUTE.groundDone })
+      -- The ground under one queued tile, put back as the collapse reaches it.
+      local ground = core.allocateAssembly(templates.queue_ground, {
+        TERRAIN_FIX = terrainOn and 1 or 0,
+        STEP_TILE_ADDRESS = control + C.STEP_TILE,
+        STEP_X_ADDRESS = control + C.STEP_X,
+        STEP_Y_ADDRESS = control + C.STEP_Y,
+        TILE_FLAGS_ADDRESS = tileFlags,
+        BUILDING_TILE_ADDRESS = buildingTiles,
+        LIVE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
+        BASE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
+        TILE_MAP_STATE_ADDRESS = tileMapState,
+        TERRAIN_BRUSH_ADDRESS = brush,
+        OVERLAY = mark.OVERLAY,
+        OVERLAY_TILES = mark.OVERLAY_TILES,
+        MARKS_ADDRESS = mark.MARKS_ADDRESS,
+      })
 
-        -- ... and the tick that works through what is queued.
-        local tick = core.allocateAssembly(templates.queue_tick, {
+      -- Writing a tunnel into the queue; only what does not fit has its ground put back now.
+      local fill = core.allocateAssembly(templates.queue_fill, {
+        FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
+        FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
+        FILL_TILE_ADDRESS = control + C.FILL_TILE,
+        FILL_X_ADDRESS = control + C.FILL_X,
+        FILL_Y_ADDRESS = control + C.FILL_Y,
+        FILL_STEP_ADDRESS = control + C.FILL_STEP,
+        FILL_LEFT_ADDRESS = control + C.FILL_LEFT,
+        QUEUE_ADDRESS = queue,
+        QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT,
+        QUEUE_MAX = QUEUE_MAX,
+        TERRAIN_FIX = terrainOn and 1 or 0,
+        TILE_FLAGS_ADDRESS = tileFlags,
+        BUILDING_TILE_ADDRESS = buildingTiles,
+        LIVE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
+        BASE_HEIGHT_ADDRESS = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
+        TILE_MAP_STATE_ADDRESS = tileMapState,
+        TERRAIN_BRUSH_ADDRESS = brush,
+        DIRECTIONS_ADDRESS = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
+        X_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_X_DELTAS_OPERAND),
+        Y_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
+        UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
+        UNIT_PATH_PLAN = (unitBase + UNIT_PATH_PLAN) & 0xFFFFFFFF,
+        UNIT_LADDER_X = (unitBase + UNIT_LADDER_X) & 0xFFFFFFFF,
+        UNIT_LADDER_Y = (unitBase + UNIT_LADDER_Y) & 0xFFFFFFFF,
+        UNIT_PREVIOUS_TILE = (unitBase + UNIT_PREVIOUS_TILE) & 0xFFFFFFFF,
+        OVERLAY = mark.OVERLAY,
+        OVERLAY_TILES = mark.OVERLAY_TILES,
+        MARKS_ADDRESS = mark.MARKS_ADDRESS,
+      })
+
+      -- One tile of it: what stands about is shaken.
+      local step = core.allocateAssembly(templates.queue_step, {
+        WALL_FAMILY = WALL_FAMILY_FLAGS,
+        STOCKPILE = ROUTE.stockpileFlag,
+        FORTIFIED_ADDRESS = fortified,
+        TYPE_LIMIT = BUILDING_TYPE_LIMIT,
+        TUNNEL_DAMAGE = TUNNEL_DAMAGE,
+        TUNNEL_TYPE = ROUTE.tunnelType,
+        STEP_DAMAGE_ADDRESS = control + C.STEP_DAMAGE,
+        BUILDING_STRIDE = SEARCH_STRIDE,
+        BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
+        STEP_RADIUS_ADDRESS = control + C.STEP_RADIUS,
+        STEP_X_ADDRESS = control + C.STEP_X,
+        STEP_Y_ADDRESS = control + C.STEP_Y,
+        STEP_FLAGS_ADDRESS = control + C.STEP_FLAGS,
+        STEP_DX_ADDRESS = control + C.STEP_DX,
+        STEP_DY_ADDRESS = control + C.STEP_DY,
+        STEP_THIS_TILE_ADDRESS = control + C.STEP_THIS_TILE,
+        STEP_THIS_X_ADDRESS = control + C.STEP_THIS_X,
+        STEP_THIS_Y_ADDRESS = control + C.STEP_THIS_Y,
+        SPREAD_DAMAGE_ADDRESS = control + C.SPREAD_DAMAGE,
+        ROW_TABLE_ADDRESS = rowTable,
+        MAP_LIMIT = MAP_LIMIT,
+        TILE_FLAGS_ADDRESS = tileFlags,
+        BUILDING_TILE_ADDRESS = buildingTiles,
+        TILE_MAP_STATE_ADDRESS = tileMapState,
+        PROCESS_DAMAGE_ADDRESS = processDamage,
+        FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
+        STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
+      })
+
+      -- A tunnel whose entrance falls while it digs strikes where it stood, next tick.
+      local strike = core.allocateAssembly(templates.strike, {
+        STOCKPILE = ROUTE.stockpileFlag,
+        WALL_FAMILY = WALL_FAMILY_FLAGS,
+        TUNNEL_TYPE = ROUTE.tunnelType,
+        BUILDING_STRIDE = SEARCH_STRIDE,
+        BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
+        TILE_FLAGS_ADDRESS = tileFlags,
+        BUILDING_TILE_ADDRESS = buildingTiles,
+        RESET_TILE_ADDRESS = callTarget(tunneler + TUNNELER_RESET_TILE_CALL),
+        TILE_MAP_STATE_ADDRESS = tileMapState,
+        PROCESS_DAMAGE_ADDRESS = processDamage,
+        DAMAGE_ADDRESS = control + C.COLLAPSE_DAMAGE,
+        FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
+        FAMILY_READY_ADDRESS = control + C.FAMILY_READY,
+      })
+
+      -- ... and the tick that works through what is queued.
+      local tick = core.allocateAssembly(templates.queue_tick, {
+        STRIKE_COUNT_ADDRESS = control + C.STRIKE_COUNT,
+        STRIKES_ADDRESS = control + C.STRIKES,
+        STRIKE_ADDRESS = strike,
+        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+        REPORT_ADDRESS = report,
+        REPORT_PAD_ADDRESS = reportPad,
+        SW_FLOOR = ROUTE.stopwatchFloor,
+        SW_LAST_ADDRESS = control + C.SW_LAST,
+        SW_AVERAGE_ADDRESS = control + C.SW_AVERAGE,
+        SW_TUNNEL_ADDRESS = control + C.SW_TUNNEL,
+        SW_QUEUE_ADDRESS = control + C.SW_QUEUE,
+        SW_MAX_ADDRESS = control + C.SW_MAX,
+        SW_COUNT_ADDRESS = control + C.SW_COUNT,
+        SW_TILES_ADDRESS = control + C.SW_TILES,
+        SW_DAMAGE_MAX_ADDRESS = control + C.SW_DAMAGE_MAX,
+        SW_DAMAGE_CALLS_ADDRESS = control + C.SW_DAMAGE_CALLS,
+        SW_DAMAGE_KIND_ADDRESS = control + C.SW_DAMAGE_KIND,
+        STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
+        DAMAGE_LEFT_ADDRESS = control + C.DAMAGE_LEFT,
+        RADIUS_ADDRESS = control + C.SPREAD_RADIUS,
+        STEP_RADIUS_ADDRESS = control + C.STEP_RADIUS,
+        STEP_DX_ADDRESS = control + C.STEP_DX,
+        STEP_DY_ADDRESS = control + C.STEP_DY,
+        STEP_THIS_TILE_ADDRESS = control + C.STEP_THIS_TILE,
+        TILE_FLAGS_ADDRESS = tileFlags,
+        WALL_FAMILY = WALL_FAMILY_FLAGS,
+        BUILDING_TILE_ADDRESS = buildingTiles,
+        BUILDING_STRIDE = SEARCH_STRIDE,
+        BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
+        QUEUE_ADDRESS = queue,
+        QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT,
+        SPEED_ADDRESS = control + C.SPEED,
+        TICKS_ADDRESS = ticks,
+        NORMAL_TICKS = TICKS_PER_SECOND,
+        GROUND_ADDRESS = ground,
+        GROUND_DONE = ROUTE.groundDone,
+        TICK_LEFT_ADDRESS = control + C.TICK_LEFT,
+        STEP_TILE_ADDRESS = control + C.STEP_TILE,
+        STEP_X_ADDRESS = control + C.STEP_X,
+        STEP_Y_ADDRESS = control + C.STEP_Y,
+        STEP_FLAGS_ADDRESS = control + C.STEP_FLAGS,
+        STEP_ADDRESS = step,
+        PATH_STATE_ADDRESS = readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND),
+        UPDATE_WALK_ADDRESS = callTarget(walk + DAMAGE_WALK_UPDATE_CALL),
+        RNG_ADDRESS = readAddress(tickSite + TICK_RNG_OPERAND),
+        RETURN_ADDRESS = tickSite + TICK_HOOK + TICK_HOOK_SIZE,
+        OVERLAY = mark.OVERLAY,
+        REBUILD_ADDRESS = mark.REBUILD_ADDRESS,
+        OVERLAY_REBUILD_ADDRESS = mark.OVERLAY_REBUILD_ADDRESS,
+      })
+      writeJump(tickSite + TICK_HOOK, tick, TICK_HOOK_SIZE)
+
+      -- The game's own whole-tunnel collapse, when an entrance is destroyed, goes into the
+      -- queue as well.
+      do
+        if not guardsHold(walk, ROUTE.walkEntryGuard, "the game's tunnel collapse") then
+          error("The tunnel collapse entry could not be verified.", 0)
+        end
+        local walkHook = core.allocateAssembly(templates.tunnel_walk, {
           STRIKE_COUNT_ADDRESS = control + C.STRIKE_COUNT,
           STRIKES_ADDRESS = control + C.STRIKES,
-          STRIKE_ADDRESS = strike,
+          STRIKE_MAX = entranceLostOn and ROUTE.strikeMax or 0,
+          OWN_CALL_RETURN = tunneler + TUNNELER_TUNNEL_DAMAGE_CALL + 5,
+          UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
+          UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
+          FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
+          FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
+          FILL_ADDRESS = fill,
+          UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
+          UNIT_TYPE = (unitBase + UNIT_TYPE) & 0xFFFFFFFF,
+          UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
+          UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
+          UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
+          CURRENT_UNIT_ADDRESS = currentUnit,
           DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
           REPORT_ADDRESS = report,
           REPORT_PAD_ADDRESS = reportPad,
-          SW_FLOOR = ROUTE.stopwatchFloor,
-          SW_LAST_ADDRESS = control + C.SW_LAST,
-          SW_AVERAGE_ADDRESS = control + C.SW_AVERAGE,
-          SW_TUNNEL_ADDRESS = control + C.SW_TUNNEL,
-          SW_QUEUE_ADDRESS = control + C.SW_QUEUE,
-          SW_MAX_ADDRESS = control + C.SW_MAX,
-          SW_COUNT_ADDRESS = control + C.SW_COUNT,
-          SW_TILES_ADDRESS = control + C.SW_TILES,
-          SW_DAMAGE_MAX_ADDRESS = control + C.SW_DAMAGE_MAX,
-          SW_DAMAGE_CALLS_ADDRESS = control + C.SW_DAMAGE_CALLS,
-          SW_DAMAGE_KIND_ADDRESS = control + C.SW_DAMAGE_KIND,
-          STEP_ACTIVE_ADDRESS = control + C.STEP_ACTIVE,
-          DAMAGE_LEFT_ADDRESS = control + C.DAMAGE_LEFT,
-          RADIUS_ADDRESS = control + C.SPREAD_RADIUS,
-          STEP_RADIUS_ADDRESS = control + C.STEP_RADIUS,
-          STEP_DX_ADDRESS = control + C.STEP_DX,
-          STEP_DY_ADDRESS = control + C.STEP_DY,
-          STEP_THIS_TILE_ADDRESS = control + C.STEP_THIS_TILE,
-          TILE_FLAGS_ADDRESS = tileFlags,
-          WALL_FAMILY = WALL_FAMILY_FLAGS,
-          BUILDING_TILE_ADDRESS = buildingTiles,
-          BUILDING_STRIDE = SEARCH_STRIDE,
-          BUILDING_TYPE_ADDRESS = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
-          QUEUE_ADDRESS = queue,
-          QUEUE_COUNT_ADDRESS = control + C.QUEUE_COUNT,
-          SPEED_ADDRESS = control + C.SPEED,
-          TICKS_ADDRESS = ticks,
-          NORMAL_TICKS = TICKS_PER_SECOND,
-          GROUND_ADDRESS = ground,
-          GROUND_DONE = ROUTE.groundDone,
-          TICK_LEFT_ADDRESS = control + C.TICK_LEFT,
-          STEP_TILE_ADDRESS = control + C.STEP_TILE,
-          STEP_X_ADDRESS = control + C.STEP_X,
-          STEP_Y_ADDRESS = control + C.STEP_Y,
-          STEP_FLAGS_ADDRESS = control + C.STEP_FLAGS,
-          STEP_ADDRESS = step,
-          PATH_STATE_ADDRESS = readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND),
-          UPDATE_WALK_ADDRESS = callTarget(walk + DAMAGE_WALK_UPDATE_CALL),
-          RNG_ADDRESS = readAddress(tickSite + TICK_RNG_OPERAND),
-          RETURN_ADDRESS = tickSite + TICK_HOOK + TICK_HOOK_SIZE,
-          OVERLAY = mark.OVERLAY,
-          REBUILD_ADDRESS = mark.REBUILD_ADDRESS,
-          OVERLAY_REBUILD_ADDRESS = mark.OVERLAY_REBUILD_ADDRESS,
         })
-        remember(tickSite + TICK_HOOK, TICK_HOOK_SIZE)
-        writeJump(tickSite + TICK_HOOK, tick, TICK_HOOK_SIZE)
-
-        -- The game's own whole-tunnel collapse, when an entrance is destroyed, goes into the
-        -- queue as well.
-        if guardsHold(walk, ROUTE.walkEntryGuard, "the game's tunnel collapse") then
-          local walkHook = core.allocateAssembly(templates.tunnel_walk, {
-            STRIKE_COUNT_ADDRESS = control + C.STRIKE_COUNT,
-            STRIKES_ADDRESS = control + C.STRIKES,
-            STRIKE_MAX = entranceLostOn and ROUTE.strikeMax or 0,
-            OWN_CALL_RETURN = tunneler + TUNNELER_TUNNEL_DAMAGE_CALL + 5,
-            UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
-            UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
-            FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
-            FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
-            FILL_ADDRESS = fill,
-            UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-            UNIT_TYPE = (unitBase + UNIT_TYPE) & 0xFFFFFFFF,
-            UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
-            UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
-            UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
-            CURRENT_UNIT_ADDRESS = currentUnit,
-            DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-            REPORT_ADDRESS = report,
-            REPORT_PAD_ADDRESS = reportPad,
-          })
-          remember(walk, 6)
-          writeJump(walk, walkHook, 6)
-        end
-
-        -- ... and what the collapse does to the thing it arrived under, before the tunnel
-        -- behind it is queued to fall in. Without it the game demolishes the target.
-        if collapseOn then
-          local target = core.allocateAssembly(templates.collapse_target, {
-            WALL_FAMILY = WALL_FAMILY_FLAGS,
-            RESET_TILE_ADDRESS = callTarget(tunneler + TUNNELER_RESET_TILE_CALL),
-            TILE_FLAGS_ADDRESS = tileFlags,
-            BUILDING_TILE_ADDRESS = buildingTiles,
-            CURRENT_UNIT_ADDRESS = currentUnit,
-            DAMAGE_ADDRESS = control + C.COLLAPSE_DAMAGE,
-            UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
-            UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
-            UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
-            UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
-            TILE_MAP_STATE_ADDRESS = tileMapState,
-            PROCESS_DAMAGE_ADDRESS = processDamage,
-            FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
-            FAMILY_READY_ADDRESS = control + C.FAMILY_READY,
-            FILL_ADDRESS = fill,
-            FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
-            FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
-            UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
-            RETURN_ADDRESS = tunneler + TUNNELER_COLLAPSE_DONE,
-          })
-          remember(tunneler + TUNNELER_COLLAPSE_HOOK, TUNNELER_COLLAPSE_HOOK_SIZE)
-          writeJump(tunneler + TUNNELER_COLLAPSE_HOOK, target, TUNNELER_COLLAPSE_HOOK_SIZE)
-          targetReady = true
-        end
-        collapseReady = true
-
-        -- The tunnel mark: tunnellers mark where they dig, the map draws it.
-        if mark.OVERLAY == 1 then
-          self.markReady = require("overlay").install({
-            guardsHold = guardsHold, readAddress = readAddress, callTarget = callTarget,
-            remember = remember, writeJump = writeJump,
-            tunneler = tunneler, currentUnit = currentUnit, onAddress = control + C.OVERLAY_ON,
-            unitField = function(offset) return (unitBase + offset) & 0xFFFFFFFF end,
-            UNIT_TYPE = UNIT_TYPE, UNIT_LOGICAL_STATE = UNIT_LOGICAL_STATE, UNIT_UID = UNIT_UID,
-            UNIT_OWNER = UNIT_OWNER, UNIT_TILE = UNIT_TILE, UNIT_PREVIOUS_TILE = UNIT_PREVIOUS_TILE,
-            UNIT_LADDER_Y = UNIT_LADDER_Y, UNIT_PATH_INDEX = UNIT_PATH_INDEX,
-            UNIT_PATH_LENGTH = UNIT_PATH_LENGTH, UNIT_PATH_PLAN = UNIT_PATH_PLAN,
-            UNIT_TYPE_TUNNELER = UNIT_TYPE_TUNNELER, UNIT_LOGICAL_ALIVE = UNIT_LOGICAL_ALIVE,
-            liveHeight = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
-            baseHeight = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
-            directions = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
-            yDeltas = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
-          })
-          if not self.markReady then
-            writeInteger(control + C.OVERLAY_ON, 0)
-          end
-        end
-      end
-    end
-    if (collapseOn or spreadOn or entranceLostOn) and not collapseReady then
-      log(ERROR, "Tunnel collapse changes are off. The collapse code could not be verified.")
-    elseif collapseOn and not targetReady then
-      log(ERROR, "Custom tunnel collapse damage is off. The damage code could not be verified.")
-    end
-    if terrainOn and not collapseReady then
-      log(ERROR, "Restoring ground after digging is off. The terrain code could not be verified.")
-    end
-    if overlayOn and not collapseReady then
-      log(ERROR, "The tunnel mark is off. The tunnel collapse code could not be verified.")
-    end
-
-    if walk ~= nil and routingOn then
-      -------------------------------------------------------------------------------
-      -- Where a tunnel goes
-      -------------------------------------------------------------------------------
-      local algResult = readAddress(finder + FIND_RESULT_OPERAND)
-      local algX = readAddress(tunneler + TUNNELER_ALG_TARGET_X_OPERAND)
-      local algY = readAddress(tunneler + TUNNELER_ALG_TARGET_Y_OPERAND)
-      local setDestination = callTarget(tunneler + TUNNELER_SET_DESTINATION_CALL)
-      local lines = control + C.LINES
-      local function unitField(offset)
-        return (unitBase + offset) & 0xFFFFFFFF
+        writeJump(walk, walkHook, 6)
       end
 
-      -- The filter every search runs through. It stays off - the game's own searches, the
-      -- AI's included, never see it - except for the single run one of the routines below
-      -- asks it for.
-      local filter = core.allocateAssembly(templates.aim_filter, {
-        STOCKPILE = ROUTE.stockpileFlag,
-        TILE_FLAGS_ADDRESS = tileFlags,
-        BUILDING_TILE_ADDRESS = buildingTiles,
+      -- ... and what the collapse does to the thing it arrived under, before the tunnel
+      -- behind it is queued to fall in. Without it the game demolishes the target.
+      if collapseOn then
+        local target = core.allocateAssembly(templates.collapse_target, {
+          WALL_FAMILY = WALL_FAMILY_FLAGS,
+          RESET_TILE_ADDRESS = callTarget(tunneler + TUNNELER_RESET_TILE_CALL),
+          TILE_FLAGS_ADDRESS = tileFlags,
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          CURRENT_UNIT_ADDRESS = currentUnit,
+          DAMAGE_ADDRESS = control + C.COLLAPSE_DAMAGE,
+          UNIT_TILE = (unitBase + UNIT_TILE) & 0xFFFFFFFF,
+          UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
+          UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
+          UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
+          TILE_MAP_STATE_ADDRESS = tileMapState,
+          PROCESS_DAMAGE_ADDRESS = processDamage,
+          FAMILY_ACTIVE_ADDRESS = control + C.FAMILY_DAMAGE,
+          FAMILY_READY_ADDRESS = control + C.FAMILY_READY,
+          FILL_ADDRESS = fill,
+          FILL_UNIT_ADDRESS = control + C.FILL_UNIT,
+          FILL_FLAGS_ADDRESS = control + C.FILL_FLAGS,
+          UNIT_PATH_LENGTH = (unitBase + UNIT_PATH_LENGTH) & 0xFFFFFFFF,
+          RETURN_ADDRESS = tunneler + TUNNELER_COLLAPSE_DONE,
+        })
+        writeJump(tunneler + TUNNELER_COLLAPSE_HOOK, target, TUNNELER_COLLAPSE_HOOK_SIZE)
+        targetReady = true
+      end
+    end
+
+    local function prepareOverlay()
+      require("overlay").install({
+        guardsHold = guardsHold, readAddress = readAddress, callTarget = callTarget,
+        writeJump = writeJump,
+        tunneler = tunneler, currentUnit = currentUnit, onAddress = control + C.OVERLAY_ON,
+        unitField = function(offset) return (unitBase + offset) & 0xFFFFFFFF end,
+        UNIT_TYPE = UNIT_TYPE, UNIT_LOGICAL_STATE = UNIT_LOGICAL_STATE, UNIT_UID = UNIT_UID,
+        UNIT_OWNER = UNIT_OWNER, UNIT_TILE = UNIT_TILE, UNIT_PREVIOUS_TILE = UNIT_PREVIOUS_TILE,
+        UNIT_LADDER_Y = UNIT_LADDER_Y, UNIT_PATH_INDEX = UNIT_PATH_INDEX,
+        UNIT_PATH_LENGTH = UNIT_PATH_LENGTH, UNIT_PATH_PLAN = UNIT_PATH_PLAN,
+        UNIT_TYPE_TUNNELER = UNIT_TYPE_TUNNELER, UNIT_LOGICAL_ALIVE = UNIT_LOGICAL_ALIVE,
+        liveHeight = readAddress(walk + DAMAGE_WALK_LIVE_HEIGHT_OPERAND),
+        baseHeight = readAddress(walk + DAMAGE_WALK_BASE_HEIGHT_OPERAND),
+        directions = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
+        yDeltas = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
+      })
+    end
+
+    local function prepareTargets()
+      if not search then error("The target search could not be verified.", 0) end
+      local targets = core.allocateAssembly(templates.tunnel_targets, {
+        ENABLED_ADDRESS = control + C.TARGETS_ENABLED,
+        GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
+        TYPE_LIMIT = BUILDING_TYPE_LIMIT,
+        UNDER_ENABLED_ADDRESS = control + C.UNDER_BUILDINGS,
+        KEEP_FIRST_TYPE = KEEP_FIRST_TYPE,
+        KEEP_TYPE_SPAN = KEEP_TYPE_SPAN,
+        ALLOW_ADDRESS = search + SEARCH_ALLOW,
+        SKIP_ADDRESS = search + SEARCH_SKIP,
+      })
+      -- A tunnel may be aimed at stairs and at crenellations, not only at plain wall.
+      if guardsHold(search, SEARCH_WALL_TEST_GUARD, "the search's own wall test") then
+        stage(search + SEARCH_WALL_TEST_OPERAND, core.itob(WALL_FAMILY_FLAGS))
+      end
+
+      writeJump(search + SEARCH_BUILDING_TEST, targets, SEARCH_BUILDING_TEST_SIZE)
+
+      local accept = core.allocateAssembly(templates.tunnel_accept, {
+        AIM_MODE_ADDRESS = control + C.AIM_MODE,
         CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
-        TICKS_ADDRESS = ticks,
-        REFUSED_ADDRESS = control + C.REFUSED,
-        REFUSED_END_ADDRESS = control + C.REFUSED + ROUTE.refused * 8,
-        AIM_MODE_ADDRESS = control + C.AIM_MODE,
-        AIM_PIN_ADDRESS = control + C.AIM_PIN,
-        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
-        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
-        AIM_DIR_X_ADDRESS = control + C.AIM_DIR_X,
-        AIM_DIR_Y_ADDRESS = control + C.AIM_DIR_Y,
-        AIM_DIR_LENGTH_ADDRESS = control + C.AIM_DIR_LENGTH,
-        RESULT_TILE = SEARCH_RESULT_TILE,
-        RESULT_Y = SEARCH_RESULT_Y,
-        RESULT_X = SEARCH_RESULT_X,
+        ENABLED_ADDRESS = control + C.TARGETS_ENABLED,
+        GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
+        TYPE_LIMIT = BUILDING_TYPE_LIMIT,
+        BUILDING_STRIDE = SEARCH_STRIDE,
+        BUILDING_TYPE_ADDRESS = readAddress(search + SEARCH_TYPE_OPERAND),
+        RETURN_ADDRESS = search + SEARCH_ACCEPT_RETURN,
         SPREAD_ADDRESS = search + SEARCH_SPREAD,
-        RETURN_ADDRESS = search + SEARCH_TAKE_IT_DONE,
       })
-      remember(search + SEARCH_TAKE_IT, SEARCH_TAKE_IT_SIZE)
-      writeJump(search + SEARCH_TAKE_IT, filter, SEARCH_TAKE_IT_SIZE)
+      writeJump(search + SEARCH_ACCEPT, accept, SEARCH_ACCEPT_SIZE)
+    end
 
-      local lineSearch = core.allocateAssembly(templates.line_search, {
-        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
-        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
-        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
-        AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
-        AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
-        AIM_MODE_ADDRESS = control + C.AIM_MODE,
-        PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
-        SEARCH_ADDRESS = search,
-        ALG_RESULT_ADDRESS = algResult,
-        TICKS_ADDRESS = ticks,
-        SEARCH_TICK_ADDRESS = control + C.SEARCH_TICK,
-      })
-      local stands = core.allocateAssembly(templates.stands, {
-        STOCKPILE = ROUTE.stockpileFlag,
-        TILE_FLAGS_ADDRESS = tileFlags,
-        BUILDING_TILE_ADDRESS = buildingTiles,
-        WALL_FAMILY = WALL_FAMILY_FLAGS,
-      })
-      local recordOf = core.allocateAssembly(templates.record_of, {
-        AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
-        UNIT_UID = unitField(UNIT_UID),
-        RECORDS_ADDRESS = records,
-        RECORDS_END_ADDRESS = records + RECORD_COUNT * RECORD_SIZE,
-        RING_CURSOR_ADDRESS = control + C.RING_CURSOR,
-        RECORD_ADDRESS = control + C.RECORD,
-      })
-      local newLine = core.allocateAssembly(templates.new_line, {
-        ORIGINS_ADDRESS = control + C.ORIGINS,
-        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
-        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
-        AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
-        ROUTES_ADDRESS = control + C.ROUTES,
-        ROUTE_SIZE = ROUTE.size,
-        LINE_ADDRESS = lines,
-        STANDS_ADDRESS = stands,
-        ALG_RESULT_ADDRESS = algResult,
-        ALG_TARGET_X_ADDRESS = algX,
-        ALG_TARGET_Y_ADDRESS = algY,
-        TICKS_ADDRESS = ticks,
-        RECORD_ADDRESS = control + C.RECORD,
-      })
+    local function unitField(offset)
+      return (unitBase + offset) & 0xFFFFFFFF
+    end
+    local routePatches, redirect
+    local algResult = retargetOn and search and readAddress(finder + FIND_RESULT_OPERAND) or 0
+    if retargetOn then
+      routePatches, redirect = prepare("Following up on tunnel breaches", function()
+        if not (tunneler and ticks and search) then error("The tunnel route could not be verified.", 0) end
+        local algX = readAddress(tunneler + TUNNELER_ALG_TARGET_X_OPERAND)
+        local algY = readAddress(tunneler + TUNNELER_ALG_TARGET_Y_OPERAND)
+        local setDestination = callTarget(tunneler + TUNNELER_SET_DESTINATION_CALL)
+        local lines = control + C.LINES
 
-      -- A line's route to the campfire, and its front. Without the map's rows or a search
-      -- that looks the way it should, no route is ever laid out and a line whose target is
-      -- down falls back on the search towards the campfire.
-      local routeBuild, followRoute
-      local routesOk = walkReady and rowTable ~= nil and anchor ~= nil
-        and guardsHold(search, ROUTE.guards, "the search's own maps")
-      if routesOk then
-        local routeWalk = core.allocateAssembly(templates.route_walk, {
-          END_RADIUS = ROUTE.endRadius,
-          CAMP_X_ADDRESS = control + C.CAMP_X,
-          CAMP_Y_ADDRESS = control + C.CAMP_Y,
-          MAP_LIMIT = MAP_LIMIT,
-          WALK_X_ADDRESS = control + C.WALK_X,
-          WALK_Y_ADDRESS = control + C.WALK_Y,
-          ROW_TABLE_ADDRESS = rowTable,
-          FLAG_MAP_ADDRESS = readAddress(search + ROUTE.flagMapOperand),
-          ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
-          ROUTE_BEST_ADDRESS = control + C.ROUTE_BEST,
-          ROUTE_X_ADDRESS = control + C.ROUTE_X,
-          ROUTE_Y_ADDRESS = control + C.ROUTE_Y,
-          ROUTE_FOUND_ADDRESS = control + C.ROUTE_FOUND,
-          DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
-          TILE_FLAGS_ADDRESS = tileFlags,
-          WALL_FAMILY = WALL_FAMILY_FLAGS,
-          STOCKPILE = ROUTE.stockpileFlag,
-          WALL_OWNER_ADDRESS = readAddress(search + ROUTE.wallOwnerOperand),
-          BUILDING_TILE_ADDRESS = buildingTiles,
-          BUILDING_STRIDE = SEARCH_STRIDE,
-          BUILDING_TYPE = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
-          BUILDING_OWNER = (buildingBase + ROUTE.buildingOwner) & 0xFFFFFFFF,
-          TYPE_LIMIT = BUILDING_TYPE_LIMIT,
-          GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
-          AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
-          TEAMS_ADDRESS = teamTable,
-          FOUND_MAX = ROUTE.found,
-          ROUTE_TEMP_ADDRESS = control + C.ROUTE_TEMP,
-          DIRECTIONS_ADDRESS = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
-          X_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_X_DELTAS_OPERAND),
-          Y_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
-          ROUTE_ENTRIES = ROUTE.entries,
-          PATH_FOUND_ADDRESS = control + C.PATH_FOUND,
-          PATH_MAX = ROUTE.pathMax,
-          PATH_TEMP_ADDRESS = control + C.PATH_TEMP,
-          PATH_OFFSET = ROUTE.pathOffset,
+        -- The filter every search runs through. It stays off - the game's own searches, the
+        -- AI's included, never see it - except for the single run one of the routines below
+        -- asks it for.
+        if teamTable ~= nil and unitBase ~= nil and (campIds ~= nil or keepIds ~= nil) then
+          anchor = core.allocateAssembly(templates.find_anchor, {
+            ANCHOR_ID_ADDRESS = control + C.ANCHOR_ID,
+            CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
+            ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
+            ANCHOR_FROM_ADDRESS = control + C.ANCHOR_FROM,
+            ANCHOR_TO_ADDRESS = control + C.ANCHOR_TO,
+            ANCHOR_BEST_ADDRESS = control + C.ANCHOR_BEST,
+            ANCHOR_X_ADDRESS = control + C.ANCHOR_X,
+            ANCHOR_Y_ADDRESS = control + C.ANCHOR_Y,
+            CAMP_X_ADDRESS = control + C.CAMP_X,
+            CAMP_Y_ADDRESS = control + C.CAMP_Y,
+            TEAMS_ADDRESS = teamTable,
+            PLAYER_COUNT = PLAYER_COUNT,
+            PLAYER_STRIDE = PLAYER_STRIDE,
+            BUILDING_STRIDE = SEARCH_STRIDE,
+            KEEP_IDS_ADDRESS = keepIds or campIds,
+            CAMP_IDS_ADDRESS = campIds or keepIds,
+            BUILDING_X = (buildingBase + BUILDING_X) & 0xFFFFFFFF,
+            BUILDING_Y = (buildingBase + BUILDING_Y) & 0xFFFFFFFF,
+            UNIT_X = (unitBase + UNIT_X) & 0xFFFFFFFF,
+            UNIT_Y = (unitBase + UNIT_Y) & 0xFFFFFFFF,
+            UNIT_OWNER = (unitBase + UNIT_OWNER) & 0xFFFFFFFF,
+            UNIT_SIEGE_TARGET = (unitBase + UNIT_SIEGE_TARGET) & 0xFFFFFFFF,
+          })
+        end
+        -- ... and what stands in for it when those tables were not found: "no camp".
+        local anchorStub = core.allocateAssembly(templates.no_anchor, {
+          ANCHOR_BEST_ADDRESS = control + C.ANCHOR_BEST,
         })
-        routeBuild = core.allocateAssembly(templates.route_build, {
-          AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
-          ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
-          ANCHOR_ADDRESS = anchor,
+
+        local filter = core.allocateAssembly(templates.aim_filter, {
+          STOCKPILE = ROUTE.stockpileFlag,
+          TILE_FLAGS_ADDRESS = tileFlags,
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
+          TICKS_ADDRESS = ticks,
+          REFUSED_ADDRESS = control + C.REFUSED,
+          REFUSED_END_ADDRESS = control + C.REFUSED + ROUTE.refused * 8,
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
+          AIM_PIN_ADDRESS = control + C.AIM_PIN,
+          AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+          AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+          AIM_DIR_X_ADDRESS = control + C.AIM_DIR_X,
+          AIM_DIR_Y_ADDRESS = control + C.AIM_DIR_Y,
+          AIM_DIR_LENGTH_ADDRESS = control + C.AIM_DIR_LENGTH,
+          RESULT_TILE = SEARCH_RESULT_TILE,
+          RESULT_Y = SEARCH_RESULT_Y,
+          RESULT_X = SEARCH_RESULT_X,
+          SPREAD_ADDRESS = search + SEARCH_SPREAD,
+          RETURN_ADDRESS = search + SEARCH_TAKE_IT_DONE,
+        })
+        writeJump(search + SEARCH_TAKE_IT, filter, SEARCH_TAKE_IT_SIZE)
+
+        local lineSearch = core.allocateAssembly(templates.line_search, {
           AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
           AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
           AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
-          CAMP_X_ADDRESS = control + C.CAMP_X,
-          CAMP_Y_ADDRESS = control + C.CAMP_Y,
-          ROUTE_SLACK = ROUTE.slack,
-          ROUTE_REACH = ROUTE.reach,
-          AIM_MODE_ADDRESS = control + C.AIM_MODE,
-          SEARCHED_ADDRESS = control + C.SEARCHED,
-          LINE_SEARCH_ADDRESS = lineSearch,
-          PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
-          ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
-          ROUTE_WALK_ADDRESS = routeWalk,
-          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-          REPORT_ADDRESS = report,
-          REPORT_PAD_ADDRESS = reportPad,
+          AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
           AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
-        })
-        followRoute = core.allocateAssembly(templates.follow_route, {
-          STANDS_ADDRESS = stands,
-          TICKS_ADDRESS = ticks,
-          CLAIM_TICKS = ROUTE.claimSeconds * TICKS_PER_SECOND,
-          FOLLOW_AT_ADDRESS = control + C.FOLLOW_AT,
-          FOLLOW_FIRST_ADDRESS = control + C.FOLLOW_FIRST,
-          FOLLOW_PICK_ADDRESS = control + C.FOLLOW_PICK,
-          LINE_ADDRESS = lines,
-          ROUTE_SIZE = ROUTE.size,
-          ROUTES_ADDRESS = control + C.ROUTES,
-          PATH_OFFSET = ROUTE.pathOffset,
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
           PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
-          SEARCH_NUMBER_LIMIT = ROUTE.searchNumberLimit,
-          ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
-          DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
-          FLAG_MAP_ADDRESS = readAddress(search + ROUTE.flagMapOperand),
+          SEARCH_ADDRESS = search,
+          ALG_RESULT_ADDRESS = algResult,
+          TICKS_ADDRESS = ticks,
+          SEARCH_TICK_ADDRESS = control + C.SEARCH_TICK,
+        })
+        local stands = core.allocateAssembly(templates.stands, {
+          STOCKPILE = ROUTE.stockpileFlag,
+          TILE_FLAGS_ADDRESS = tileFlags,
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          WALL_FAMILY = WALL_FAMILY_FLAGS,
+        })
+        local recordOf = core.allocateAssembly(templates.record_of, {
+          AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+          UNIT_UID = unitField(UNIT_UID),
+          RECORDS_ADDRESS = records,
+          RECORDS_END_ADDRESS = records + RECORD_COUNT * RECORD_SIZE,
+          RING_CURSOR_ADDRESS = control + C.RING_CURSOR,
+          RECORD_ADDRESS = control + C.RECORD,
+        })
+        local newLine = core.allocateAssembly(templates.new_line, {
+          ORIGINS_ADDRESS = control + C.ORIGINS,
+          AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+          AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+          AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+          ROUTES_ADDRESS = control + C.ROUTES,
+          ROUTE_SIZE = ROUTE.size,
+          LINE_ADDRESS = lines,
+          STANDS_ADDRESS = stands,
           ALG_RESULT_ADDRESS = algResult,
           ALG_TARGET_X_ADDRESS = algX,
           ALG_TARGET_Y_ADDRESS = algY,
+          TICKS_ADDRESS = ticks,
+          RECORD_ADDRESS = control + C.RECORD,
         })
 
-        -- A tunnel collapses under the first enemy fortification it comes to.
-        if guardsHold(tunneler, { [ROUTE.travelHook - 2] = { 0x85, 0xC0, 0x0F, 0x84 } },
-            "the tunneler's travel test") then
-          local crossing = core.allocateAssembly(templates.crossing, {
-            ARRIVED_ADDRESS = tunneler + TUNNELER_ARRIVED_HOOK,
-            NOT_ARRIVED_ADDRESS = jumpTarget(tunneler + ROUTE.travelHook),
-            ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
-            CURRENT_UNIT_ADDRESS = currentUnit,
-            UNIT_TILE = unitField(UNIT_TILE),
-            UNIT_OWNER = unitField(UNIT_OWNER),
-            UNIT_X = unitField(UNIT_X),
-            UNIT_Y = unitField(UNIT_Y),
-            UNIT_DEST_X = unitField(UNIT_DEST_X),
-            UNIT_DEST_Y = unitField(UNIT_DEST_Y),
-            UNIT_DEST_TILE = unitField(UNIT_DEST_TILE),
-            UNIT_UID = unitField(UNIT_UID),
-            UNIT_PATH_INDEX = unitField(UNIT_PATH_INDEX),
-            UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
-            UNIT_MOVE_STATUS = unitField(UNIT_MOVE_STATUS),
+        -- A line's route to the campfire, and its front. Without the map's rows or a search
+        -- that looks the way it should, no route is ever laid out and a line whose target is
+        -- down falls back on the search towards the campfire.
+        local routeBuild, followRoute
+        local routesOk = walkReady and rowTable ~= nil and anchor ~= nil
+          and guardsHold(search, ROUTE.guards, "the search's own maps")
+        if routesOk then
+          local routeWalk = core.allocateAssembly(templates.route_walk, {
+            END_RADIUS = ROUTE.endRadius,
+            CAMP_X_ADDRESS = control + C.CAMP_X,
+            CAMP_Y_ADDRESS = control + C.CAMP_Y,
+            MAP_LIMIT = MAP_LIMIT,
+            WALK_X_ADDRESS = control + C.WALK_X,
+            WALK_Y_ADDRESS = control + C.WALK_Y,
+            ROW_TABLE_ADDRESS = rowTable,
+            FLAG_MAP_ADDRESS = readAddress(search + ROUTE.flagMapOperand),
+            ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
+            ROUTE_BEST_ADDRESS = control + C.ROUTE_BEST,
+            ROUTE_X_ADDRESS = control + C.ROUTE_X,
+            ROUTE_Y_ADDRESS = control + C.ROUTE_Y,
+            ROUTE_FOUND_ADDRESS = control + C.ROUTE_FOUND,
+            DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
             TILE_FLAGS_ADDRESS = tileFlags,
             WALL_FAMILY = WALL_FAMILY_FLAGS,
             STOCKPILE = ROUTE.stockpileFlag,
@@ -1699,305 +1654,375 @@ return {
             BUILDING_OWNER = (buildingBase + ROUTE.buildingOwner) & 0xFFFFFFFF,
             TYPE_LIMIT = BUILDING_TYPE_LIMIT,
             GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
+            AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
             TEAMS_ADDRESS = teamTable,
-            RECORDS_ADDRESS = records,
-            RECORDS_END_ADDRESS = records + RECORD_COUNT * RECORD_SIZE,
+            FOUND_MAX = ROUTE.found,
+            ROUTE_TEMP_ADDRESS = control + C.ROUTE_TEMP,
+            DIRECTIONS_ADDRESS = readAddress(walk + DAMAGE_WALK_DIRECTIONS_OPERAND),
+            X_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_X_DELTAS_OPERAND),
+            Y_DELTAS_ADDRESS = readAddress(walk + DAMAGE_WALK_Y_DELTAS_OPERAND),
+            ROUTE_ENTRIES = ROUTE.entries,
+            PATH_FOUND_ADDRESS = control + C.PATH_FOUND,
+            PATH_MAX = ROUTE.pathMax,
+            PATH_TEMP_ADDRESS = control + C.PATH_TEMP,
+            PATH_OFFSET = ROUTE.pathOffset,
+          })
+          routeBuild = core.allocateAssembly(templates.route_build, {
+            AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+            ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
+            ANCHOR_ADDRESS = anchor,
+            AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+            AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+            AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+            CAMP_X_ADDRESS = control + C.CAMP_X,
+            CAMP_Y_ADDRESS = control + C.CAMP_Y,
+            ROUTE_SLACK = ROUTE.slack,
+            ROUTE_REACH = ROUTE.reach,
+            AIM_MODE_ADDRESS = control + C.AIM_MODE,
+            SEARCHED_ADDRESS = control + C.SEARCHED,
+            LINE_SEARCH_ADDRESS = lineSearch,
+            PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
+            ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
+            ROUTE_WALK_ADDRESS = routeWalk,
+            DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+            REPORT_ADDRESS = report,
+            REPORT_PAD_ADDRESS = reportPad,
+            AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+          })
+          followRoute = core.allocateAssembly(templates.follow_route, {
+            STANDS_ADDRESS = stands,
+            TICKS_ADDRESS = ticks,
+            CLAIM_TICKS = ROUTE.claimSeconds * TICKS_PER_SECOND,
+            FOLLOW_AT_ADDRESS = control + C.FOLLOW_AT,
+            FOLLOW_FIRST_ADDRESS = control + C.FOLLOW_FIRST,
+            FOLLOW_PICK_ADDRESS = control + C.FOLLOW_PICK,
             LINE_ADDRESS = lines,
             ROUTE_SIZE = ROUTE.size,
             ROUTES_ADDRESS = control + C.ROUTES,
-            TICKS_ADDRESS = ticks,
-            CLAIM_TICKS = ROUTE.claimSeconds * TICKS_PER_SECOND,
+            PATH_OFFSET = ROUTE.pathOffset,
+            PATH_STATE_ADDRESS = readAddress(finder + FIND_PATH_STATE_OPERAND),
+            SEARCH_NUMBER_LIMIT = ROUTE.searchNumberLimit,
+            ROUTE_GEN_ADDRESS = control + C.ROUTE_GEN,
+            DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
+            FLAG_MAP_ADDRESS = readAddress(search + ROUTE.flagMapOperand),
+            ALG_RESULT_ADDRESS = algResult,
+            ALG_TARGET_X_ADDRESS = algX,
+            ALG_TARGET_Y_ADDRESS = algY,
           })
-          remember(tunneler + ROUTE.travelHook, 6)
-          writeJump(tunneler + ROUTE.travelHook, crossing, 6)
+
+          -- A tunnel collapses under the first enemy fortification it comes to.
+          if guardsHold(tunneler, { [ROUTE.travelHook - 2] = { 0x85, 0xC0, 0x0F, 0x84 } },
+              "the tunneler's travel test") then
+            local crossing = core.allocateAssembly(templates.crossing, {
+              ARRIVED_ADDRESS = tunneler + TUNNELER_ARRIVED_HOOK,
+              NOT_ARRIVED_ADDRESS = jumpTarget(tunneler + ROUTE.travelHook),
+              ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
+              CURRENT_UNIT_ADDRESS = currentUnit,
+              UNIT_TILE = unitField(UNIT_TILE),
+              UNIT_OWNER = unitField(UNIT_OWNER),
+              UNIT_X = unitField(UNIT_X),
+              UNIT_Y = unitField(UNIT_Y),
+              UNIT_DEST_X = unitField(UNIT_DEST_X),
+              UNIT_DEST_Y = unitField(UNIT_DEST_Y),
+              UNIT_DEST_TILE = unitField(UNIT_DEST_TILE),
+              UNIT_UID = unitField(UNIT_UID),
+              UNIT_PATH_INDEX = unitField(UNIT_PATH_INDEX),
+              UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
+              UNIT_MOVE_STATUS = unitField(UNIT_MOVE_STATUS),
+              TILE_FLAGS_ADDRESS = tileFlags,
+              WALL_FAMILY = WALL_FAMILY_FLAGS,
+              STOCKPILE = ROUTE.stockpileFlag,
+              WALL_OWNER_ADDRESS = readAddress(search + ROUTE.wallOwnerOperand),
+              BUILDING_TILE_ADDRESS = buildingTiles,
+              BUILDING_STRIDE = SEARCH_STRIDE,
+              BUILDING_TYPE = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
+              BUILDING_OWNER = (buildingBase + ROUTE.buildingOwner) & 0xFFFFFFFF,
+              TYPE_LIMIT = BUILDING_TYPE_LIMIT,
+              GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
+              TEAMS_ADDRESS = teamTable,
+              RECORDS_ADDRESS = records,
+              RECORDS_END_ADDRESS = records + RECORD_COUNT * RECORD_SIZE,
+              LINE_ADDRESS = lines,
+              ROUTE_SIZE = ROUTE.size,
+              ROUTES_ADDRESS = control + C.ROUTES,
+              TICKS_ADDRESS = ticks,
+              CLAIM_TICKS = ROUTE.claimSeconds * TICKS_PER_SECOND,
+            })
+            writeJump(tunneler + ROUTE.travelHook, crossing, 6)
+          end
+        else
+          routeBuild = core.allocateCode({ 0xC7, 0x06, 0x02, 0x00, 0x00, 0x00, 0xC3 })  -- state 2
+          followRoute = core.allocateCode({ 0x31, 0xC0, 0xC3 })                        -- search
         end
-      else
-        routeBuild = core.allocateCode({ 0xC7, 0x06, 0x02, 0x00, 0x00, 0x00, 0xC3 })  -- state 2
-        followRoute = core.allocateCode({ 0x31, 0xC0, 0xC3 })                        -- search
-      end
-      local lineFront = core.allocateAssembly(templates.line_front, {
-        STANDS_ADDRESS = stands,
-        LINE_ADDRESS = lines,
-        ROUTE_SIZE = ROUTE.size,
-        ROUTES_ADDRESS = control + C.ROUTES,
-        ROUTE_CURRENT_ADDRESS = control + C.ROUTE_CURRENT,
-        ROUTE_BUILD_ADDRESS = routeBuild,
-        SEARCHED_ADDRESS = control + C.SEARCHED,
-      })
-      local aimAtLine = core.allocateAssembly(templates.aim_at_line, {
-        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
-        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
-        RANGE_ADDRESS = control + C.RETARGET_RANGE,
-        PIN_SLACK = ROUTE.pinSlack,
-        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
-        AIM_PIN_ADDRESS = control + C.AIM_PIN,
-        AIM_MODE_ADDRESS = control + C.AIM_MODE,
-        SEARCHED_ADDRESS = control + C.SEARCHED,
-        LINE_SEARCH_ADDRESS = lineSearch,
-      })
+        local lineFront = core.allocateAssembly(templates.line_front, {
+          STANDS_ADDRESS = stands,
+          LINE_ADDRESS = lines,
+          ROUTE_SIZE = ROUTE.size,
+          ROUTES_ADDRESS = control + C.ROUTES,
+          ROUTE_CURRENT_ADDRESS = control + C.ROUTE_CURRENT,
+          ROUTE_BUILD_ADDRESS = routeBuild,
+          SEARCHED_ADDRESS = control + C.SEARCHED,
+        })
+        local aimAtLine = core.allocateAssembly(templates.aim_at_line, {
+          AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+          AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+          RANGE_ADDRESS = control + C.RETARGET_RANGE,
+          PIN_SLACK = ROUTE.pinSlack,
+          AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+          AIM_PIN_ADDRESS = control + C.AIM_PIN,
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
+          SEARCHED_ADDRESS = control + C.SEARCHED,
+          LINE_SEARCH_ADDRESS = lineSearch,
+        })
 
-      -- Laying the next leg while keeping the tunnel one piece.
-      local extend = core.allocateAssembly(templates.extend_plan, {
-        QUIET_ADDRESS = control + C.QUIET,
-        EXTEND_FULL_ADDRESS = control + C.EXTEND_FULL,
-        AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
-        UNIT_PATH_INDEX = unitField(UNIT_PATH_INDEX),
-        UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
-        UNIT_PATH_PLAN = unitField(UNIT_PATH_PLAN),
-        UNIT_LADDER_X = unitField(UNIT_LADDER_X),
-        UNIT_LADDER_Y = unitField(UNIT_LADDER_Y),
-        UNIT_PREVIOUS_TILE = unitField(UNIT_PREVIOUS_TILE),
-        UNIT_MOVE_STATUS = unitField(UNIT_MOVE_STATUS),
-        UNIT_SELECTABLE = unitField(UNIT_SELECTABLE),
-        SAVE_LADDER_X_ADDRESS = control + C.SAVE_LADDER_X,
-        SAVE_LADDER_Y_ADDRESS = control + C.SAVE_LADDER_Y,
-        SAVE_PREVIOUS_ADDRESS = control + C.SAVE_PREVIOUS,
-        PLAN_BUFFER_ADDRESS = control + C.PLAN_BUFFER,
-        PLAN_STEPS = PLAN_STEPS,
-        ALG_TARGET_X_ADDRESS = algX,
-        ALG_TARGET_Y_ADDRESS = algY,
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        UNITS_STATE_ADDRESS = unitsState,
-        SET_DESTINATION_ADDRESS = setDestination,
-      })
+        -- Laying the next leg while keeping the tunnel one piece.
+        local extend = core.allocateAssembly(templates.extend_plan, {
+          QUIET_ADDRESS = control + C.QUIET,
+          EXTEND_FULL_ADDRESS = control + C.EXTEND_FULL,
+          AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+          UNIT_PATH_INDEX = unitField(UNIT_PATH_INDEX),
+          UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
+          UNIT_PATH_PLAN = unitField(UNIT_PATH_PLAN),
+          UNIT_LADDER_X = unitField(UNIT_LADDER_X),
+          UNIT_LADDER_Y = unitField(UNIT_LADDER_Y),
+          UNIT_PREVIOUS_TILE = unitField(UNIT_PREVIOUS_TILE),
+          UNIT_MOVE_STATUS = unitField(UNIT_MOVE_STATUS),
+          UNIT_SELECTABLE = unitField(UNIT_SELECTABLE),
+          SAVE_LADDER_X_ADDRESS = control + C.SAVE_LADDER_X,
+          SAVE_LADDER_Y_ADDRESS = control + C.SAVE_LADDER_Y,
+          SAVE_PREVIOUS_ADDRESS = control + C.SAVE_PREVIOUS,
+          PLAN_BUFFER_ADDRESS = control + C.PLAN_BUFFER,
+          PLAN_STEPS = PLAN_STEPS,
+          ALG_TARGET_X_ADDRESS = algX,
+          ALG_TARGET_Y_ADDRESS = algY,
+          CURRENT_UNIT_ADDRESS = currentUnit,
+          UNITS_STATE_ADDRESS = unitsState,
+          SET_DESTINATION_ADDRESS = setDestination,
+        })
 
-      -- Sending a tunnel on from empty ground.
-      -- The search in the cone towards the enemy's campfire.
-      local aimCone = core.allocateAssembly(templates.aim_cone, {
-        ANCHOR_ADDRESS = anchor or anchorStub,
-        ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
-        CAMP_X_ADDRESS = control + C.CAMP_X,
-        CAMP_Y_ADDRESS = control + C.CAMP_Y,
-        AIM_DIR_X_ADDRESS = control + C.AIM_DIR_X,
-        AIM_DIR_Y_ADDRESS = control + C.AIM_DIR_Y,
-        AIM_DIR_LENGTH_ADDRESS = control + C.AIM_DIR_LENGTH,
-        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
-        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
-        SEARCHED_ADDRESS = control + C.SEARCHED,
-        AIM_MODE_ADDRESS = control + C.AIM_MODE,
-        LINE_SEARCH_ADDRESS = lineSearch,
-      })
+        -- Sending a tunnel on from empty ground.
+        -- The search in the cone towards the enemy's campfire.
+        local aimCone = core.allocateAssembly(templates.aim_cone, {
+          ANCHOR_ADDRESS = anchor or anchorStub,
+          ANCHOR_UNIT_ADDRESS = control + C.ANCHOR_UNIT,
+          CAMP_X_ADDRESS = control + C.CAMP_X,
+          CAMP_Y_ADDRESS = control + C.CAMP_Y,
+          AIM_DIR_X_ADDRESS = control + C.AIM_DIR_X,
+          AIM_DIR_Y_ADDRESS = control + C.AIM_DIR_Y,
+          AIM_DIR_LENGTH_ADDRESS = control + C.AIM_DIR_LENGTH,
+          AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+          AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+          SEARCHED_ADDRESS = control + C.SEARCHED,
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
+          LINE_SEARCH_ADDRESS = lineSearch,
+        })
 
-      local redirect = core.allocateAssembly(templates.redirect, {
-        SEARCHED_ADDRESS = control + C.SEARCHED,
-        SEARCH_TICK_ADDRESS = control + C.SEARCH_TICK,
-        STEP_WINDOW = ROUTE.stepSeconds * TICKS_PER_SECOND * 4,
-        EXTEND_FULL_ADDRESS = control + C.EXTEND_FULL,
-        REFUSED_CURSOR_ADDRESS = control + C.REFUSED_CURSOR,
-        REFUSED_TICKS = ROUTE.refusedSeconds * TICKS_PER_SECOND,
-        FAIL_SPOT_ADDRESS = control + C.FAIL_SPOT,
-        FAIL_UNTIL_ADDRESS = control + C.FAIL_UNTIL,
-        WAIT_TICKS = ROUTE.waitSeconds * TICKS_PER_SECOND,
-        LINE_ADDRESS = lines,
-        ROUTE_SIZE = ROUTE.size,
-        ROUTES_ADDRESS = control + C.ROUTES,
-        REFUSED_ADDRESS = control + C.REFUSED,
-        REFUSED_END_ADDRESS = control + C.REFUSED + ROUTE.refused * 8,
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
-        RECORD_OF_ADDRESS = recordOf,
-        RECORD_ADDRESS = control + C.RECORD,
-        REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
-        MAX_ADDRESS = control + C.RETARGET_MAX,
-        UNIT_OWNER = unitField(UNIT_OWNER),
-        UNIT_SIEGE_TARGET = unitField(UNIT_SIEGE_TARGET),
-        UNIT_X = unitField(UNIT_X),
-        UNIT_Y = unitField(UNIT_Y),
-        UNIT_TILE = unitField(UNIT_TILE),
-        AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
-        AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
-        RANGE_ADDRESS = control + C.RETARGET_RANGE,
-        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
-        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
-        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
-        TICKS_ADDRESS = ticks,
-        STANDS_ADDRESS = stands,
-        LINE_FRONT_ADDRESS = lineFront,
-        ROUTE_CURRENT_ADDRESS = control + C.ROUTE_CURRENT,
-        FOLLOW_ROUTE_ADDRESS = followRoute,
-        AIM_AT_LINE_ADDRESS = aimAtLine,
-        AIM_MODE_ADDRESS = control + C.AIM_MODE,
-        AIM_CONE_ADDRESS = aimCone,
-        LINE_SEARCH_ADDRESS = lineSearch,
-        NEW_LINE_ADDRESS = newLine,
-        LINE_LIFETIME = LINE_LIFETIME_SECONDS * TICKS_PER_SECOND,
-        ALG_RESULT_ADDRESS = algResult,
-        ALG_TARGET_X_ADDRESS = algX,
-        ALG_TARGET_Y_ADDRESS = algY,
-        EXTEND_ADDRESS = extend,
-      })
+        local redirect = core.allocateAssembly(templates.redirect, {
+          SEARCHED_ADDRESS = control + C.SEARCHED,
+          SEARCH_TICK_ADDRESS = control + C.SEARCH_TICK,
+          STEP_WINDOW = ROUTE.stepSeconds * TICKS_PER_SECOND * 4,
+          EXTEND_FULL_ADDRESS = control + C.EXTEND_FULL,
+          REFUSED_CURSOR_ADDRESS = control + C.REFUSED_CURSOR,
+          REFUSED_TICKS = ROUTE.refusedSeconds * TICKS_PER_SECOND,
+          FAIL_SPOT_ADDRESS = control + C.FAIL_SPOT,
+          FAIL_UNTIL_ADDRESS = control + C.FAIL_UNTIL,
+          WAIT_TICKS = ROUTE.waitSeconds * TICKS_PER_SECOND,
+          LINE_ADDRESS = lines,
+          ROUTE_SIZE = ROUTE.size,
+          ROUTES_ADDRESS = control + C.ROUTES,
+          REFUSED_ADDRESS = control + C.REFUSED,
+          REFUSED_END_ADDRESS = control + C.REFUSED + ROUTE.refused * 8,
+          CURRENT_UNIT_ADDRESS = currentUnit,
+          AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+          RECORD_OF_ADDRESS = recordOf,
+          RECORD_ADDRESS = control + C.RECORD,
+          REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
+          MAX_ADDRESS = control + C.RETARGET_MAX,
+          UNIT_OWNER = unitField(UNIT_OWNER),
+          UNIT_SIEGE_TARGET = unitField(UNIT_SIEGE_TARGET),
+          UNIT_X = unitField(UNIT_X),
+          UNIT_Y = unitField(UNIT_Y),
+          UNIT_TILE = unitField(UNIT_TILE),
+          AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+          AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
+          RANGE_ADDRESS = control + C.RETARGET_RANGE,
+          AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+          AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+          AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+          TICKS_ADDRESS = ticks,
+          STANDS_ADDRESS = stands,
+          LINE_FRONT_ADDRESS = lineFront,
+          ROUTE_CURRENT_ADDRESS = control + C.ROUTE_CURRENT,
+          FOLLOW_ROUTE_ADDRESS = followRoute,
+          AIM_AT_LINE_ADDRESS = aimAtLine,
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
+          AIM_CONE_ADDRESS = aimCone,
+          LINE_SEARCH_ADDRESS = lineSearch,
+          NEW_LINE_ADDRESS = newLine,
+          LINE_LIFETIME = LINE_LIFETIME_SECONDS * TICKS_PER_SECOND,
+          ALG_RESULT_ADDRESS = algResult,
+          ALG_TARGET_X_ADDRESS = algX,
+          ALG_TARGET_Y_ADDRESS = algY,
+          EXTEND_ADDRESS = extend,
+        })
 
-      local arrival = core.allocateAssembly(templates.arrival, {
-        FAIL_SPOT_ADDRESS = control + C.FAIL_SPOT,
-        FAIL_UNTIL_ADDRESS = control + C.FAIL_UNTIL,
-        UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        UNIT_TILE = unitField(UNIT_TILE),
-        UNIT_X = unitField(UNIT_X),
-        UNIT_Y = unitField(UNIT_Y),
-        UNIT_OWNER = unitField(UNIT_OWNER),
-        TILE_FLAGS_ADDRESS = tileFlags,
-        BUILDING_TILE_ADDRESS = buildingTiles,
-        WALL_FAMILY = WALL_FAMILY_FLAGS,
-        STOCKPILE = ROUTE.stockpileFlag,
-        RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
-        LAST_REDIRECT_ADDRESS = control + C.LAST_REDIRECT,
-        REDIRECT_ADDRESS = redirect,
-        REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
-        RECORD_ADDRESS = control + C.RECORD,
-        ALG_RESULT_ADDRESS = algResult,
-        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-        REPORT_ADDRESS = report,
-        REPORT_PAD_ADDRESS = reportPad,
-        DENIAL_ENABLED_ADDRESS = control + C.DENIAL_ENABLED,
-        DURATION_ADDRESS = control + C.DENIAL_DURATION,
-        TICKS_ADDRESS = ticks,
-        LAST_TICK_ADDRESS = control + C.LAST_TICK,
-        ZONES_ADDRESS = zones,
-        ZONES_END_ADDRESS = zones + ZONE_COUNT * ZONE_SIZE,
-        STACK_RADIUS = DENIAL_STACK_RADIUS,
-        STACK_SPAN = 2 * DENIAL_STACK_RADIUS,
-        TAIL_ADDRESS = tunneler + TUNNELER_TAIL,
-        RETURN_ADDRESS = tunneler + TUNNELER_ARRIVED_HOOK + TUNNELER_ARRIVED_HOOK_SIZE,
-      })
-      remember(tunneler + TUNNELER_ARRIVED_HOOK, TUNNELER_ARRIVED_HOOK_SIZE)
-      writeJump(tunneler + TUNNELER_ARRIVED_HOOK, arrival, TUNNELER_ARRIVED_HOOK_SIZE)
+        -- What the refused-path report reads: the separate-area map, out of
+        -- setDestinationForUnit's own `movsx edx, word [eax*2 + areas]` (a zeroed stand-in if
+        -- that is not where it was), and the trace failures counted so far.
+        local pathState = readAddress(finder + FIND_PATH_STATE_OPERAND)
+        local areaMap = guardsHold(setDestination, { [ROUTE.destinationArea - 4] = { 0x0F, 0xBF, 0x14, 0x45 } },
+            "the route search's area map")
+          and readAddress(setDestination + ROUTE.destinationArea)
+          or core.allocate(ROUTE.mapTiles * 2, true)
+        local traceFails = core.allocate(4, true)
 
+        -- Which lines a tunnel starting here may join.
+        local joinNear = core.allocateAssembly(templates.join_near, {
+          JOIN_DISTANCE_ADDRESS = control + C.JOIN_DISTANCE,
+          LINE_ADDRESS = lines,
+          ORIGINS_ADDRESS = control + C.ORIGINS,
+          AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+          AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+        })
 
-      -- A path of ours that will not lay must not set off the game's whole-map rebuild.
-      local traceFailed = scanOptional(ROUTE.traceFailed.aob, "the path trace's failure branch")
-      if traceFailed ~= nil
-          and guardsHold(traceFailed, ROUTE.traceFailed.guards, "the path trace's failure branch") then
+        -- The first target: lines, over the game's own answer.
+        local firstAim = core.allocateAssembly(templates.place_aim, {
+          JOIN_NEAR_ADDRESS = joinNear,
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
+          PATH_STATE_ADDRESS = pathState,
+          TRACE_FAILS_ADDRESS = traceFails,
+          OURS_ADDRESS = control + C.OURS,
+          QUIET_ADDRESS = control + C.QUIET,
+          FIND_TARGET_ADDRESS = finder,
+          RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
+          SEARCH_TICK_ADDRESS = control + C.SEARCH_TICK,
+          SAVED_ENTRANCE_ADDRESS = control + C.SAVED_ENTRANCE,
+          SAVED_COUNTER_ADDRESS = control + C.SAVED_COUNTER,
+          COUNTER_ADDRESS = readAddress(finder + ROUTE.findCounterOperand),
+          STEP_WINDOW = ROUTE.stepSeconds * TICKS_PER_SECOND * 4,
+          ALG_RESULT_ADDRESS = algResult,
+          ALG_TARGET_X_ADDRESS = algX,
+          ALG_TARGET_Y_ADDRESS = algY,
+          GAME_TILE_ADDRESS = control + C.GAME_TILE,
+          GAME_X_ADDRESS = control + C.GAME_X,
+          GAME_Y_ADDRESS = control + C.GAME_Y,
+          CURRENT_UNIT_ADDRESS = currentUnit,
+          AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
+          UNIT_OWNER = unitField(UNIT_OWNER),
+          UNIT_SIEGE_TARGET = unitField(UNIT_SIEGE_TARGET),
+          UNIT_WORKPLACE = unitField(UNIT_WORKPLACE),
+          AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
+          AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
+          RANGE_ADDRESS = control + C.RETARGET_RANGE,
+          AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+          BUILDING_STRIDE = SEARCH_STRIDE,
+          BUILDING_SOME_X = (buildingBase + BUILDING_SOME_X) & 0xFFFFFFFF,
+          BUILDING_SOME_Y = (buildingBase + BUILDING_SOME_Y) & 0xFFFFFFFF,
+          AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
+          AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
+          RECORD_OF_ADDRESS = recordOf,
+          RECORD_ADDRESS = control + C.RECORD,
+          LINE_ADDRESS = lines,
+          TICKS_ADDRESS = ticks,
+          LINE_FRONT_ADDRESS = lineFront,
+          AIM_AT_LINE_ADDRESS = aimAtLine,
+          SEARCHED_ADDRESS = control + C.SEARCHED,
+          LINE_SEARCH_ADDRESS = lineSearch,
+          VANILLA_RANGE = VANILLA_RANGE,
+          LINE_LIFETIME = LINE_LIFETIME_SECONDS * TICKS_PER_SECOND,
+          NEW_LINE_ADDRESS = newLine,
+          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+          REPORT_ADDRESS = report,
+          REPORT_PAD_ADDRESS = reportPad,
+          RETURN_ADDRESS = tunneler + TUNNELER_FIND_TARGET_CALL + 5,
+        })
+        writeJump(tunneler + TUNNELER_FIND_TARGET_CALL, firstAim, 5)
+
+        -- ... and the net under it, should a line's path refuse to lay.
+        local net = core.allocateAssembly(templates.place_net, {
+          OURS_ADDRESS = control + C.OURS,
+          QUIET_ADDRESS = control + C.QUIET,
+          AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
+          VANILLA_RANGE = VANILLA_RANGE,
+          LINE_SEARCH_ADDRESS = lineSearch,
+          GAME_TILE_ADDRESS = control + C.GAME_TILE,
+          GAME_X_ADDRESS = control + C.GAME_X,
+          GAME_Y_ADDRESS = control + C.GAME_Y,
+          CURRENT_UNIT_ADDRESS = currentUnit,
+          UNITS_STATE_ADDRESS = unitsState,
+          SET_DESTINATION_ADDRESS = setDestination,
+          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+          REPORT_ADDRESS = report,
+          REPORT_PAD_ADDRESS = reportPad,
+          GIVE_UP_ADDRESS = tunneler + TUNNELER_PATH_GIVE_UP,
+          LAID_ADDRESS = tunneler + TUNNELER_PATH_LAID,
+          TAIL_ADDRESS = tunneler + TUNNELER_TAIL,
+          AIM_MODE_ADDRESS = control + C.AIM_MODE,
+          RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
+          ALG_RESULT_ADDRESS = algResult,
+          TILE_FLAGS_ADDRESS = tileFlags,
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          AREA_MAP_ADDRESS = areaMap,
+          DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
+          FLAG_MAP_ADDRESS = readAddress(search + ROUTE.flagMapOperand),
+          PATH_STATE_ADDRESS = pathState,
+          TRACE_FAILS_ADDRESS = traceFails,
+          UNIT_TILE = unitField(UNIT_TILE),
+          UNIT_STATE = unitField(UNIT_STATE),
+          UNIT_WORKPLACE = unitField(UNIT_WORKPLACE),
+          BUILDING_STRIDE = SEARCH_STRIDE,
+          COUNTER_ADDRESS = readAddress(finder + ROUTE.findCounterOperand),
+          REFUSED_CURSOR_ADDRESS = control + C.REFUSED_CURSOR,
+          REFUSED_TICKS = ROUTE.refusedSeconds * TICKS_PER_SECOND,
+          REFUSED_ADDRESS = control + C.REFUSED,
+          REFUSED_END_ADDRESS = control + C.REFUSED + ROUTE.refused * 8,
+          TICKS_ADDRESS = ticks,
+        })
+        writeJump(tunneler + TUNNELER_PATH_HOOK, net, TUNNELER_PATH_HOOK_SIZE)
+        -- Failed traces from a trial route must not rebuild the whole map.
+        local traceFailed = scanOptional(ROUTE.traceFailed.aob, "the path trace's failure branch")
+        if not traceFailed
+            or not guardsHold(traceFailed, ROUTE.traceFailed.guards, "the path trace's failure branch") then
+          error("The path trace's failure branch could not be verified.", 0)
+        end
         local quiet = core.allocateAssembly(templates.quiet_trace, {
           QUIET_ADDRESS = control + C.QUIET,
           PLAN_LENGTH_FIELD = readInteger(traceFailed + ROUTE.traceFailed.planLengthOperand),
           DONE_ADDRESS = traceFailed + ROUTE.traceFailed.done,
           RETURN_ADDRESS = traceFailed + ROUTE.traceFailed.hookSize,
         })
-        remember(traceFailed, ROUTE.traceFailed.hookSize)
         writeJump(traceFailed, quiet, ROUTE.traceFailed.hookSize)
+        prepareTargets()
+        return redirect
+      end)
+    end
+
+    local collapsePatches, overlayPatches
+    if collapseWanted or routePatches then
+      collapsePatches = prepare("Tunnel collapse changes", prepareCollapse)
+      if overlayOn and collapsePatches then
+        overlayPatches = prepare("The tunnel mark", prepareOverlay)
+        if not overlayPatches then writeInteger(control + C.OVERLAY_ON, 0) end
       end
+      if collapseWanted then
+        if collapseOn or terrainOn or spreadOn or entranceLostOn or overlayPatches then
+          collapseReady = publish("Tunnel collapse changes", collapsePatches)
+          if not collapseReady then collapsePatches = nil end
+        end
+      end
+      if routePatches and not collapsePatches then
+        routePatches, redirect = nil, nil
+        log(ERROR, "Following up on tunnel breaches is off. The tunnel collapse queue is unavailable.")
+      end
+    end
 
-      -- What the refused-path report reads: the separate-area map, out of
-      -- setDestinationForUnit's own `movsx edx, word [eax*2 + areas]` (a zeroed stand-in if
-      -- that is not where it was), and the trace failures counted so far.
-      local pathState = readAddress(finder + FIND_PATH_STATE_OPERAND)
-      local areaMap = guardsHold(setDestination, { [ROUTE.destinationArea - 4] = { 0x0F, 0xBF, 0x14, 0x45 } },
-          "the route search's area map")
-        and readAddress(setDestination + ROUTE.destinationArea)
-        or core.allocate(ROUTE.mapTiles * 2, true)
-      local traceFails = core.allocate(4, true)
-
-      -- Which lines a tunnel starting here may join.
-      local joinNear = core.allocateAssembly(templates.join_near, {
-        JOIN_DISTANCE_ADDRESS = control + C.JOIN_DISTANCE,
-        LINE_ADDRESS = lines,
-        ORIGINS_ADDRESS = control + C.ORIGINS,
-        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
-        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
-      })
-
-      -- The first target: lines, over the game's own answer.
-      local firstAim = core.allocateAssembly(templates.place_aim, {
-        JOIN_NEAR_ADDRESS = joinNear,
-        AIM_MODE_ADDRESS = control + C.AIM_MODE,
-        PATH_STATE_ADDRESS = pathState,
-        TRACE_FAILS_ADDRESS = traceFails,
-        OURS_ADDRESS = control + C.OURS,
-        QUIET_ADDRESS = control + C.QUIET,
-        FIND_TARGET_ADDRESS = finder,
-        RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
-        SEARCH_TICK_ADDRESS = control + C.SEARCH_TICK,
-        SAVED_ENTRANCE_ADDRESS = control + C.SAVED_ENTRANCE,
-        SAVED_COUNTER_ADDRESS = control + C.SAVED_COUNTER,
-        COUNTER_ADDRESS = readAddress(finder + ROUTE.findCounterOperand),
-        STEP_WINDOW = ROUTE.stepSeconds * TICKS_PER_SECOND * 4,
-        ALG_RESULT_ADDRESS = algResult,
-        ALG_TARGET_X_ADDRESS = algX,
-        ALG_TARGET_Y_ADDRESS = algY,
-        GAME_TILE_ADDRESS = control + C.GAME_TILE,
-        GAME_X_ADDRESS = control + C.GAME_X,
-        GAME_Y_ADDRESS = control + C.GAME_Y,
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        AIM_UNIT_ADDRESS = control + C.AIM_UNIT,
-        UNIT_OWNER = unitField(UNIT_OWNER),
-        UNIT_SIEGE_TARGET = unitField(UNIT_SIEGE_TARGET),
-        UNIT_WORKPLACE = unitField(UNIT_WORKPLACE),
-        AIM_OWNER_ADDRESS = control + C.AIM_OWNER,
-        AIM_SIEGE_ADDRESS = control + C.AIM_SIEGE,
-        RANGE_ADDRESS = control + C.RETARGET_RANGE,
-        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
-        BUILDING_STRIDE = SEARCH_STRIDE,
-        BUILDING_SOME_X = (buildingBase + BUILDING_SOME_X) & 0xFFFFFFFF,
-        BUILDING_SOME_Y = (buildingBase + BUILDING_SOME_Y) & 0xFFFFFFFF,
-        AIM_FROM_X_ADDRESS = control + C.AIM_FROM_X,
-        AIM_FROM_Y_ADDRESS = control + C.AIM_FROM_Y,
-        RECORD_OF_ADDRESS = recordOf,
-        RECORD_ADDRESS = control + C.RECORD,
-        LINE_ADDRESS = lines,
-        TICKS_ADDRESS = ticks,
-        LINE_FRONT_ADDRESS = lineFront,
-        AIM_AT_LINE_ADDRESS = aimAtLine,
-        SEARCHED_ADDRESS = control + C.SEARCHED,
-        LINE_SEARCH_ADDRESS = lineSearch,
-        VANILLA_RANGE = VANILLA_RANGE,
-        LINE_LIFETIME = LINE_LIFETIME_SECONDS * TICKS_PER_SECOND,
-        NEW_LINE_ADDRESS = newLine,
-        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-        REPORT_ADDRESS = report,
-        REPORT_PAD_ADDRESS = reportPad,
-        RETURN_ADDRESS = tunneler + TUNNELER_FIND_TARGET_CALL + 5,
-      })
-      remember(tunneler + TUNNELER_FIND_TARGET_CALL, 5)
-      writeJump(tunneler + TUNNELER_FIND_TARGET_CALL, firstAim, 5)
-
-      -- ... and the net under it, should a line's path refuse to lay.
-      local net = core.allocateAssembly(templates.place_net, {
-        OURS_ADDRESS = control + C.OURS,
-        QUIET_ADDRESS = control + C.QUIET,
-        AIM_RANGE_ADDRESS = control + C.AIM_RANGE,
-        VANILLA_RANGE = VANILLA_RANGE,
-        LINE_SEARCH_ADDRESS = lineSearch,
-        GAME_TILE_ADDRESS = control + C.GAME_TILE,
-        GAME_X_ADDRESS = control + C.GAME_X,
-        GAME_Y_ADDRESS = control + C.GAME_Y,
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        UNITS_STATE_ADDRESS = unitsState,
-        SET_DESTINATION_ADDRESS = setDestination,
-        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-        REPORT_ADDRESS = report,
-        REPORT_PAD_ADDRESS = reportPad,
-        GIVE_UP_ADDRESS = tunneler + TUNNELER_PATH_GIVE_UP,
-        LAID_ADDRESS = tunneler + TUNNELER_PATH_LAID,
-        TAIL_ADDRESS = tunneler + TUNNELER_TAIL,
-        AIM_MODE_ADDRESS = control + C.AIM_MODE,
-        RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
-        ALG_RESULT_ADDRESS = algResult,
-        TILE_FLAGS_ADDRESS = tileFlags,
-        BUILDING_TILE_ADDRESS = buildingTiles,
-        AREA_MAP_ADDRESS = areaMap,
-        DISTANCE_MAP_ADDRESS = readAddress(search + SEARCH_DISTANCE_OPERAND),
-        FLAG_MAP_ADDRESS = readAddress(search + ROUTE.flagMapOperand),
-        PATH_STATE_ADDRESS = pathState,
-        TRACE_FAILS_ADDRESS = traceFails,
-        UNIT_TILE = unitField(UNIT_TILE),
-        UNIT_STATE = unitField(UNIT_STATE),
-        UNIT_WORKPLACE = unitField(UNIT_WORKPLACE),
-        BUILDING_STRIDE = SEARCH_STRIDE,
-        COUNTER_ADDRESS = readAddress(finder + ROUTE.findCounterOperand),
-        REFUSED_CURSOR_ADDRESS = control + C.REFUSED_CURSOR,
-        REFUSED_TICKS = ROUTE.refusedSeconds * TICKS_PER_SECOND,
-        REFUSED_ADDRESS = control + C.REFUSED,
-        REFUSED_END_ADDRESS = control + C.REFUSED + ROUTE.refused * 8,
-        TICKS_ADDRESS = ticks,
-      })
-      remember(tunneler + TUNNELER_PATH_HOOK, TUNNELER_PATH_HOOK_SIZE)
-      writeJump(tunneler + TUNNELER_PATH_HOOK, net, TUNNELER_PATH_HOOK_SIZE)
-      retargetReady = true
-
-      -- The denial test itself, in the one function every placement check goes through.
-      if teamSite ~= nil and enemySite ~= nil
-          and guardsHold(enemySite, ENEMY_GUARDS, "the build denial check") then
+    local denialPatches
+    if denialOn then
+      denialPatches = prepare("Blocking construction over tunnel breaches", function()
+        if not (tunneler and ticks and teamSite and enemySite
+            and guardsHold(enemySite, ENEMY_GUARDS, "the build denial check")) then
+          error("The placement check and tunnel arrival could not be verified.", 0)
+        end
         local check = core.allocateAssembly(templates.denial_check, {
           TICKS_ADDRESS = ticks,
           LAST_TICK_ADDRESS = control + C.LAST_TICK,
@@ -2015,110 +2040,110 @@ return {
           TEAMS_ADDRESS = readAddress(teamSite + OFFSET_PLAYER_TEAMS),
           RETURN_ADDRESS = enemySite + ENEMY_HOOK + ENEMY_HOOK_SIZE,
         })
-        remember(enemySite + ENEMY_HOOK, ENEMY_HOOK_SIZE)
         writeJump(enemySite + ENEMY_HOOK, check, ENEMY_HOOK_SIZE)
-        denialReady = true
-      end
+      end)
+    end
 
+    local routingReady
+    if tunneler and ticks and (denialPatches or routePatches or diagnosticsOn) then
+      routingReady = install("Tunnel arrival and routing", function()
+        local arrival = core.allocateAssembly(templates.arrival, {
+          FAIL_SPOT_ADDRESS = control + C.FAIL_SPOT,
+          FAIL_UNTIL_ADDRESS = control + C.FAIL_UNTIL,
+          UNIT_PATH_LENGTH = unitField(UNIT_PATH_LENGTH),
+          CURRENT_UNIT_ADDRESS = currentUnit,
+          UNIT_TILE = unitField(UNIT_TILE),
+          UNIT_X = unitField(UNIT_X),
+          UNIT_Y = unitField(UNIT_Y),
+          UNIT_OWNER = unitField(UNIT_OWNER),
+          TILE_FLAGS_ADDRESS = tileFlags,
+          BUILDING_TILE_ADDRESS = buildingTiles,
+          WALL_FAMILY = WALL_FAMILY_FLAGS,
+          STOCKPILE = ROUTE.stockpileFlag,
+          RETARGET_ENABLED_ADDRESS = control + C.RETARGET_ENABLED,
+          LAST_REDIRECT_ADDRESS = control + C.LAST_REDIRECT,
+          REDIRECT_ADDRESS = redirect or tunneler + TUNNELER_TAIL,
+          REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
+          RECORD_ADDRESS = control + C.RECORD,
+          ALG_RESULT_ADDRESS = algResult,
+          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+          REPORT_ADDRESS = report,
+          REPORT_PAD_ADDRESS = reportPad,
+          DENIAL_ENABLED_ADDRESS = control + C.DENIAL_ENABLED,
+          DURATION_ADDRESS = control + C.DENIAL_DURATION,
+          TICKS_ADDRESS = ticks,
+          LAST_TICK_ADDRESS = control + C.LAST_TICK,
+          ZONES_ADDRESS = zones,
+          ZONES_END_ADDRESS = zones + ZONE_COUNT * ZONE_SIZE,
+          STACK_RADIUS = DENIAL_STACK_RADIUS,
+          STACK_SPAN = 2 * DENIAL_STACK_RADIUS,
+          TAIL_ADDRESS = tunneler + TUNNELER_TAIL,
+          RETURN_ADDRESS = tunneler + TUNNELER_ARRIVED_HOOK + TUNNELER_ARRIVED_HOOK_SIZE,
+        })
+        writeJump(tunneler + TUNNELER_ARRIVED_HOOK, arrival, TUNNELER_ARRIVED_HOOK_SIZE)
+        for _, patch in ipairs(denialPatches or {}) do pending[#pending + 1] = patch end
+        if routePatches then
+          for _, patch in ipairs(routePatches) do pending[#pending + 1] = patch end
+          if not collapseReady then
+            for _, patch in ipairs(collapsePatches) do pending[#pending + 1] = patch end
+          end
+        end
+      end)
+    end
+    retargetReady = routingReady == true and routePatches ~= nil
+    denialReady = routingReady == true and denialPatches ~= nil
+    collapseReady = collapseReady or retargetReady
+    if not retargetReady then writeInteger(control + C.RETARGET_ENABLED, 0) end
+    if not denialReady then writeInteger(control + C.DENIAL_ENABLED, 0) end
+    if not collapseReady then
+      familyReady, targetReady = false, false
+      writeInteger(control + C.FAMILY_READY, 0)
+      writeInteger(control + C.OVERLAY_ON, 0)
+    elseif overlayPatches then
+      self.markReady = publish("The tunnel mark", overlayPatches)
+      if not self.markReady then writeInteger(control + C.OVERLAY_ON, 0) end
+    end
+
+    if denialReady and messageOn then
       -- The refusal the player reads. The module's own line has to go into the game's text
       -- through textResourceModifier; if that module is not there, or says no, the message
       -- is left exactly as the game writes it.
-      if denialReady and messageOn then
-        -- cr.tex and its encoding are available at the framework's afterInit.
-        -- Do not install a message hook pointing at an absent/rejected string.
-        local attempted = false
-        hooks.registerHookCallback("afterInit", function()
-          if attempted or self.control ~= control then return end
-          attempted = true
-          local texts = modules ~= nil and modules.textResourceModifier or nil
-          local wrote = false
-          if texts ~= nil and texts.SetText ~= nil and texts.GetLanguage ~= nil then
-            local ok, accepted = pcall(function()
-              local language = texts:GetLanguage()
-              local text = type(language) == "string" and require("messages")[language:lower()]
-              return text ~= nil and texts:SetText(MESSAGE_GROUP, MESSAGE_ENTRY, text)
-            end)
-            wrote = ok and accepted == true
-            if not wrote then
-              log(WARNING, "improved-tunnelers: the game's text could not be changed, so a "
-                .. "denial keeps the game's own refusal message.")
-            end
-          else
-            log(INFO, "improved-tunnelers: no textResourceModifier, so a denial keeps the "
-              .. "game's own refusal message.")
+      -- cr.tex and its encoding are available at the framework's afterInit.
+      -- Do not install a message hook pointing at an absent/rejected string.
+      local attempted = false
+      hooks.registerHookCallback("afterInit", function()
+        if attempted or self.control ~= control then return end
+        attempted = true
+        local ready = install("The tunnel breach message", function()
+          local site = scanOptional(AOB_PLACEMENT_MESSAGE, "the placement refusal message")
+          if not site or not guardsHold(site, MESSAGE_GUARDS, "the placement refusal message") then
+            error("The placement check could not be verified.", 0)
           end
-          local messageSite = wrote and scanOptional(AOB_PLACEMENT_MESSAGE,
-            "the placement refusal message") or nil
-          if messageSite ~= nil and guardsHold(messageSite, MESSAGE_GUARDS,
-              "the placement refusal message") then
-            local message = core.allocateAssembly(templates.placement_message, {
-              MINE_ADDRESS = control + C.MINE,
-              MINE_TICK_ADDRESS = control + C.MINE_TICK,
-              TICKS_ADDRESS = ticks,
-              MESSAGE_ENTRY = MESSAGE_ENTRY,
-              RETURN_ADDRESS = messageSite + MESSAGE_HOOK + MESSAGE_HOOK_SIZE,
-            })
-            remember(messageSite + MESSAGE_HOOK, MESSAGE_HOOK_SIZE)
-            writeJump(messageSite + MESSAGE_HOOK, message, MESSAGE_HOOK_SIZE)
-            log(INFO, "improved-tunnelers: localized placement refusal enabled.")
-          elseif wrote then
-            log(ERROR, "The tunnel breach message is off. The placement check could not be verified.")
+          local message = core.allocateAssembly(templates.placement_message, {
+            MINE_ADDRESS = control + C.MINE,
+            MINE_TICK_ADDRESS = control + C.MINE_TICK,
+            TICKS_ADDRESS = ticks,
+            MESSAGE_ENTRY = MESSAGE_ENTRY,
+            RETURN_ADDRESS = site + MESSAGE_HOOK + MESSAGE_HOOK_SIZE,
+          })
+          writeJump(site + MESSAGE_HOOK, message, MESSAGE_HOOK_SIZE)
+          local texts = modules and modules.textResourceModifier
+          local language = texts and texts:GetLanguage()
+          local text = type(language) == "string" and require("messages")[language:lower()]
+          if not text or not texts:SetText(MESSAGE_GROUP, MESSAGE_ENTRY, text) then
+            error("The localized text could not be installed.", 0)
           end
         end)
-      end
+        if ready then log(INFO, "improved-tunnelers: localized placement refusal enabled.") end
+      end)
     end
-    if denialOn and not denialReady then
-      log(ERROR, "Blocking construction over tunnel breaches is off. The placement check could not be bound.")
-    end
-    if retargetOn and not retargetReady then
-      log(ERROR, "Following up on tunnel breaches is off. The tunnel route code could not be bound.")
-    end
-
     ---------------------------------------------------------------------------------
     -- 2b. Towers and gates as tunnel targets
     ---------------------------------------------------------------------------------
 
-    local targetsReady = false
-    if tunneler ~= nil and (targetsOn or underOn or retargetOn) then
-      if search ~= nil then
-        local targets = core.allocateAssembly(templates.tunnel_targets, {
-          ENABLED_ADDRESS = control + C.TARGETS_ENABLED,
-          GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
-          TYPE_LIMIT = BUILDING_TYPE_LIMIT,
-          UNDER_ENABLED_ADDRESS = control + C.UNDER_BUILDINGS,
-          KEEP_FIRST_TYPE = KEEP_FIRST_TYPE,
-          KEEP_TYPE_SPAN = KEEP_TYPE_SPAN,
-          ALLOW_ADDRESS = search + SEARCH_ALLOW,
-          SKIP_ADDRESS = search + SEARCH_SKIP,
-        })
-        -- A tunnel may be aimed at stairs and at crenellations, not only at plain wall.
-        if guardsHold(search, SEARCH_WALL_TEST_GUARD, "the search's own wall test") then
-          remember(search + SEARCH_WALL_TEST_OPERAND, 4)
-          core.writeCodeInteger(search + SEARCH_WALL_TEST_OPERAND, WALL_FAMILY_FLAGS)
-        end
-
-        remember(search + SEARCH_BUILDING_TEST, SEARCH_BUILDING_TEST_SIZE)
-        writeJump(search + SEARCH_BUILDING_TEST, targets, SEARCH_BUILDING_TEST_SIZE)
-
-        local accept = core.allocateAssembly(templates.tunnel_accept, {
-          AIM_MODE_ADDRESS = control + C.AIM_MODE,
-          CAMP_BUILDING_ADDRESS = control + C.CAMP_BUILDING,
-          ENABLED_ADDRESS = control + C.TARGETS_ENABLED,
-          GATE_OR_TOWER_ADDRESS = readAddress(tunneler + TUNNELER_GATE_TOWER_OPERAND),
-          TYPE_LIMIT = BUILDING_TYPE_LIMIT,
-          BUILDING_STRIDE = SEARCH_STRIDE,
-          BUILDING_TYPE_ADDRESS = readAddress(search + SEARCH_TYPE_OPERAND),
-          RETURN_ADDRESS = search + SEARCH_ACCEPT_RETURN,
-          SPREAD_ADDRESS = search + SEARCH_SPREAD,
-        })
-        remember(search + SEARCH_ACCEPT, SEARCH_ACCEPT_SIZE)
-        writeJump(search + SEARCH_ACCEPT, accept, SEARCH_ACCEPT_SIZE)
-
-        targetsReady = true
-      end
-    end
-    if (targetsOn or underOn) and not targetsReady then
-      log(ERROR, "Expanded tunnel targets and routes are off. The target search could not be bound.")
+    local targetsReady = retargetReady
+    if not targetsReady and (targetsOn or underOn) then
+      targetsReady = install("Expanded tunnel targets and routes", prepareTargets)
     end
 
     -- Nothing aims at a tunneler that is underground.
@@ -2126,18 +2151,17 @@ return {
     local aimSite = untargetableOn and scanOptional(AOB_WORTH_AIMING_AT, "the worth-aiming-at test") or nil
     if aimSite ~= nil and unitBase ~= nil
         and guardsHold(aimSite, AIM_GUARDS, "the worth-aiming-at test") then
-      local hidden = core.allocateAssembly(templates.not_a_target, {
-        ENABLED_ADDRESS = control + C.HIDE_TARGET,
-        UNIT_TYPE = (unitBase + UNIT_TYPE) & 0xFFFFFFFF,
-        UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
-        TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
-        RETURN_ADDRESS = aimSite + AIM_HOOK + AIM_HOOK_SIZE,
-      })
-      remember(aimSite + AIM_HOOK, AIM_HOOK_SIZE)
-      writeJump(aimSite + AIM_HOOK, hidden, AIM_HOOK_SIZE)
-      aimReady = true
-    end
-    if untargetableOn and not aimReady then
+      aimReady = install("Protection from attacks while digging", function()
+        local hidden = core.allocateAssembly(templates.not_a_target, {
+          ENABLED_ADDRESS = control + C.HIDE_TARGET,
+          UNIT_TYPE = (unitBase + UNIT_TYPE) & 0xFFFFFFFF,
+          UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
+          TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
+          RETURN_ADDRESS = aimSite + AIM_HOOK + AIM_HOOK_SIZE,
+        })
+        writeJump(aimSite + AIM_HOOK, hidden, AIM_HOOK_SIZE)
+      end)
+    elseif untargetableOn then
       log(ERROR, "Protection from attacks while digging is off. The attack check could not be bound.")
     end
 
@@ -2146,17 +2170,16 @@ return {
     local pitSite = trapProofOn and unitBase ~= nil
       and scanOptional(ROUTE.killingPit, "the killing pit's damage") or nil
     if pitSite ~= nil then
-      local pit = core.allocateAssembly(templates.trap_proof, {
-        UNIT_TYPE = (unitBase + UNIT_TYPE) & 0xFFFFFFFF,
-        UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
-        TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
-        RETURN_ADDRESS = pitSite + ROUTE.killingPitHook,
-      })
-      remember(pitSite, ROUTE.killingPitHook)
-      writeJump(pitSite, pit, ROUTE.killingPitHook)
-      trapReady = true
-    end
-    if trapProofOn and not trapReady then
+      trapReady = install("Protection from killing pits while digging", function()
+        local pit = core.allocateAssembly(templates.trap_proof, {
+          UNIT_TYPE = (unitBase + UNIT_TYPE) & 0xFFFFFFFF,
+          UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
+          TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
+          RETURN_ADDRESS = pitSite + ROUTE.killingPitHook,
+        })
+        writeJump(pitSite, pit, ROUTE.killingPitHook)
+      end)
+    elseif trapProofOn then
       log(ERROR, "Protection from killing pits while digging is off. The trap check could not be bound.")
     end
 
@@ -2174,48 +2197,47 @@ return {
           "the unit command button clicks")
         and guardsHold(toolbar, { [0] = TOOLBAR_GUARD }, "the toolbar button handler") then
 
-      -- The attack-here slot: step over the branch that turns it into the dig tunnel
-      -- button, so tunnelers fall through to the sword every other soldier gets. Two
-      -- bytes, je -> jmp.
-      remember(render + RENDER_TUNNELER_BRANCH, 2)
-      core.writeCodeByte(render + RENDER_TUNNELER_BRANCH, 0xEB)
+      uiReady = install("The tunneler command buttons", function()
+        -- The attack-here slot: step over the branch that turns it into the dig tunnel
+        -- button, so tunnelers fall through to the sword every other soldier gets. Two
+        -- bytes, je -> jmp.
+        stage(render + RENDER_TUNNELER_BRANCH, { 0xEB })
 
-      -- ... and the same branch in the click handler, so the button does what it shows.
-      remember(click + CLICK_TUNNELER_BRANCH, 2)
-      core.writeCodeByte(click + CLICK_TUNNELER_BRANCH, 0xEB)
+        -- ... and the same branch in the click handler, so the button does what it shows.
+        stage(click + CLICK_TUNNELER_BRANCH, { 0xEB })
 
-      -- The slot to the right of it draws the dig tunnel button now.
-      local slot = core.allocateAssembly(templates.render_tunnel_button, {
-        ENABLED_ADDRESS = control + C.UI_ENABLED,
-        ENGINEER_SELECTED_ADDRESS = readAddress(render + RENDER_ENGINEER_OPERAND),
-        UNITS_STATE_ADDRESS = readAddress(render + RENDER_UNITS_STATE_OPERAND),
-        TUNNELERS_ONLY_ADDRESS = callTarget(render + RENDER_TUNNELERS_ONLY_CALL),
-        GAME_MODE_ADDRESS = readAddress(render + RENDER_GAME_MODE_OPERAND),
-        BUTTON_PICTURE_ADDRESS = readAddress(render + RENDER_PICTURE_OPERAND),
-        HELP_TEXT_ADDRESS = readAddress(render + RENDER_HELP_TEXT_OPERAND),
-        BUTTON_INACTIVE_ADDRESS = readAddress(render + RENDER_INACTIVE_OPERAND),
-        RENDER_BUTTON_ADDRESS = callTarget(render + RENDER_BUTTON_CALL),
-        TUNNEL_PICTURE = TUNNEL_PICTURE,
-        TUNNEL_HELP_TEXT = TUNNEL_HELP_TEXT,
-        RENDER_RETURN_ADDRESS = render + RENDER_RETURN,
-        RETURN_ADDRESS = render + RENDER_BUILD_SLOT_HOOK + RENDER_BUILD_SLOT_HOOK_SIZE,
-      })
-      remember(render + RENDER_BUILD_SLOT_HOOK, RENDER_BUILD_SLOT_HOOK_SIZE)
-      writeJump(render + RENDER_BUILD_SLOT_HOOK, slot, RENDER_BUILD_SLOT_HOOK_SIZE)
+        -- The slot to the right of it draws the dig tunnel button now.
+        local slot = core.allocateAssembly(templates.render_tunnel_button, {
+          ENABLED_ADDRESS = control + C.UI_ENABLED,
+          ENGINEER_SELECTED_ADDRESS = readAddress(render + RENDER_ENGINEER_OPERAND),
+          UNITS_STATE_ADDRESS = readAddress(render + RENDER_UNITS_STATE_OPERAND),
+          TUNNELERS_ONLY_ADDRESS = callTarget(render + RENDER_TUNNELERS_ONLY_CALL),
+          GAME_MODE_ADDRESS = readAddress(render + RENDER_GAME_MODE_OPERAND),
+          BUTTON_PICTURE_ADDRESS = readAddress(render + RENDER_PICTURE_OPERAND),
+          HELP_TEXT_ADDRESS = readAddress(render + RENDER_HELP_TEXT_OPERAND),
+          BUTTON_INACTIVE_ADDRESS = readAddress(render + RENDER_INACTIVE_OPERAND),
+          RENDER_BUTTON_ADDRESS = callTarget(render + RENDER_BUTTON_CALL),
+          TUNNEL_PICTURE = TUNNEL_PICTURE,
+          TUNNEL_HELP_TEXT = TUNNEL_HELP_TEXT,
+          RENDER_RETURN_ADDRESS = render + RENDER_RETURN,
+          RETURN_ADDRESS = render + RENDER_BUILD_SLOT_HOOK + RENDER_BUILD_SLOT_HOOK_SIZE,
+        })
+        writeJump(render + RENDER_BUILD_SLOT_HOOK, slot, RENDER_BUILD_SLOT_HOOK_SIZE)
 
-      -- ... and sends the tunnel command when it is clicked.
-      local press = core.allocateAssembly(templates.tunnel_button_click, {
-        ENABLED_ADDRESS = control + C.UI_ENABLED,
-        UNITS_STATE_ADDRESS = readAddress(render + RENDER_UNITS_STATE_OPERAND),
-        TUNNELERS_ONLY_ADDRESS = callTarget(render + RENDER_TUNNELERS_ONLY_CALL),
-        ENGINEER_BUILD_COMMAND = ENGINEER_BUILD_COMMAND,
-        TUNNEL_COMMAND = TUNNEL_COMMAND,
-        SYNC_STATUS_ADDRESS = readAddress(toolbar + TOOLBAR_SYNC_OPERAND),
-        RETURN_ADDRESS = toolbar + TOOLBAR_HOOK_SIZE,
-      })
-      remember(toolbar, TOOLBAR_HOOK_SIZE)
-      writeJump(toolbar, press, TOOLBAR_HOOK_SIZE)
-      uiReady = true
+        -- ... and sends the tunnel command when it is clicked.
+        local press = core.allocateAssembly(templates.tunnel_button_click, {
+          ENABLED_ADDRESS = control + C.UI_ENABLED,
+          UNITS_STATE_ADDRESS = readAddress(render + RENDER_UNITS_STATE_OPERAND),
+          TUNNELERS_ONLY_ADDRESS = callTarget(render + RENDER_TUNNELERS_ONLY_CALL),
+          ENGINEER_BUILD_COMMAND = ENGINEER_BUILD_COMMAND,
+          TUNNEL_COMMAND = TUNNEL_COMMAND,
+          SYNC_STATUS_ADDRESS = readAddress(toolbar + TOOLBAR_SYNC_OPERAND),
+          RETURN_ADDRESS = toolbar + TOOLBAR_HOOK_SIZE,
+        })
+        writeJump(toolbar, press, TOOLBAR_HOOK_SIZE)
+      end)
+    elseif uiOn then
+      log(ERROR, "The tunneler command buttons are off. The game controls could not be bound.")
     end
 
     ---------------------------------------------------------------------------------
@@ -2224,26 +2246,24 @@ return {
 
     local stanceReady = false
     if tunneler ~= nil and (stancesOn or unselectableOn) then
-      local stance = core.allocateAssembly(templates.stance, {
-        ENABLED_ADDRESS = control + C.STANCE_ENABLED,
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
-        UNIT_LOOKING_AROUND = (unitBase + UNIT_LOOKING_AROUND) & 0xFFFFFFFF,
-        UNIT_SELECTABLE = (unitBase + UNIT_SELECTABLE) & 0xFFFFFFFF,
-        HIDE_ENABLED_ADDRESS = control + C.HIDE_SELECT,
-        RETURN_ADDRESS = tunneler + 7,
-      })
-      remember(tunneler, 7)
-      writeJump(tunneler, stance, 7)
-      stanceReady = true
-    end
-    if (stancesOn or unselectableOn) and not stanceReady then
+      stanceReady = install("Tunneler stance and selection changes", function()
+        local stance = core.allocateAssembly(templates.stance, {
+          ENABLED_ADDRESS = control + C.STANCE_ENABLED,
+          CURRENT_UNIT_ADDRESS = currentUnit,
+          UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
+          UNIT_LOOKING_AROUND = (unitBase + UNIT_LOOKING_AROUND) & 0xFFFFFFFF,
+          UNIT_SELECTABLE = (unitBase + UNIT_SELECTABLE) & 0xFFFFFFFF,
+          HIDE_ENABLED_ADDRESS = control + C.HIDE_SELECT,
+          RETURN_ADDRESS = tunneler + 7,
+        })
+        writeJump(tunneler, stance, 7)
+      end)
+    elseif stancesOn or unselectableOn then
       log(ERROR, "Tunneler stance and selection changes are off. The tunneler update could not be bound.")
     end
 
-    if uiOn and not uiReady then
-      log(ERROR, "The tunneler command buttons are off. The game controls could not be bound.")
-    end
+
+
     ---------------------------------------------------------------------------------
     -- 5. Tunnellers in AI raids
     ---------------------------------------------------------------------------------
@@ -2254,114 +2274,119 @@ return {
     if tribeSite ~= nil and guildSite ~= nil
         and guardsHold(guildSite, ROUTE.raids.guildGuards, "the AI's recruiting loop")
         and guardsHold(tribeSite, ROUTE.raids.tribeGuards, "the AI's raid troop lookup") then
-      local hook = tribeSite + ROUTE.raids.tribeHook
-      local tribe = core.allocateAssembly(templates.raid_tribe, {
-        UNIT_TYPE_OPERAND = readInteger(hook + 3),
-        CHANGE_INTO_OPERAND = readInteger(tribeSite + ROUTE.raids.changeInto + 3),
-        ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
-        TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
-        STAND_IN_TYPE = ROUTE.raids.role(UNIT_TYPE_TUNNELER),
-        RETURN_ADDRESS = hook + 7,
-        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-        REPORT_ADDRESS = report,
-        REPORT_PAD_ADDRESS = reportPad,
-        UNIT_SIZE = UNIT_SIZE,
-      })
-      local guild = core.allocateAssembly(templates.raid_no_guild, {
-        ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
-        TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
-        RECRUIT_ADDRESS = guildSite + 8,
-        EXIT_ADDRESS = jumpTarget(guildSite + 2),
-        NEXT_ADDRESS = guildSite + ROUTE.raids.guildNext,
-        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-        REPORT_ADDRESS = report,
-        REPORT_PAD_ADDRESS = reportPad,
-      })
-      remember(hook, 7)
-      writeJump(hook, tribe, 7)
-      remember(guildSite, 8)
-      writeJump(guildSite, guild, 8)
-      raidsReady = true
-    end
-    self.raidsOn = raidsReady and raidsOn
-    if raidsOn and not raidsReady then
-      log(ERROR, "Tunnelers in AI raids are off. AI recruitment could not be bound.")
-    end
-
-    if diagnosticsOn and tunneler ~= nil and unitBase ~= nil then
-      -- The stopwatch round every tunneller update, for the diagnostics.
-      -- It calls whatever sits on the entry already - the stance hook, when that is on -
-      -- or else the two instructions it replaces, so it is always the outermost.
-      local body
-      if (readByte(tunneler) & 0xFF) == 0xE9 then
-        body = (tunneler + 5 + readInteger(tunneler + 1)) & 0xFFFFFFFF
-      else
-        body = core.allocateAssembly(templates.tunneler_entry, {
-          FIRST_OPERAND = readAddress(tunneler + 3),
-          RETURN_ADDRESS = tunneler + 7,
+      raidsReady = install("Tunnelers in AI raids", function()
+        local hook = tribeSite + ROUTE.raids.tribeHook
+        local tribe = core.allocateAssembly(templates.raid_tribe, {
+          UNIT_TYPE_OPERAND = readInteger(hook + 3),
+          CHANGE_INTO_OPERAND = readInteger(tribeSite + ROUTE.raids.changeInto + 3),
+          ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
+          TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
+          STAND_IN_TYPE = ROUTE.raids.role(UNIT_TYPE_TUNNELER),
+          RETURN_ADDRESS = hook + 7,
+          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+          REPORT_ADDRESS = report,
+          REPORT_PAD_ADDRESS = reportPad,
+          UNIT_SIZE = UNIT_SIZE,
         })
-      end
-      -- ... and the watch on every tunneller that has dug in. The owner's AI attack state is
-      -- read through UpdateTunneler's own `add [edi + player data + army size], edx`.
-      local watch = core.allocateCode({ 0xC3 })
-      if guardsHold(tunneler, ROUTE.watch.guards, "the tunneller's player data") then
-        local playerData = (readAddress(tunneler + ROUTE.watch.armyOperand)
-          - ROUTE.watch.armySize) & 0xFFFFFFFF
-        local unitAt = function(offset) return (unitBase + offset) & 0xFFFFFFFF end
-        watch = core.allocateAssembly(templates.tunnel_watch, {
-          CURRENT_UNIT_ADDRESS = currentUnit,
-          WATCH_UNITS = ROUTE.watch.units,
-          WATCH_ADDRESS = core.allocate(ROUTE.watch.units * 2, true),
-          UNIT_STATE = unitAt(UNIT_STATE),
-          UNIT_UID = unitAt(UNIT_UID),
-          UNIT_DYING = unitAt(UNIT_DYING),
-          UNIT_LOGICAL = unitAt(UNIT_LOGICAL_STATE),
-          UNIT_MOVE_STATUS = unitAt(UNIT_MOVE_STATUS),
-          UNIT_PATH_INDEX = unitAt(UNIT_PATH_INDEX),
-          UNIT_PATH_LENGTH = unitAt(UNIT_PATH_LENGTH),
-          UNIT_WORKPLACE = unitAt(UNIT_WORKPLACE),
-          UNIT_TILE = unitAt(UNIT_TILE),
-          UNIT_OWNER = unitAt(UNIT_OWNER),
-          BUILDING_STRIDE = SEARCH_STRIDE,
-          BUILDING_LOGICAL = (buildingBase + ROUTE.watch.buildingLogical) & 0xFFFFFFFF,
-          BUILDING_TYPE = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
-          BUILDING_UNIT = (buildingBase + ROUTE.watch.buildingUnit) & 0xFFFFFFFF,
-          PLAYER_STRIDE = ROUTE.watch.playerStride,
-          AI_STATE_ADDRESS = playerData + ROUTE.watch.aiState,
+        local guild = core.allocateAssembly(templates.raid_no_guild, {
+          ENABLED_ADDRESS = control + C.RAIDS_ENABLED,
+          TUNNELER_TYPE = UNIT_TYPE_TUNNELER,
+          RECRUIT_ADDRESS = guildSite + 8,
+          EXIT_ADDRESS = jumpTarget(guildSite + 2),
+          NEXT_ADDRESS = guildSite + ROUTE.raids.guildNext,
+          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
           REPORT_ADDRESS = report,
           REPORT_PAD_ADDRESS = reportPad,
         })
-      end
-      local timed = core.allocateAssembly(templates.tunneler_timed, {
-        WATCH_ADDRESS = watch,
-        DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
-        CURRENT_UNIT_ADDRESS = currentUnit,
-        UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
-        REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
-        SW_TUNNEL_ADDRESS = control + C.SW_TUNNEL,
-        SW_COUNT_ADDRESS = control + C.SW_COUNT,
-        SW_MAX_ADDRESS = control + C.SW_MAX,
-        SW_MAX_STATE_ADDRESS = control + C.SW_MAX_STATE,
-        SW_MAX_UNIT_ADDRESS = control + C.SW_MAX_UNIT,
-        SW_MAX_HOW_ADDRESS = control + C.SW_MAX_HOW,
-        BODY_ADDRESS = body,
-      })
-      remember(tunneler, 7)
-      writeJump(tunneler, timed, 7)
+        writeJump(hook, tribe, 7)
+        writeJump(guildSite, guild, 8)
+      end)
+    elseif raidsOn then
+      log(ERROR, "Tunnelers in AI raids are off. AI recruitment could not be bound.")
+    end
+    self.raidsOn = raidsReady and raidsOn
+
+
+    if diagnosticsOn and tunneler ~= nil and unitBase ~= nil then
+      install("Tunneler update diagnostics", function()
+        -- The stopwatch round every tunneller update, for the diagnostics.
+        -- It calls whatever sits on the entry already - the stance hook, when that is on -
+        -- or else the two instructions it replaces, so it is always the outermost.
+        local body
+        if (readByte(tunneler) & 0xFF) == 0xE9 then
+          body = (tunneler + 5 + readInteger(tunneler + 1)) & 0xFFFFFFFF
+        else
+          body = core.allocateAssembly(templates.tunneler_entry, {
+            FIRST_OPERAND = readAddress(tunneler + 3),
+            RETURN_ADDRESS = tunneler + 7,
+          })
+        end
+        -- ... and the watch on every tunneller that has dug in. The owner's AI attack state is
+        -- read through UpdateTunneler's own `add [edi + player data + army size], edx`.
+        local watch = core.allocateCode({ 0xC3 })
+        if guardsHold(tunneler, ROUTE.watch.guards, "the tunneller's player data") then
+          local playerData = (readAddress(tunneler + ROUTE.watch.armyOperand)
+            - ROUTE.watch.armySize) & 0xFFFFFFFF
+          local unitAt = function(offset) return (unitBase + offset) & 0xFFFFFFFF end
+          watch = core.allocateAssembly(templates.tunnel_watch, {
+            CURRENT_UNIT_ADDRESS = currentUnit,
+            WATCH_UNITS = ROUTE.watch.units,
+            WATCH_ADDRESS = core.allocate(ROUTE.watch.units * 2, true),
+            UNIT_STATE = unitAt(UNIT_STATE),
+            UNIT_UID = unitAt(UNIT_UID),
+            UNIT_DYING = unitAt(UNIT_DYING),
+            UNIT_LOGICAL = unitAt(UNIT_LOGICAL_STATE),
+            UNIT_MOVE_STATUS = unitAt(UNIT_MOVE_STATUS),
+            UNIT_PATH_INDEX = unitAt(UNIT_PATH_INDEX),
+            UNIT_PATH_LENGTH = unitAt(UNIT_PATH_LENGTH),
+            UNIT_WORKPLACE = unitAt(UNIT_WORKPLACE),
+            UNIT_TILE = unitAt(UNIT_TILE),
+            UNIT_OWNER = unitAt(UNIT_OWNER),
+            BUILDING_STRIDE = SEARCH_STRIDE,
+            BUILDING_LOGICAL = (buildingBase + ROUTE.watch.buildingLogical) & 0xFFFFFFFF,
+            BUILDING_TYPE = (buildingBase + BUILDING_TYPE) & 0xFFFFFFFF,
+            BUILDING_UNIT = (buildingBase + ROUTE.watch.buildingUnit) & 0xFFFFFFFF,
+            PLAYER_STRIDE = ROUTE.watch.playerStride,
+            AI_STATE_ADDRESS = playerData + ROUTE.watch.aiState,
+            REPORT_ADDRESS = report,
+            REPORT_PAD_ADDRESS = reportPad,
+          })
+        end
+        local timed = core.allocateAssembly(templates.tunneler_timed, {
+          WATCH_ADDRESS = watch,
+          DIAGNOSTICS_ADDRESS = control + C.DIAGNOSTICS,
+          CURRENT_UNIT_ADDRESS = currentUnit,
+          UNIT_STATE = (unitBase + UNIT_STATE) & 0xFFFFFFFF,
+          REDIRECT_HOW_ADDRESS = control + C.REDIRECT_HOW,
+          SW_TUNNEL_ADDRESS = control + C.SW_TUNNEL,
+          SW_COUNT_ADDRESS = control + C.SW_COUNT,
+          SW_MAX_ADDRESS = control + C.SW_MAX,
+          SW_MAX_STATE_ADDRESS = control + C.SW_MAX_STATE,
+          SW_MAX_UNIT_ADDRESS = control + C.SW_MAX_UNIT,
+          SW_MAX_HOW_ADDRESS = control + C.SW_MAX_HOW,
+          BODY_ADDRESS = body,
+        })
+        writeJump(tunneler, timed, 7)
+      end)
     end
 
     ---------------------------------------------------------------------------------
 
     -- Denial zones, lines and the collapse queue are the state a save carries.
-    if retargetReady or collapseReady then
-      state.attach(self, C, layout, table.concat({
+    local capabilities
+    if denialReady or retargetReady or collapseReady then
+      capabilities = table.concat({
         tostring(denialReady), tostring(retargetReady), tostring(targetsReady),
         tostring(collapseReady), tostring(terrainOn and collapseReady), tostring(familyReady), tostring(aimReady),
         tostring(stanceReady), tostring(raidsReady), tostring(anchor ~= nil),
         tostring(campIds ~= nil),
-      }, '/'))
-    else
-      state.attach(self, C, layout)
+      }, '/')
+    end
+    local attached, reason = pcall(state.attach, self, C, layout, capabilities)
+    if not attached then
+      self:disable()
+      log(ERROR, "Improved Tunnelers save support is off. " .. tostring(reason))
+      return
     end
 
     log(INFO, string.format(

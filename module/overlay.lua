@@ -314,7 +314,7 @@ end
 ---Install the marking and the drawing. `h` carries the module's helpers and addresses.
 ---@return boolean ready
 function M.install(h)
-  if M.memory == nil then return false end
+  assert(M.memory, "The tunnel mark memory is unavailable.")
   local mem = h.memory or M.memory
   local function scan(pattern, purpose)
     local address, reason = core.AOBScanUnique(pattern)
@@ -328,22 +328,18 @@ function M.install(h)
   local tall = scan(M.AOB_TALL, "where the map redraws a tile's ground")
   local player = scan(M.AOB_PLAYER, "the local player")
   if ground == nil or tall == nil or player == nil then
-    log(ERROR, "The tunnel mark is off. The map drawing code could not be bound.")
-    return false
+    error("The map drawing code could not be bound.", 0)
   end
   if not h.guardsHold(ground, M.GROUND.guards, "the map's ground drawing")
       or not h.guardsHold(tall, M.TALL.guards, "the map's ground redrawing")
       or not h.guardsHold(h.tunneler, M.DIG_GUARDS, "the tunneller's digging")
       or h.readAddress(h.tunneler + M.DIG_HOOK + 2) ~= h.currentUnit then
-    log(ERROR, "The tunnel mark is off. The map drawing layout could not be verified.")
-    log(WARNING, "improved-tunnelers: the map drawing is not laid out as expected; the tunnel mark is off.")
-    return false
+    error("The map drawing layout could not be verified.", 0)
   end
   local readAddress = h.readAddress
   local blend = h.callTarget(ground + M.GROUND.blendCall)
   if h.callTarget(tall + 0x4F) ~= blend then
-    log(ERROR, "The tunnel mark is off. The two moat drawing routines do not match.")
-    return false
+    error("The two moat drawing routines do not match.", 0)
   end
   local draw = {
     SHADE_ADDRESS = readAddress(ground + M.GROUND.shade),
@@ -408,11 +404,8 @@ function M.install(h)
     RETURN_ADDRESS = h.tunneler + M.DIG_HOOK + M.DIG_HOOK_SIZE,
   })
 
-  h.remember(ground + M.GROUND.hook, 5)
   h.writeJump(ground + M.GROUND.hook, groundCode, 5)
-  h.remember(tall + M.TALL.hook, M.TALL.hookSize)
   h.writeJump(tall + M.TALL.hook, tallCode, M.TALL.hookSize)
-  h.remember(h.tunneler + M.DIG_HOOK, M.DIG_HOOK_SIZE)
   h.writeJump(h.tunneler + M.DIG_HOOK, digCode, M.DIG_HOOK_SIZE)
   return true
 end
