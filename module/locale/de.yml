@@ -9,7 +9,7 @@ retarget_enabled: Nach Breschen weiter vorgehen
 retarget_enabled_tooltip: Tunnelgräber suchen ein neues Ziel, nachdem sie eine Bresche geschlagen oder ihr Ziel verloren haben.
 targets_group: Tunnelziele
 targets_enabled: Türme und Tore angreifen
-targets_enabled_tooltip: Tunnelgräber können auf Türme und Torhäuser zugraben.
+targets_enabled_tooltip: Tunnelgräber können unter Türme und Torhäuser graben.
 ui_group: Unterirdische Tunnelgräber
 targets_under: Unter Stadtgebäuden hindurchgraben
 targets_under_tooltip: Tunnel können unter gewöhnlichen Stadtgebäuden hindurchführen.
@@ -32,8 +32,8 @@ balance_changes: Balance-Änderungen
 bugfixes: Fehlerkorrekturen
 ai: KI
 improvements: Verbesserungen
-digging_trap_proof: Mördergruben beim Graben ignorieren
-digging_trap_proof_tooltip: Grabende Tunnelgräber nehmen keinen Schaden durch Mördergruben.
+digging_trap_proof: Mörderlöcher beim Graben ignorieren
+digging_trap_proof_tooltip: Mörderlöcher fügen grabenden Tunnelgräbern keinen Schaden zu.
 digging_overlay: Eigene Tunnel unter erhöhtem Gelände markieren
 digging_overlay_tooltip: Eigene Tunnel unter erhöhtem Boden erscheinen rot.
 collapse_entrance_lost: Tunnel bei zerstörtem Eingang einstürzen lassen
