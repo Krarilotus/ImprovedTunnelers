@@ -1009,6 +1009,7 @@ return {
     local tickSite, problem = core.AOBScanUnique(AOB_TICK_COUNTER)
     local ticks = tickSite and readAddress(tickSite + 8)
     if not ticks then
+      log(ERROR, "Timed tunneler features are off. The game tick counter could not be bound.")
       log(WARNING, "improved-tunnelers: game tick counter " .. problem .. "; the part of the module that needs it is off")
     end
 
@@ -1182,7 +1183,7 @@ return {
           and readAddress(brush + 0xA2) == readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND)
           and callTarget(brush + 0xA6) == callTarget(walk + DAMAGE_WALK_UPDATE_CALL)
         if not brushReady then
-          log(WARNING, "improved-tunnelers: tunnel terrain brush data does not match its native caller; collapse changes are off.")
+          log(ERROR, "Tunnel collapse changes are off. The terrain brush could not be verified.")
         end
       end
       if walkReady
@@ -2195,6 +2196,9 @@ return {
       stanceReady = true
     end
 
+    if uiOn and not uiReady then
+      log(ERROR, "The tunneler command buttons are off. The game controls could not be bound.")
+    end
     ---------------------------------------------------------------------------------
     -- 5. Tunnellers in AI raids
     ---------------------------------------------------------------------------------

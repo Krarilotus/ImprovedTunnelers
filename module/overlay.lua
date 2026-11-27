@@ -328,18 +328,22 @@ function M.install(h)
   local ground = scan(M.AOB_GROUND, "where the map draws a tile's ground")
   local tall = scan(M.AOB_TALL, "where the map redraws a tile's ground")
   local player = scan(M.AOB_PLAYER, "the local player")
-  if ground == nil or tall == nil or player == nil then return false end
+  if ground == nil or tall == nil or player == nil then
+    log(ERROR, "The tunnel mark is off. The map drawing code could not be bound.")
+    return false
+  end
   if not h.guardsHold(ground, M.GROUND.guards, "the map's ground drawing")
       or not h.guardsHold(tall, M.TALL.guards, "the map's ground redrawing")
       or not h.guardsHold(h.tunneler, M.DIG_GUARDS, "the tunneller's digging")
       or h.readAddress(h.tunneler + M.DIG_HOOK + 2) ~= h.currentUnit then
+    log(ERROR, "The tunnel mark is off. The map drawing layout could not be verified.")
     log(WARNING, "improved-tunnelers: the map drawing is not laid out as expected; the tunnel mark is off.")
     return false
   end
   local readAddress = h.readAddress
   local blend = h.callTarget(ground + M.GROUND.blendCall)
   if h.callTarget(tall + 0x4F) ~= blend then
-    log(WARNING, "improved-tunnelers: the two moat mark drawings differ; the tunnel mark is off.")
+    log(ERROR, "The tunnel mark is off. The two moat drawing routines do not match.")
     return false
   end
   local draw = {
