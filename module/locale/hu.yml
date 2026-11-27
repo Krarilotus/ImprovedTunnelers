@@ -1,62 +1,46 @@
-denial_group: Építés a rés megnyitása után
-denial_enabled: Építési és javítási várakozás (tick)
-denial_enabled_tooltip: |-
-  Rövid ideig tiltja az építést és a faljavítást a rés körül. Alapértelmezett: 100 tick (normál sebességen 2,5 másodperc). Maximum: 2400 tick. Újabb omlások hosszabbítják. Kikapcsolva azonnal lehet újjáépíteni.
-denial_message: Építési tiltás magyarázata
-denial_message_tooltip: |-
-  Üzenetet mutat, ha egy rés miatt nem lehet építeni.
+denial_group: Építkezés réseken
+denial_enabled: Újjáépítés késleltetése alagútrés felett
+denial_enabled_tooltip: Beállítja, meddig marad tiltva az építkezés egy rés felett.
+denial_message: Építési tiltás okának magyarázata
+denial_message_tooltip: Üzenetet jelenít meg, ha aktív résbe próbálsz építeni.
 terrain_enabled: Talaj helyreállítása ásás után
-terrain_enabled_tooltip: |-
-  Visszaállítja a befejezett alagutak körüli eredeti talajmagasságot. Kikapcsolva az eredeti játék helyreállítását használja.
-retarget_enabled: Továbbásás a réseken át
-retarget_enabled_tooltip: |-
-  Összehangolja az alagutakat, és új célt keres, ha az előző megsemmisült.
+terrain_enabled_tooltip: Helyreállítja a megemelt talajt az alagút beomlásakor.
+retarget_enabled: Továbbhaladás a rések után
+retarget_enabled_tooltip: Az alagútásók új célpontot keresnek, miután rést nyitottak vagy elvesztették eredeti célpontjukat.
 targets_group: Alagútcélpontok
 targets_enabled: Tornyok és kapuk célzása
-targets_enabled_tooltip: |-
-  Minden torony és kapu lehet alagútcélpont.
-ui_group: Alagútásó-parancsok és omlási sebzés
+targets_enabled_tooltip: Az alagútásók tornyok és kapuházak felé is áshatnak.
+ui_group: Föld alatti alagútásók
 targets_under: Ásás városi épületek alatt
-targets_under_tooltip: |-
-  Engedélyezi az útvonalat a közönséges épületek alatt. A vártornyok kivételek.
-digging_unselectable: Ásó alagútásók kihagyása kijelöléskor
-digging_unselectable_tooltip: |-
-  A csapatkijelölés és a csoportparancs ne szakítsa meg az ásást.
-digging_untargetable: Föld alatti alagútásók védelme
-digging_untargetable_tooltip: |-
-  Az ellenség nem célozhatja az alagútásókat ásás közben.
-collapse_enabled: Az alagutak sebzik a célpontot
-collapse_enabled_tooltip: |-
-  Az alagút végén lévő fal, torony vagy kapu az alább megadott sebzést kapja, ahelyett hogy azonnal leomlana, mint az eredeti játékban.
+targets_under_tooltip: Az alagutak áthaladhatnak a közönséges városi épületek alatt.
+digging_unselectable: Ásó alagútásók kihagyása a kijelölésből
+digging_unselectable_tooltip: A kijelölés kihagyja a föld alatt lévő alagútásókat.
+digging_untargetable: Föld alatti alagútásók védelme a támadásoktól
+digging_untargetable_tooltip: Az ellenségek nem vehetik célba a föld alatti alagútásókat.
+collapse_enabled: Célpont sebzése alagút beomlásakor
+collapse_enabled_tooltip: Az omlás megsebzi a célmező feletti építményt.
 collapse_damage: Célpont sebzése
 collapse_spread: Közeli épületek sebzése
-collapse_spread_tooltip: |-
-  Sebzi az alagút melletti közönséges épületeket. A szomszédos erődítmények kivételek.
-ui_enabled: „Támadás ide” gomb hozzáadása
-ui_enabled_tooltip: |-
-  Megtartja az ásás gombot, és külön épülettámadási parancsot ad hozzá.
-stances_enabled: Védekező és támadó harci mód engedélyezése
-stances_enabled_tooltip: |-
-  A tétlen alagútásók reagálnak a közeli ellenségre az ásási és mozgási parancsok megszakítása nélkül.
-raids_enabled: Portyázó alagútásók engedélyezése
-raids_enabled_tooltip: |-
-  Az MI portyabeállításaiban kiválasztott alagútásók csatlakoznak a portyázó csapatokhoz.
+collapse_spread_tooltip: Az alagút beomlása a célpont körüli más épületeket is megsebezheti.
+ui_enabled: „Támadás ide” és „Alagút ásása” parancsok szétválasztása
+ui_enabled_tooltip: Jelölj ki egy alagútásót, kattints az egységpanelben a „Támadás ide” vagy a mellette lévő „Alagút ásása” gombra, majd a célpontra.
+stances_enabled: Tétlen alagútásók követik a harci módokat
+stances_enabled_tooltip: A megszokott harci mód gombokkal szabályozható, hogyan reagáljanak a tétlen alagútásók az ellenségre.
+raids_enabled: Alagútásók engedélyezése MI-portyákban
+raids_enabled_tooltip: Az MI-lordok küldhetnek alagútásókat portyákba, ha szerepelnek a portyalistájukon.
 balance_changes: Egyensúlymódosítások
 bugfixes: Hibajavítások
 ai: MI
 improvements: Fejlesztések
-digging_trap_proof: Az alagútásók figyelmen kívül hagyják a csapdavermeket
-digging_trap_proof_tooltip: |-
-  A föld alatti alagútásók nem sérülnek a csapdavermektől, és nem is hozzák működésbe őket.
-digging_overlay: Saját alagutak mutatása magaslatok alatt
-digging_overlay_tooltip: |-
-  Ahol a saját alagutad magasabb terep alatt halad, a játék nem mutat kidudorodást a felszínen. Ezeket a mezőket pirossal jelöli, mint egy tervezett várárkot, amíg az ásás tart, és a jelölés eltűnik, amikor az alagút beomlik. A saját alagutaidat csak te látod.
-collapse_entrance_lost: Lerombolt bejárat beomlasztja az alagutat
-collapse_entrance_lost_tooltip: |-
-  Ha a bejáratot ásás közben lerombolják, az alagút ott omlik be, ahová eljutott, és megrongálja, ami fölötte áll, mintha célba ért volna.
-
+digging_trap_proof: Veremcsapdák figyelmen kívül hagyása ásás közben
+digging_trap_proof_tooltip: Az ásó alagútásókat nem sebzik a veremcsapdák.
+digging_overlay: Saját alagutak jelölése magasított terep alatt
+digging_overlay_tooltip: A magasított talaj alatti saját alagutak pirossal jelennek meg.
+collapse_entrance_lost: Alagutak beomlasztása a bejárat elvesztésekor
+collapse_entrance_lost_tooltip: Az alagút beomolhat, ha a bejárata megsemmisül.
 tags.behavior: Viselkedés
 tags.bugfixes: Hibajavítások
 tags.balance: Egyensúly
 tags.interface: Kezelőfelület
 qol: Kényelmi funkciók
+collapse_group: Alagútomlasztások

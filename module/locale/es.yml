@@ -1,62 +1,46 @@
-denial_group: Construcción tras una brecha
-denial_enabled: Espera para construir y reparar (ticks)
-denial_enabled_tooltip: |-
-  Bloquea brevemente la construcción y reparación de murallas junto a una brecha. Predeterminado: 100 ticks (2,5 segundos a velocidad normal). Máximo: 2400 ticks. Otros derrumbes prolongan la espera. Desactivado permite reconstruir de inmediato.
-denial_message: Explicar el bloqueo
-denial_message_tooltip: |-
-  Muestra un mensaje cuando una brecha impide construir.
-terrain_enabled: Restaurar el suelo tras excavar
-terrain_enabled_tooltip: |-
-  Restaura la altura original alrededor de túneles terminados. Desactivado usa la limpieza del juego original.
-retarget_enabled: Continuar tras las brechas
-retarget_enabled_tooltip: |-
-  Coordina túneles y busca otro objetivo si el anterior ya no existe.
+denial_group: Construir sobre brechas
+denial_enabled: Retrasar la reconstrucción sobre una brecha de túnel
+denial_enabled_tooltip: Define cuánto tiempo queda bloqueada la construcción sobre una brecha.
+denial_message: Explicar por qué está bloqueada la construcción
+denial_message_tooltip: Muestra un aviso al intentar construir dentro de una brecha activa.
+terrain_enabled: Restaurar el terreno tras excavar
+terrain_enabled_tooltip: Restaura el terreno elevado cuando el túnel se derrumba.
+retarget_enabled: Continuar tras abrir brechas
+retarget_enabled_tooltip: Los zapadores buscan un nuevo objetivo tras abrir una brecha o perder el original.
 targets_group: Objetivos de túneles
 targets_enabled: Atacar torres y puertas
-targets_enabled_tooltip: |-
-  Permite elegir cualquier torre o puerta como objetivo.
-ui_group: Órdenes de zapadores y daño de derrumbe
-targets_under: Excavar bajo edificios civiles
-targets_under_tooltip: |-
-  Permite rutas bajo edificios normales. Las fortalezas quedan excluidas.
-digging_unselectable: Omitir zapadores excavando al seleccionar
-digging_unselectable_tooltip: |-
-  Evita interrumpir la excavación al seleccionar tropas o dar órdenes de grupo.
-digging_untargetable: Proteger zapadores bajo tierra
-digging_untargetable_tooltip: |-
-  Impide que los enemigos ataquen a los zapadores mientras excavan.
-collapse_enabled: Los túneles dañan su objetivo
-collapse_enabled_tooltip: |-
-  La muralla, torre o puerta al final del túnel recibe el daño indicado abajo en lugar de derrumbarse de golpe como en el juego original.
+targets_enabled_tooltip: Los zapadores pueden excavar hacia torres y casas de la puerta.
+ui_group: Zapadores bajo tierra
+targets_under: Excavar bajo edificios urbanos
+targets_under_tooltip: Los túneles pueden pasar por debajo de edificios urbanos comunes.
+digging_unselectable: Excluir de selecciones a los zapadores excavando
+digging_unselectable_tooltip: Las selecciones omiten a los zapadores mientras están bajo tierra.
+digging_untargetable: Proteger de ataques a los zapadores bajo tierra
+digging_untargetable_tooltip: Los enemigos no pueden fijar como objetivo a los zapadores bajo tierra.
+collapse_enabled: Dañar el objetivo al derrumbarse un túnel
+collapse_enabled_tooltip: El derrumbe daña la estructura sobre su casilla objetivo.
 collapse_damage: Daño al objetivo
 collapse_spread: Dañar edificios cercanos
-collapse_spread_tooltip: |-
-  Daña edificios normales junto al túnel. Excluye fortificaciones vecinas.
-ui_enabled: Añadir botón «Atacar aquí»
-ui_enabled_tooltip: |-
-  Conserva el botón de excavar y añade una orden aparte para atacar edificios.
-stances_enabled: Activar posturas defensiva y agresiva
-stances_enabled_tooltip: |-
-  Los zapadores inactivos reaccionan a enemigos cercanos sin interrumpir órdenes de movimiento o excavación.
-raids_enabled: Activar zapadores en incursiones
-raids_enabled_tooltip: |-
-  Los zapadores elegidos en los ajustes de incursión de la IA se unen a sus tropas de incursión.
+collapse_spread_tooltip: El derrumbe de un túnel puede dañar otros edificios alrededor del objetivo.
+ui_enabled: Separar las órdenes «Atacar aquí» y «Cavar túnel»
+ui_enabled_tooltip: Selecciona un zapador, pulsa «Atacar aquí» o el botón contiguo «Cavar túnel» en el panel de unidad y luego haz clic en el objetivo.
+stances_enabled: Los zapadores inactivos obedecen las posturas de combate
+stances_enabled_tooltip: Usa los botones de postura habituales para elegir cómo reaccionan los zapadores inactivos ante enemigos.
+raids_enabled: Permitir zapadores en incursiones de la IA
+raids_enabled_tooltip: Los señores de la IA pueden enviar zapadores en incursiones si su lista los incluye.
 balance_changes: Cambios de equilibrio
 bugfixes: Correcciones de errores
 ai: IA
 improvements: Mejoras
-digging_trap_proof: Los zapadores ignoran los fosos de la muerte
-digging_trap_proof_tooltip: |-
-  Los zapadores bajo tierra no reciben daño de los fosos de la muerte ni los activan.
-digging_overlay: Mostrar tus túneles bajo terreno alto
-digging_overlay_tooltip: |-
-  Donde tu túnel pasa bajo terreno elevado, el juego no muestra ningún bulto en la superficie. Esas casillas se marcan en rojo, como un foso planeado, mientras se cava, y la marca desaparece cuando el túnel se derrumba. Solo tú ves tus propios túneles.
-collapse_entrance_lost: Entrada destruida derrumba el túnel
-collapse_entrance_lost_tooltip: |-
-  Si la entrada se destruye mientras el túnel aún se excava, el túnel se derrumba donde ha llegado y daña lo que hay encima, como si hubiera alcanzado un objetivo.
-
+digging_trap_proof: Ignorar fosos mortales al excavar
+digging_trap_proof_tooltip: Los zapadores que excavan no reciben daño de los fosos mortales.
+digging_overlay: Marcar tus túneles bajo terreno elevado
+digging_overlay_tooltip: Tus túneles bajo terreno elevado aparecen en rojo.
+collapse_entrance_lost: Derrumbar túneles si se pierde su entrada
+collapse_entrance_lost_tooltip: Un túnel puede derrumbarse si destruyen su entrada.
 tags.behavior: Comportamiento
 tags.bugfixes: Correcciones
 tags.balance: Equilibrio
 tags.interface: Interfaz
 qol: Comodidad de juego
+collapse_group: Derrumbes de túneles

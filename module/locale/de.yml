@@ -1,62 +1,46 @@
-denial_group: Bauen nach einer Bresche
-denial_enabled: Bau- und Reparaturpause (Ticks)
-denial_enabled_tooltip: |-
-  Bauen und Mauerreparaturen an einer Bresche kurz sperren. Standard: 100 Ticks (2,5 Sekunden bei normalem Tempo). Maximum: 2400 Ticks. Weitere Einstürze verlängern die Pause. Ausschalten erlaubt sofortigen Wiederaufbau.
-denial_message: Bausperre erklären
-denial_message_tooltip: |-
-  Bei einer Bausperre an einer Bresche einen Hinweis anzeigen.
-terrain_enabled: Boden nach dem Tunnelbau wiederherstellen
-terrain_enabled_tooltip: |-
-  Die ursprüngliche Bodenhöhe um fertige Tunnel wiederherstellen. Aus verwendet die Bereinigung des Originalspiels.
-retarget_enabled: Durch Breschen weitergraben
-retarget_enabled_tooltip: |-
-  Tunnel koordinieren und ein neues Ziel suchen, wenn das vorige zerstört ist.
+denial_group: Bauen über Breschen
+denial_enabled: Wiederaufbau über einer Tunnelbresche verzögern
+denial_enabled_tooltip: Legt fest, wie lange das Bauen über einer Bresche gesperrt bleibt.
+denial_message: Erklären, warum das Bauen gesperrt ist
+denial_message_tooltip: Zeigt eine Meldung an, wenn du in einer aktiven Bresche zu bauen versuchst.
+terrain_enabled: Boden nach dem Graben wiederherstellen
+terrain_enabled_tooltip: Stellt erhöhten Boden wieder her, sobald der Tunnel einstürzt.
+retarget_enabled: Nach Breschen weiter vorgehen
+retarget_enabled_tooltip: Tunnelgräber suchen ein neues Ziel, nachdem sie eine Bresche geschlagen oder ihr Ziel verloren haben.
 targets_group: Tunnelziele
 targets_enabled: Türme und Tore angreifen
-targets_enabled_tooltip: |-
-  Alle Türme und Tore als Tunnelziele zulassen.
-ui_group: Tunnelgräberbefehle und Einsturzschaden
-targets_under: Unter Stadtgebäuden graben
-targets_under_tooltip: |-
-  Wege unter normalen Gebäuden erlauben. Bergfriede bleiben ausgenommen.
-digging_unselectable: Grabende Tunnelgräber bei Auswahl überspringen
-digging_unselectable_tooltip: |-
-  Graben nicht durch Truppenauswahl oder Gruppenbefehle unterbrechen.
-digging_untargetable: Tunnelgräber unter der Erde schützen
-digging_untargetable_tooltip: |-
-  Feinde können grabende Tunnelgräber nicht anvisieren.
-collapse_enabled: Tunnel beschädigen ihr Ziel
-collapse_enabled_tooltip: |-
-  Mauer, Turm oder Tor am Tunnelende erhalten den Schaden unten, statt wie im Originalspiel sofort abgerissen zu werden.
+targets_enabled_tooltip: Tunnelgräber können auf Türme und Torhäuser zugraben.
+ui_group: Unterirdische Tunnelgräber
+targets_under: Unter Stadtgebäuden hindurchgraben
+targets_under_tooltip: Tunnel können unter gewöhnlichen Stadtgebäuden hindurchführen.
+digging_unselectable: Grabende Tunnelgräber aus der Auswahl ausschließen
+digging_unselectable_tooltip: Tunnelgräber unter der Erde werden nicht mitausgewählt.
+digging_untargetable: Unterirdische Tunnelgräber vor Angriffen schützen
+digging_untargetable_tooltip: Gegner können Tunnelgräber unter der Erde nicht anvisieren.
+collapse_enabled: Ziel bei Tunneleinsturz beschädigen
+collapse_enabled_tooltip: Ein Einsturz beschädigt das Bauwerk über dem Zielfeld.
 collapse_damage: Schaden am Ziel
 collapse_spread: Benachbarte Gebäude beschädigen
-collapse_spread_tooltip: |-
-  Normale Gebäude neben dem Tunnel beschädigen. Benachbarte Befestigungen bleiben verschont.
-ui_enabled: Schaltfläche „Hier angreifen“ hinzufügen
-ui_enabled_tooltip: |-
-  Grabebefehl behalten und einen eigenen Befehl zum Angriff auf Gebäude hinzufügen.
-stances_enabled: Defensive und aggressive Haltung aktivieren
-stances_enabled_tooltip: |-
-  Untätige Tunnelgräber reagieren auf nahe Feinde, ohne Grab- oder Laufbefehle zu unterbrechen.
-raids_enabled: Tunnelgräber für Überfälle aktivieren
-raids_enabled_tooltip: |-
-  In den KI-Überfalleinstellungen gewählte Tunnelgräber schließen sich den Überfalltruppen an.
+collapse_spread_tooltip: Ein Tunneleinsturz kann weitere Gebäude rund um das Ziel beschädigen.
+ui_enabled: Befehle „Hier angreifen“ und „Tunnel graben“ trennen
+ui_enabled_tooltip: Wähle einen Tunnelgräber, klicke im Einheitenmenü auf „Hier angreifen“ oder daneben auf „Tunnel graben“ und dann auf das Ziel.
+stances_enabled: Untätige Tunnelgräber befolgen Kampfhaltungen
+stances_enabled_tooltip: Nutze die üblichen Haltungsschaltflächen für die Reaktion untätiger Tunnelgräber auf Gegner.
+raids_enabled: Tunnelgräber in KI-Überfallgruppen erlauben
+raids_enabled_tooltip: KI-Lords können Tunnelgräber bei Überfällen einsetzen, wenn sie in ihrer Überfallliste stehen.
 balance_changes: Balance-Änderungen
 bugfixes: Fehlerkorrekturen
 ai: KI
 improvements: Verbesserungen
-digging_trap_proof: Tunnelgräber ignorieren Fallgruben
-digging_trap_proof_tooltip: |-
-  Tunnelgräber unter der Erde nehmen keinen Schaden durch Fallgruben und lösen sie nicht aus.
-digging_overlay: Eigene Tunnel unter Anhöhen zeigen
-digging_overlay_tooltip: |-
-  Wo dein Tunnel unter erhöhtem Gelände verläuft, zeigt das Spiel keine Erhebung an der Oberfläche. Diese Felder werden rot markiert, wie ein geplanter Burggraben, solange gegraben wird; die Markierung verschwindet, wenn der Tunnel einstürzt. Nur du siehst deine eigenen Tunnel.
-collapse_entrance_lost: Zerstörter Eingang lässt Tunnel einstürzen
-collapse_entrance_lost_tooltip: |-
-  Wird der Eingang zerstört, während der Tunnel noch gegraben wird, stürzt der Tunnel an seiner Spitze ein und beschädigt, was darüber steht, als hätte er ein Ziel erreicht.
-
+digging_trap_proof: Mördergruben beim Graben ignorieren
+digging_trap_proof_tooltip: Grabende Tunnelgräber nehmen keinen Schaden durch Mördergruben.
+digging_overlay: Eigene Tunnel unter erhöhtem Gelände markieren
+digging_overlay_tooltip: Eigene Tunnel unter erhöhtem Boden erscheinen rot.
+collapse_entrance_lost: Tunnel bei zerstörtem Eingang einstürzen lassen
+collapse_entrance_lost_tooltip: Ein Tunnel kann einstürzen, wenn sein Eingang zerstört wird.
 tags.behavior: Verhalten
 tags.bugfixes: Fehlerkorrekturen
 tags.balance: Balance
 tags.interface: Oberfläche
 qol: Komfort
+collapse_group: Tunneleinstürze

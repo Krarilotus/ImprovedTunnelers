@@ -1,3 +1,3 @@
-# Fejlesztett alagútásók
+# Improved Tunnelers
 
-Javítja az alagútásók célpontválasztását, együttműködését és harci parancsokra adott reakcióját. Folytathatják az ásást az ellenséges védművek felé, és részt vehetnek az MI portyáiban. Az alagútomlás sebzése, a rés utáni ideiglenes építési korlátozások és az alagútásók viselkedése testreszabható.
+Javítja az alagútásók ásását, célpontválasztását és továbbhaladását a rések után. Beállíthatod, hogyan sebzik az omlások az épületeket és mikor folytatódhat az építkezés. Bekapcsoláskor jelölj ki egy alagútásót a külön támadási és ásási parancsok használatához.

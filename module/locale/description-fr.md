@@ -1,3 +1,3 @@
-# Tunneliers améliorés
+# Improved Tunnelers
 
-Améliore le choix des cibles, la coopération et la réaction des tunneliers aux ordres de combat. Ils peuvent poursuivre leurs tunnels vers les défenses ennemies et participer aux raids de l’IA. Personnalisez les dégâts des effondrements, les restrictions temporaires de construction après une brèche et le comportement des tunneliers.
+Améliore la façon dont les tunneliers creusent, choisissent leurs cibles et exploitent les brèches. Choisissez comment les effondrements endommagent les bâtiments et quand la reconstruction peut reprendre. Une fois l’option activée, sélectionnez un tunnelier pour utiliser des ordres d’attaque et de creusement distincts.

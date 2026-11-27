@@ -1,62 +1,46 @@
-denial_group: Gedikten sonra inşaat
-denial_enabled: İnşaat ve onarım bekleme süresi (tik)
-denial_enabled_tooltip: |-
-  Gediğin çevresinde inşaatı ve duvar onarımını kısa süre engeller. Varsayılan: 100 tik (normal hızda 2,5 saniye). En fazla: 2400 tik. Yeni çökmeler süreyi uzatır. Kapatıldığında hemen yeniden inşa edilebilir.
-denial_message: İnşaat engelini açıkla
-denial_message_tooltip: |-
-  Bir gedik inşaatı engellediğinde mesaj gösterir.
-terrain_enabled: Kazıdan sonra zemini düzelt
-terrain_enabled_tooltip: |-
-  Biten tünellerin çevresindeki zemini eski yüksekliğine getirir. Kapalıyken oyunun özgün temizliği kullanılır.
-retarget_enabled: Gediklerden devam et
-retarget_enabled_tooltip: |-
-  Tünelleri koordine eder ve önceki hedef yok olmuşsa yeni hedef arar.
+denial_group: Gedikler üzerine inşa etme
+denial_enabled: Tünel gediği üzerinde yeniden inşayı geciktir
+denial_enabled_tooltip: Bir gedik üzerinde inşaatın ne kadar süre engelleneceğini belirler.
+denial_message: İnşaatın neden engellendiğini açıkla
+denial_message_tooltip: Etkin bir gedik içine inşa etmeye çalıştığınızda mesaj gösterir.
+terrain_enabled: Kazı sonrası zemini düzelt
+terrain_enabled_tooltip: Tünel çökerken kabaran zemini eski hâline getirir.
+retarget_enabled: Gedik açtıktan sonra devam et
+retarget_enabled_tooltip: Tünelciler bir gedik açtıktan veya ilk hedeflerini kaybettikten sonra yeni hedef arar.
 targets_group: Tünel hedefleri
 targets_enabled: Kuleleri ve kapıları hedefle
-targets_enabled_tooltip: |-
-  Tüm kule ve kapıların tünel hedefi olmasına izin verir.
-ui_group: Tünelci komutları ve çökme hasarı
-targets_under: Şehir binalarının altından kaz
-targets_under_tooltip: |-
-  Sıradan binaların altından geçmeye izin verir. İç kale hariçtir.
-digging_unselectable: Kazı yapan tünelcileri seçimde atla
-digging_unselectable_tooltip: |-
-  Asker seçimi veya grup emirleriyle kazının kesilmesini önler.
-digging_untargetable: Yeraltındaki tünelcileri koru
-digging_untargetable_tooltip: |-
-  Kazı sırasında düşmanların tünelcileri hedeflemesini önler.
-collapse_enabled: Tüneller hedefe hasar verir
-collapse_enabled_tooltip: |-
-  Tünelin ucundaki duvar, kule veya kapı, orijinal oyundaki gibi hemen yıkılmak yerine aşağıdaki hasarı alır.
+targets_enabled_tooltip: Tünelciler kulelere ve kapı binalarına doğru kazabilir.
+ui_group: Yer altındaki tünelciler
+targets_under: Şehir binalarının altından tünel kaz
+targets_under_tooltip: Tüneller sıradan şehir binalarının altından geçebilir.
+digging_unselectable: Kazan tünelcileri seçim dışı bırak
+digging_unselectable_tooltip: Seçimler yer altındaki tünelcileri dışarıda bırakır.
+digging_untargetable: Yer altındaki tünelcileri saldırılardan koru
+digging_untargetable_tooltip: Düşmanlar yer altındaki tünelcileri hedef alamaz.
+collapse_enabled: Tünel çöktüğünde hedefe hasar ver
+collapse_enabled_tooltip: Çökme, hedef karenin üstündeki yapıya hasar verir.
 collapse_damage: Hedefe verilen hasar
 collapse_spread: Yakındaki binalara hasar ver
-collapse_spread_tooltip: |-
-  Tünelin yanındaki sıradan binalara hasar verir. Yakındaki tahkimatlar hariçtir.
-ui_enabled: «Buraya saldır» düğmesi ekle
-ui_enabled_tooltip: |-
-  Kazı düğmesini korur ve ayrı bir bina saldırı komutu ekler.
-stances_enabled: Savunma ve saldırgan duruşları aç
-stances_enabled_tooltip: |-
-  Boştaki tünelciler kazı veya hareket emirlerini kesmeden yakındaki düşmanlara tepki verir.
-raids_enabled: Baskın tünelcilerini aç
-raids_enabled_tooltip: |-
-  Yapay zekânın baskın ayarlarında seçilen tünelciler baskın birliklerine katılır.
+collapse_spread_tooltip: Bir tünel çökmesi hedefin etrafındaki diğer binalara da zarar verebilir.
+ui_enabled: «Buraya saldır» ve «Tünel kaz» komutlarını ayır
+ui_enabled_tooltip: Bir tünelci seçin, birim panelinde «Buraya saldır» veya yanındaki «Tünel kaz» düğmesine tıklayın, ardından hedefe tıklayın.
+stances_enabled: Boştaki tünelciler savaş duruşlarına uyar
+stances_enabled_tooltip: Boştaki tünelcilerin düşmanlara nasıl tepki vereceğini seçmek için normal duruş düğmelerini kullanın.
+raids_enabled: Yapay zekâ baskın gruplarında tünelcilere izin ver
+raids_enabled_tooltip: Baskın listelerinde yer alıyorsa yapay zekâ lordları baskınlara tünelci gönderebilir.
 balance_changes: Denge değişiklikleri
 bugfixes: Hata düzeltmeleri
 ai: Yapay zekâ
 improvements: İyileştirmeler
-digging_trap_proof: Tünelciler ölüm çukurlarını yok sayar
-digging_trap_proof_tooltip: |-
-  Yer altındaki tünelciler ölüm çukurlarından hasar almaz ve onları tetiklemez.
-digging_overlay: Yüksek zemin altındaki tünellerini göster
-digging_overlay_tooltip: |-
-  Kendi tünelin yükseltilmiş zeminin altından geçtiğinde oyun yüzeyde bir kabarıklık göstermez. Bu kareler kazı sürerken planlanmış bir hendek gibi kırmızıyla işaretlenir; tünel çöktükçe işaret kalkar. Kendi tünellerini yalnızca sen görürsün.
-collapse_entrance_lost: Yıkılan giriş tüneli çökertir
-collapse_entrance_lost_tooltip: |-
-  Tünel kazılırken girişi yıkılırsa, tünel ulaştığı yerde çöker ve üstündekine bir hedefe ulaşmış gibi hasar verir.
-
+digging_trap_proof: Kazarken ölüm çukurlarını yok say
+digging_trap_proof_tooltip: Kazı yapan tünelciler ölüm çukurlarından hasar almaz.
+digging_overlay: Yükseltilmiş arazi altındaki tünellerini işaretle
+digging_overlay_tooltip: Yükseltilmiş zemin altındaki tünelleriniz kırmızı görünür.
+collapse_entrance_lost: Girişi yok olunca tünelleri çökert
+collapse_entrance_lost_tooltip: Girişi yıkıldığında bir tünel çökebilir.
 tags.behavior: Davranış
 tags.bugfixes: Hata düzeltmeleri
 tags.balance: Denge
 tags.interface: Arayüz
 qol: Kullanım kolaylığı
+collapse_group: Tünel çökmeleri

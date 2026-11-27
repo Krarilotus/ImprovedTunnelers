@@ -1,3 +1,3 @@
-# Geliştirilmiş Tünelciler
+# Improved Tunnelers
 
-Tünelcilerin hedef seçimini, iş birliğini ve savaş emirlerine tepkisini geliştirir. Düşman savunmalarına doğru kazmaya devam edebilir ve yapay zekâ baskınlarına katılabilirler. Tünel çökme hasarını, gedik açıldıktan sonraki geçici inşa kısıtlamalarını ve tünelci davranışını özelleştirin.
+Tünelcilerin kazma, hedef seçme ve gedik sonrası ilerleme davranışlarını geliştirir. Çökmelerin binalara nasıl hasar vereceğini ve inşaatın ne zaman yeniden başlayabileceğini belirleyin. Etkinleştirildiğinde ayrı saldırı ve kazı komutlarını kullanmak için bir tünelci seçin.
