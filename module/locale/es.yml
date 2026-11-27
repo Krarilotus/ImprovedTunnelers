@@ -5,20 +5,12 @@ denial_enabled_tooltip: |-
 denial_message: Explicar el bloqueo
 denial_message_tooltip: |-
   Muestra un mensaje cuando una brecha impide construir.
-terrain_group: Terreno de los túneles
 terrain_enabled: Restaurar el suelo tras excavar
 terrain_enabled_tooltip: |-
   Restaura la altura original alrededor de túneles terminados. Desactivado usa la limpieza del juego original.
-retarget_group: Rutas de túneles
 retarget_enabled: Continuar tras las brechas
 retarget_enabled_tooltip: |-
   Coordina túneles y busca otro objetivo si el anterior ya no existe.
-retarget_range: Alcance de búsqueda (casillas)
-retarget_range_tooltip: |-
-  Distancia para buscar el siguiente objetivo. Predeterminado: 80.
-retarget_max: Máximo de nuevos objetivos
-retarget_max_tooltip: |-
-  Veces que un túnel puede continuar hacia otro objetivo. Predeterminado: 10.
 targets_group: Objetivos de túneles
 targets_enabled: Atacar torres y puertas
 targets_enabled_tooltip: |-
@@ -37,43 +29,22 @@ collapse_enabled: Los túneles dañan su objetivo
 collapse_enabled_tooltip: |-
   La muralla, torre o puerta al final del túnel recibe el daño indicado abajo en lugar de derrumbarse de golpe como en el juego original.
 collapse_damage: Daño al objetivo
-collapse_damage_tooltip: |-
-  Daño a la muralla, torre o puerta al final del túnel. Predeterminado: 2500.
 collapse_spread: Dañar edificios cercanos
 collapse_spread_tooltip: |-
   Daña edificios normales junto al túnel. Excluye fortificaciones vecinas.
-collapse_speed: Velocidad de derrumbe (casillas por segundo)
-collapse_speed_tooltip: |-
-  Lo rápido que se derrumba un túnel tras el impacto, en casillas por segundo a velocidad de juego normal: el suelo se restaura y los alrededores se sacuden casilla a casilla, del objetivo a la entrada. Valores bajos son más lentos y reparten el trabajo en el tiempo. Predeterminado: 80.
-collapse_spread_radius: Radio de daño (casillas)
-collapse_spread_radius_tooltip: |-
-  Alcance del daño alrededor del túnel. Predeterminado: 2.
-collapse_spread_damage: Daño a edificios cercanos
-collapse_spread_damage_tooltip: |-
-  Daño a cada edificio normal dentro del alcance. Predeterminado: 60.
 ui_enabled: Añadir botón «Atacar aquí»
 ui_enabled_tooltip: |-
   Conserva el botón de excavar y añade una orden aparte para atacar edificios.
-stances_group: Posturas de zapadores
 stances_enabled: Activar posturas defensiva y agresiva
 stances_enabled_tooltip: |-
   Los zapadores inactivos reaccionan a enemigos cercanos sin interrumpir órdenes de movimiento o excavación.
-raids_group: Zapadores en incursiones de la IA
 raids_enabled: Activar zapadores en incursiones
 raids_enabled_tooltip: |-
   Los zapadores elegidos en los ajustes de incursión de la IA se unen a sus tropas de incursión.
-diagnostics_group: Diagnóstico
-diagnostics_enabled: Escribir mensajes de diagnóstico
-diagnostics_enabled_tooltip: |-
-  Registra la actividad de túneles para investigar problemas. Desactivado por defecto.
 balance_changes: Cambios de equilibrio
-bugfixes: Correcciones
+bugfixes: Correcciones de errores
 ai: IA
 improvements: Mejoras
-misc: Varios
-retarget_join: Distancia de unión (casillas)
-retarget_join_tooltip: |-
-  Los túneles iniciados a esta distancia del primer túnel de un grupo van todos a su objetivo y se ramifican desde allí. Los túneles más alejados abren su propia brecha. 0 = cualquier distancia. Predeterminado: 15.
 digging_trap_proof: Los zapadores ignoran los fosos de la muerte
 digging_trap_proof_tooltip: |-
   Los zapadores bajo tierra no reciben daño de los fosos de la muerte ni los activan.
@@ -88,3 +59,4 @@ tags.behavior: Comportamiento
 tags.bugfixes: Correcciones
 tags.balance: Equilibrio
 tags.interface: Interfaz
+qol: Comodidad de juego

@@ -6,6 +6,21 @@ enemy's camp.
 
 What the module does, in plain English, is in `module/locale/description-en.md`.
 
+## Preset tuning
+
+Set these keys under `improved-tunnelers` in a preset.
+
+| Key | Default | Effect |
+| --- | ---: | --- |
+| `retarget.range` | 80 | Target search range in tiles |
+| `retarget.max` | 10 | Maximum follow-up targets |
+| `retarget.join_distance` | 15 | Distance for joining tunnels in tiles. 0 allows any distance. |
+| `collapse.damage` | 2500 | Damage to the collapse target |
+| `collapse.tiles_per_second` | 80 | Speed along the tunnel |
+| `collapse.spread_radius` | 2 | Nearby damage radius in tiles |
+| `collapse.spread_damage` | 60 | Damage to nearby buildings |
+| `diagnostics.enabled` | false | Log tunneler routing and collapse decisions |
+
 ## What is in here
 
 | Folder | |

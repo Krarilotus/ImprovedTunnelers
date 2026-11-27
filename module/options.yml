@@ -2,9 +2,8 @@ meta:
   version: 1.0.0
 options:
 - display: GroupBox
-  category: ['{{balance_changes}}']
-  header: '{{denial_group}}'
   hasHeader: true
+  header: '{{denial_group}}'
   children:
   - url: improved-tunnelers.denial
     name: improved-tunnelers-denial-duration
@@ -29,92 +28,33 @@ options:
     contents:
       type: boolean
       value: false
-
-- display: GroupBox
-  category: ['{{bugfixes}}']
-  header: '{{terrain_group}}'
+  category:
+  - '{{balance_changes}}'
+- url: improved-tunnelers.terrain.enabled
+  name: improved-tunnelers-terrain-enabled
+  header: '{{terrain_enabled}}'
+  text: '{{terrain_enabled_tooltip}}'
   hasHeader: true
-  children:
-  - url: improved-tunnelers.terrain.enabled
-    name: improved-tunnelers-terrain-enabled
-    header: '{{terrain_enabled}}'
-    text: '{{terrain_enabled_tooltip}}'
-    hasHeader: true
-    display: UCP2Switch
-    contents:
-      type: boolean
-      value: false
-
-- display: GroupBox
-  category: ['{{balance_changes}}']
-  header: '{{retarget_group}}'
+  display: UCP2Switch
+  contents:
+    type: boolean
+    value: false
+  category:
+  - '{{bugfixes}}'
+- url: improved-tunnelers.retarget.enabled
+  name: improved-tunnelers-retarget-enabled
+  header: '{{retarget_enabled}}'
+  text: '{{retarget_enabled_tooltip}}'
   hasHeader: true
-  children:
-  - url: improved-tunnelers.retarget.enabled
-    name: improved-tunnelers-retarget-enabled
-    header: '{{retarget_enabled}}'
-    text: '{{retarget_enabled_tooltip}}'
-    hasHeader: true
-    display: UCP2Switch
-    contents:
-      type: boolean
-      value: false
-  - display: GroupBox
-    header: '{{retarget_range}}'
-    hasHeader: true
-    text: '{{retarget_range_tooltip}}'
-    accordion:
-      enabled: true
-    children:
-    - url: improved-tunnelers.retarget.range
-      name: improved-tunnelers-retarget-range
-      text: '{{retarget_range}}'
-      display: Number
-      contents:
-        type: integer
-        value: 80
-        min: 20
-        max: 200
-        step: 10
-  - display: GroupBox
-    header: '{{retarget_max}}'
-    hasHeader: true
-    text: '{{retarget_max_tooltip}}'
-    accordion:
-      enabled: true
-    children:
-    - url: improved-tunnelers.retarget.max
-      name: improved-tunnelers-retarget-max
-      text: '{{retarget_max}}'
-      display: Number
-      contents:
-        type: integer
-        value: 10
-        min: 1
-        max: 30
-        step: 1
-  - display: GroupBox
-    header: '{{retarget_join}}'
-    hasHeader: true
-    text: '{{retarget_join_tooltip}}'
-    accordion:
-      enabled: true
-    children:
-    - url: improved-tunnelers.retarget.join_distance
-      name: improved-tunnelers-retarget-join-distance
-      text: '{{retarget_join}}'
-      display: Number
-      contents:
-        type: integer
-        value: 15
-        min: 0
-        max: 80
-        step: 1
-
+  display: UCP2Switch
+  contents:
+    type: boolean
+    value: false
+  category:
+  - '{{balance_changes}}'
 - display: GroupBox
-  category: ['{{balance_changes}}']
+  hasHeader: true
   header: '{{targets_group}}'
-  hasHeader: true
   children:
   - url: improved-tunnelers.targets.towers_and_gates
     name: improved-tunnelers-targets-towers-and-gates
@@ -125,12 +65,6 @@ options:
     contents:
       type: boolean
       value: false
-
-- display: GroupBox
-  category: ['{{balance_changes}}']
-  header: '{{ui_group}}'
-  hasHeader: true
-  children:
   - url: improved-tunnelers.targets.under_buildings
     name: improved-tunnelers-targets-under-buildings
     header: '{{targets_under}}'
@@ -140,6 +74,12 @@ options:
     contents:
       type: boolean
       value: false
+  category:
+  - '{{balance_changes}}'
+- display: GroupBox
+  hasHeader: true
+  header: '{{ui_group}}'
+  children:
   - url: improved-tunnelers.digging.unselectable
     name: improved-tunnelers-digging-unselectable
     header: '{{digging_unselectable}}'
@@ -167,15 +107,12 @@ options:
     contents:
       type: boolean
       value: false
-  - url: improved-tunnelers.digging.overlay
-    name: improved-tunnelers-digging-overlay
-    header: '{{digging_overlay}}'
-    text: '{{digging_overlay_tooltip}}'
-    hasHeader: true
-    display: UCP2Switch
-    contents:
-      type: boolean
-      value: false
+  category:
+  - '{{balance_changes}}'
+- display: GroupBox
+  hasHeader: true
+  header: '{{collapse_group}}'
+  children:
   - url: improved-tunnelers.collapse.enabled
     name: improved-tunnelers-collapse-enabled
     header: '{{collapse_enabled}}'
@@ -185,22 +122,6 @@ options:
     contents:
       type: boolean
       value: false
-  - display: GroupBox
-    header: '{{collapse_damage}}'
-    hasHeader: true
-    text: '{{collapse_damage_tooltip}}'
-    accordion:
-      enabled: true
-    children:
-    - url: improved-tunnelers.collapse.damage
-      name: improved-tunnelers-collapse-damage
-      text: '{{collapse_damage}}'
-      display: Number
-      contents:
-        type: integer
-        value: 2500
-        min: 1
-        max: 10000
   - url: improved-tunnelers.collapse.spread
     name: improved-tunnelers-collapse-spread
     header: '{{collapse_spread}}'
@@ -219,105 +140,124 @@ options:
     contents:
       type: boolean
       value: false
-  - display: GroupBox
-    header: '{{collapse_speed}}'
-    hasHeader: true
-    text: '{{collapse_speed_tooltip}}'
-    accordion:
-      enabled: true
-    children:
-    - url: improved-tunnelers.collapse.tiles_per_second
-      name: improved-tunnelers-collapse-tiles-per-second
-      text: '{{collapse_speed}}'
-      display: Number
-      contents:
-        type: integer
-        value: 80
-        min: 1
-        max: 4000
-  - display: GroupBox
-    header: '{{collapse_spread_radius}}'
-    hasHeader: true
-    text: '{{collapse_spread_radius_tooltip}}'
-    accordion:
-      enabled: true
-    children:
-    - url: improved-tunnelers.collapse.spread_radius
-      name: improved-tunnelers-collapse-spread-radius
-      text: '{{collapse_spread_radius}}'
-      display: Number
-      contents:
-        type: integer
-        value: 2
-        min: 0
-        max: 8
-  - display: GroupBox
-    header: '{{collapse_spread_damage}}'
-    hasHeader: true
-    text: '{{collapse_spread_damage_tooltip}}'
-    accordion:
-      enabled: true
-    children:
-    - url: improved-tunnelers.collapse.spread_damage
-      name: improved-tunnelers-collapse-spread-damage
-      text: '{{collapse_spread_damage}}'
-      display: Number
-      contents:
-        type: integer
-        value: 60
-        min: 0
-        max: 1000
-  - url: improved-tunnelers.ui.enabled
-    name: improved-tunnelers-ui-enabled
-    header: '{{ui_enabled}}'
-    text: '{{ui_enabled_tooltip}}'
-    hasHeader: true
-    display: UCP2Switch
-    contents:
-      type: boolean
-      value: false
-
-- display: GroupBox
-  category: ['{{bugfixes}}']
-  header: '{{stances_group}}'
+  category:
+  - '{{balance_changes}}'
+- url: improved-tunnelers.digging.overlay
+  name: improved-tunnelers-digging-overlay
+  header: '{{digging_overlay}}'
+  text: '{{digging_overlay_tooltip}}'
   hasHeader: true
-  children:
-  - url: improved-tunnelers.stances.enabled
-    name: improved-tunnelers-stances-enabled
-    header: '{{stances_enabled}}'
-    text: '{{stances_enabled_tooltip}}'
-    hasHeader: true
-    display: UCP2Switch
-    contents:
-      type: boolean
-      value: false
-
-- display: GroupBox
-  category: ['{{ai}}', '{{improvements}}']
-  header: '{{raids_group}}'
+  display: UCP2Switch
+  contents:
+    type: boolean
+    value: false
+  category:
+  - '{{qol}}'
+- url: improved-tunnelers.ui.enabled
+  name: improved-tunnelers-ui-enabled
+  header: '{{ui_enabled}}'
+  text: '{{ui_enabled_tooltip}}'
   hasHeader: true
-  children:
-  - url: improved-tunnelers.raids.enabled
-    name: improved-tunnelers-raids-enabled
-    header: '{{raids_enabled}}'
-    text: '{{raids_enabled_tooltip}}'
-    hasHeader: true
-    display: UCP2Switch
-    contents:
-      type: boolean
-      value: false
-
-- display: GroupBox
-  category: ['{{misc}}']
-  header: '{{diagnostics_group}}'
+  display: UCP2Switch
+  contents:
+    type: boolean
+    value: false
+  category:
+  - '{{qol}}'
+- url: improved-tunnelers.stances.enabled
+  name: improved-tunnelers-stances-enabled
+  header: '{{stances_enabled}}'
+  text: '{{stances_enabled_tooltip}}'
   hasHeader: true
-  children:
-  - url: improved-tunnelers.diagnostics.enabled
-    name: improved-tunnelers-diagnostics-enabled
-    header: '{{diagnostics_enabled}}'
-    text: '{{diagnostics_enabled_tooltip}}'
-    hasHeader: true
-    display: UCP2Switch
-    contents:
-      type: boolean
-      value: false
+  display: UCP2Switch
+  contents:
+    type: boolean
+    value: false
+  category:
+  - '{{qol}}'
+- url: improved-tunnelers.raids.enabled
+  name: improved-tunnelers-raids-enabled
+  header: '{{raids_enabled}}'
+  text: '{{raids_enabled_tooltip}}'
+  hasHeader: true
+  display: UCP2Switch
+  contents:
+    type: boolean
+    value: false
+  category:
+  - '{{ai}}'
+  - '{{improvements}}'
+- url: improved-tunnelers.retarget.range
+  name: improved-tunnelers-retarget-range
+  display: Number
+  contents:
+    type: integer
+    value: 80
+    min: 20
+    max: 200
+    step: 10
+  hidden: true
+- url: improved-tunnelers.retarget.max
+  name: improved-tunnelers-retarget-max
+  display: Number
+  contents:
+    type: integer
+    value: 10
+    min: 1
+    max: 30
+    step: 1
+  hidden: true
+- url: improved-tunnelers.retarget.join_distance
+  name: improved-tunnelers-retarget-join-distance
+  display: Number
+  contents:
+    type: integer
+    value: 15
+    min: 0
+    max: 80
+    step: 1
+  hidden: true
+- url: improved-tunnelers.collapse.damage
+  name: improved-tunnelers-collapse-damage
+  display: Number
+  contents:
+    type: integer
+    value: 2500
+    min: 1
+    max: 10000
+  hidden: true
+- url: improved-tunnelers.collapse.tiles_per_second
+  name: improved-tunnelers-collapse-tiles-per-second
+  display: Number
+  contents:
+    type: integer
+    value: 80
+    min: 1
+    max: 4000
+  hidden: true
+- url: improved-tunnelers.collapse.spread_radius
+  name: improved-tunnelers-collapse-spread-radius
+  display: Number
+  contents:
+    type: integer
+    value: 2
+    min: 0
+    max: 8
+  hidden: true
+- url: improved-tunnelers.collapse.spread_damage
+  name: improved-tunnelers-collapse-spread-damage
+  display: Number
+  contents:
+    type: integer
+    value: 60
+    min: 0
+    max: 1000
+  hidden: true
+- url: improved-tunnelers.diagnostics.enabled
+  name: improved-tunnelers-diagnostics-enabled
+  hasHeader: true
+  display: UCP2Switch
+  contents:
+    type: boolean
+    value: false
+  hidden: true

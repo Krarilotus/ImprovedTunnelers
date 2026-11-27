@@ -5,20 +5,12 @@ denial_enabled_tooltip: |-
 denial_message: Bausperre erklären
 denial_message_tooltip: |-
   Bei einer Bausperre an einer Bresche einen Hinweis anzeigen.
-terrain_group: Tunnelgelände
 terrain_enabled: Boden nach dem Tunnelbau wiederherstellen
 terrain_enabled_tooltip: |-
   Die ursprüngliche Bodenhöhe um fertige Tunnel wiederherstellen. Aus verwendet die Bereinigung des Originalspiels.
-retarget_group: Tunnelwege
 retarget_enabled: Durch Breschen weitergraben
 retarget_enabled_tooltip: |-
   Tunnel koordinieren und ein neues Ziel suchen, wenn das vorige zerstört ist.
-retarget_range: Suchweite (Felder)
-retarget_range_tooltip: |-
-  Entfernung für die Suche nach dem nächsten Ziel. Standard: 80.
-retarget_max: Maximale neue Ziele
-retarget_max_tooltip: |-
-  Wie oft ein Tunnel zu einem neuen Ziel weitergraben darf. Standard: 10.
 targets_group: Tunnelziele
 targets_enabled: Türme und Tore angreifen
 targets_enabled_tooltip: |-
@@ -37,43 +29,22 @@ collapse_enabled: Tunnel beschädigen ihr Ziel
 collapse_enabled_tooltip: |-
   Mauer, Turm oder Tor am Tunnelende erhalten den Schaden unten, statt wie im Originalspiel sofort abgerissen zu werden.
 collapse_damage: Schaden am Ziel
-collapse_damage_tooltip: |-
-  Schaden an Mauer, Turm oder Tor am Tunnelende. Standard: 2500.
 collapse_spread: Benachbarte Gebäude beschädigen
 collapse_spread_tooltip: |-
   Normale Gebäude neben dem Tunnel beschädigen. Benachbarte Befestigungen bleiben verschont.
-collapse_speed: Einsturzgeschwindigkeit (Felder pro Sekunde)
-collapse_speed_tooltip: |-
-  Wie schnell ein Tunnel nach dem Treffer einstürzt, in Tunnelfeldern pro Sekunde bei normaler Spielgeschwindigkeit: Der Boden wird Feld für Feld wiederhergestellt und die Umgebung erschüttert, vom Ziel zurück zum Eingang. Kleinere Werte sind langsamer und verteilen die Arbeit über mehr Zeit. Standard: 80.
-collapse_spread_radius: Schadensradius (Felder)
-collapse_spread_radius_tooltip: |-
-  Reichweite des Schadens neben dem Tunnel. Standard: 2.
-collapse_spread_damage: Schaden an benachbarten Gebäuden
-collapse_spread_damage_tooltip: |-
-  Schaden an jedem normalen Gebäude in Reichweite. Standard: 60.
 ui_enabled: Schaltfläche „Hier angreifen“ hinzufügen
 ui_enabled_tooltip: |-
   Grabebefehl behalten und einen eigenen Befehl zum Angriff auf Gebäude hinzufügen.
-stances_group: Haltung der Tunnelgräber
 stances_enabled: Defensive und aggressive Haltung aktivieren
 stances_enabled_tooltip: |-
   Untätige Tunnelgräber reagieren auf nahe Feinde, ohne Grab- oder Laufbefehle zu unterbrechen.
-raids_group: Tunnelgräber bei KI-Überfällen
 raids_enabled: Tunnelgräber für Überfälle aktivieren
 raids_enabled_tooltip: |-
   In den KI-Überfalleinstellungen gewählte Tunnelgräber schließen sich den Überfalltruppen an.
-diagnostics_group: Diagnose
-diagnostics_enabled: Diagnosemeldungen schreiben
-diagnostics_enabled_tooltip: |-
-  Tunnelaktivität zur Fehlersuche protokollieren. Standardmäßig aus.
 balance_changes: Balance-Änderungen
 bugfixes: Fehlerkorrekturen
 ai: KI
 improvements: Verbesserungen
-misc: Sonstiges
-retarget_join: Anschlussabstand (Felder)
-retarget_join_tooltip: |-
-  Tunnel, die so nah am Start des ersten Tunnels einer Gruppe gegraben werden, zielen alle auf dessen Ziel und verzweigen erst von dort. Weiter entfernte Tunnel öffnen ihre eigene Bresche. 0 = beliebig weit. Standard: 15.
 digging_trap_proof: Tunnelgräber ignorieren Fallgruben
 digging_trap_proof_tooltip: |-
   Tunnelgräber unter der Erde nehmen keinen Schaden durch Fallgruben und lösen sie nicht aus.
@@ -88,3 +59,4 @@ tags.behavior: Verhalten
 tags.bugfixes: Fehlerkorrekturen
 tags.balance: Balance
 tags.interface: Oberfläche
+qol: Komfort

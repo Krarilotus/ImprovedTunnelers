@@ -1008,9 +1008,8 @@ return {
 
     local tickSite, problem = core.AOBScanUnique(AOB_TICK_COUNTER)
     local ticks = tickSite and readAddress(tickSite + 8)
-    if not ticks then
-      log(ERROR, "Timed tunneler features are off. The game tick counter could not be bound.")
-      log(WARNING, "improved-tunnelers: game tick counter " .. problem .. "; the part of the module that needs it is off")
+    if not ticks and (queueWanted or routingOn) then
+      log(WARNING, "improved-tunnelers: game tick counter " .. problem)
     end
 
     ---------------------------------------------------------------------------------
@@ -1182,9 +1181,6 @@ return {
           and readAddress(brush + 0x80) == readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND)
           and readAddress(brush + 0xA2) == readAddress(walk + DAMAGE_WALK_PATH_STATE_OPERAND)
           and callTarget(brush + 0xA6) == callTarget(walk + DAMAGE_WALK_UPDATE_CALL)
-        if not brushReady then
-          log(ERROR, "Tunnel collapse changes are off. The terrain brush could not be verified.")
-        end
       end
       if walkReady
           and brushReady
@@ -1472,6 +1468,17 @@ return {
           end
         end
       end
+    end
+    if (collapseOn or spreadOn or entranceLostOn) and not collapseReady then
+      log(ERROR, "Tunnel collapse changes are off. The collapse code could not be verified.")
+    elseif collapseOn and not targetReady then
+      log(ERROR, "Custom tunnel collapse damage is off. The damage code could not be verified.")
+    end
+    if terrainOn and not collapseReady then
+      log(ERROR, "Restoring ground after digging is off. The terrain code could not be verified.")
+    end
+    if overlayOn and not collapseReady then
+      log(ERROR, "The tunnel mark is off. The tunnel collapse code could not be verified.")
     end
 
     if walk ~= nil and routingOn then
@@ -2036,9 +2043,17 @@ return {
             remember(messageSite + MESSAGE_HOOK, MESSAGE_HOOK_SIZE)
             writeJump(messageSite + MESSAGE_HOOK, message, MESSAGE_HOOK_SIZE)
             log(INFO, "improved-tunnelers: localized placement refusal enabled.")
+          elseif wrote then
+            log(ERROR, "The tunnel breach message is off. The placement check could not be verified.")
           end
         end)
       end
+    end
+    if denialOn and not denialReady then
+      log(ERROR, "Blocking construction over tunnel breaches is off. The placement check could not be bound.")
+    end
+    if retargetOn and not retargetReady then
+      log(ERROR, "Following up on tunnel breaches is off. The tunnel route code could not be bound.")
     end
 
     ---------------------------------------------------------------------------------
@@ -2084,6 +2099,9 @@ return {
         targetsReady = true
       end
     end
+    if (targetsOn or underOn) and not targetsReady then
+      log(ERROR, "Expanded tunnel targets and routes are off. The target search could not be bound.")
+    end
 
     -- Nothing aims at a tunneler that is underground.
     local aimReady = false
@@ -2101,6 +2119,9 @@ return {
       writeJump(aimSite + AIM_HOOK, hidden, AIM_HOOK_SIZE)
       aimReady = true
     end
+    if untargetableOn and not aimReady then
+      log(ERROR, "Protection from attacks while digging is off. The attack check could not be bound.")
+    end
 
     -- Killing pits let underground tunnellers pass.
     local trapReady = false
@@ -2116,6 +2137,9 @@ return {
       remember(pitSite, ROUTE.killingPitHook)
       writeJump(pitSite, pit, ROUTE.killingPitHook)
       trapReady = true
+    end
+    if trapProofOn and not trapReady then
+      log(ERROR, "Protection from killing pits while digging is off. The trap check could not be bound.")
     end
 
     ---------------------------------------------------------------------------------
@@ -2195,6 +2219,9 @@ return {
       writeJump(tunneler, stance, 7)
       stanceReady = true
     end
+    if (stancesOn or unselectableOn) and not stanceReady then
+      log(ERROR, "Tunneler stance and selection changes are off. The tunneler update could not be bound.")
+    end
 
     if uiOn and not uiReady then
       log(ERROR, "The tunneler command buttons are off. The game controls could not be bound.")
@@ -2239,6 +2266,9 @@ return {
       raidsReady = true
     end
     self.raidsOn = raidsReady and raidsOn
+    if raidsOn and not raidsReady then
+      log(ERROR, "Tunnelers in AI raids are off. AI recruitment could not be bound.")
+    end
 
     if diagnosticsOn and tunneler ~= nil and unitBase ~= nil then
       -- The stopwatch round every tunneller update, for the diagnostics.

@@ -1,68 +1,47 @@
-denial_group: Building after a breach
-denial_enabled: Building and repair delay (ticks)
-denial_enabled_tooltip: 'Briefly prevent building and wall repairs around a breach. Default: 100 ticks (2.5 seconds at normal
-  speed). Maximum: 2400 ticks. Further collapses extend the delay. Switch off to allow immediate rebuilding.'
-denial_message: Explain blocked building
-denial_message_tooltip: Show a message when a breach prevents building.
-terrain_group: Tunnel terrain
-terrain_enabled: Restore ground after tunneling
-terrain_enabled_tooltip: Restore the original ground height around completed tunnels. Off uses the original
-  game's cleanup.
-retarget_group: Tunnel routes
-retarget_enabled: Continue through breaches
-retarget_enabled_tooltip: Coordinate tunnels and find another target when the previous one is gone.
-retarget_range: Search range (tiles)
-retarget_range_tooltip: 'How far a tunnel can look for its next target. Default: 80.'
-retarget_max: Maximum new targets
-retarget_max_tooltip: 'How often one tunnel can continue to another target. Default: 10.'
+denial_group: Building over breaches
+denial_enabled: Delay rebuilding over a tunnel breach
+denial_enabled_tooltip: Set how long construction stays blocked over a breach.
+denial_message: Explain why construction is blocked
+denial_message_tooltip: Show a message when you try to build inside an active breach.
+terrain_enabled: Restore ground after digging
+terrain_enabled_tooltip: Restore raised ground as the tunnel collapses.
+retarget_enabled: Follow up on breaches
+retarget_enabled_tooltip: Tunnelers look for a new target after opening a breach or losing their original target.
 targets_group: Tunnel targets
 targets_enabled: Target towers and gates
-targets_enabled_tooltip: Allow all towers and gates as tunnel targets.
-ui_group: Tunneler commands and collapse damage
-targets_under: Dig under town buildings
-targets_under_tooltip: Allow routes under ordinary buildings. Keeps remain excluded.
-digging_unselectable: Skip digging tunnelers in selections
-digging_unselectable_tooltip: Avoid interrupting digging when selecting or ordering troops.
-digging_untargetable: Protect underground tunnelers
-digging_untargetable_tooltip: Prevent enemies from targeting tunnelers while they dig.
-collapse_enabled: Tunnels damage their target
-collapse_enabled_tooltip: 'The wall, tower or gate at the tunnel''s end takes the damage below instead of being demolished outright, as in the original game.'
+targets_enabled_tooltip: Tunnelers can dig toward towers and gatehouses.
+ui_group: Underground tunnelers
+targets_under: Tunnel under town buildings
+targets_under_tooltip: Tunnels can pass underneath ordinary town buildings.
+digging_unselectable: Keep digging tunnelers out of selections
+digging_unselectable_tooltip: Selections leave out tunnelers while they are underground.
+digging_untargetable: Protect underground tunnelers from attacks
+digging_untargetable_tooltip: Enemies cannot target tunnelers who are underground.
+collapse_enabled: Damage the target when a tunnel collapses
+collapse_enabled_tooltip: A collapse damages the structure above its target tile.
 collapse_damage: Damage to the target
-collapse_damage_tooltip: 'Damage dealt to the wall, tower or gate at the tunnel''s end. Default: 2500.'
 collapse_spread: Damage nearby buildings
-collapse_spread_tooltip: Damage ordinary buildings beside the tunnel. Nearby fortifications are excluded.
-collapse_speed: 'Collapse speed (tiles per second)'
-collapse_speed_tooltip: 'How fast a tunnel falls in once it has hit, in tunnel tiles per second at normal game speed: the ground goes back and the town beside it shakes tile by tile, from the target back to the entrance. Lower is slower and spreads the work over more time. Default: 80.'
-collapse_spread_radius: Damage radius (tiles)
-collapse_spread_radius_tooltip: 'How far damage reaches beside the tunnel. Default: 2.'
-collapse_spread_damage: Damage to nearby buildings
-collapse_spread_damage_tooltip: 'Damage dealt to each ordinary building in range. Default: 60.'
-ui_enabled: Add an attack-here button
-ui_enabled_tooltip: Keep the dig button and add a separate building-attack command.
-stances_group: Tunneler stances
-stances_enabled: Enable defensive and aggressive stances
-stances_enabled_tooltip: Let idle tunnelers react to nearby enemies without interrupting digging or movement orders.
-raids_group: Tunnelers in AI raids
-raids_enabled: Enable raid tunnelers
-raids_enabled_tooltip: Tunnelers selected in the AI's raid settings join its raiding troops.
-diagnostics_group: Diagnostics
-diagnostics_enabled: Write diagnostic messages
-diagnostics_enabled_tooltip: Log tunneler activity for troubleshooting. Off by default.
+collapse_spread_tooltip: A tunnel collapse can damage other buildings around its target.
+ui_enabled: Separate Attack Here and Dig Tunnel commands
+ui_enabled_tooltip: Select a tunneler, click Attack Here or the adjacent Dig Tunnel button in the unit panel, then click the target.
+stances_enabled: Idle tunnelers obey combat stances
+stances_enabled_tooltip: Use the usual stance buttons to choose how idle tunnelers react to enemies.
+raids_enabled: Allow tunnelers in AI raid groups
+raids_enabled_tooltip: AI lords can send tunnelers in raids when their raid roster includes them.
 balance_changes: Balance Changes
 bugfixes: Bugfixes
 ai: AI
 improvements: Improvements
-misc: Miscellaneous
-retarget_join: 'Join distance (tiles)'
-retarget_join_tooltip: 'Tunnels dug in this close to where a group''s first tunnel started all go for that tunnel''s target, then branch out from there. Tunnels further apart open their own breach. 0 = any distance. Default: 15.'
-digging_trap_proof: 'Tunnelers ignore killing pits'
-digging_trap_proof_tooltip: 'Tunnelers underground take no damage from killing pits and do not set them off.'
-digging_overlay: 'Show your tunnels under high ground'
-digging_overlay_tooltip: 'Where your own tunnel runs under raised ground, the game shows no bump on the surface. This marks those tiles in red, like a planned moat, while the tunnel is dug, and takes the mark away as the tunnel falls in. Only you see your own tunnels.'
-collapse_entrance_lost: 'Lost entrance collapses the tunnel'
-collapse_entrance_lost_tooltip: 'If a tunnel''s entrance is destroyed while it is still being dug, the tunnel falls in where it has got to and damages what stands above, as if it had reached a target.'
+digging_trap_proof: Ignore killing pits while tunneling
+digging_trap_proof_tooltip: Digging tunnelers take no damage from killing pits.
+digging_overlay: Mark your tunnels under raised terrain
+digging_overlay_tooltip: Your tunnels under raised ground appear in red.
+collapse_entrance_lost: Collapse tunnels when their entrance is lost
+collapse_entrance_lost_tooltip: A tunnel can collapse when its entrance is destroyed.
 
 tags.behavior: Behavior
 tags.bugfixes: Bug fixes
 tags.balance: Balance
 tags.interface: Interface
+qol: Quality of Life
+collapse_group: Tunnel collapses

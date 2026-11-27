@@ -5,20 +5,12 @@ denial_enabled_tooltip: |-
 denial_message: Építési tiltás magyarázata
 denial_message_tooltip: |-
   Üzenetet mutat, ha egy rés miatt nem lehet építeni.
-terrain_group: Alagutak talaja
 terrain_enabled: Talaj helyreállítása ásás után
 terrain_enabled_tooltip: |-
   Visszaállítja a befejezett alagutak körüli eredeti talajmagasságot. Kikapcsolva az eredeti játék helyreállítását használja.
-retarget_group: Alagútútvonalak
 retarget_enabled: Továbbásás a réseken át
 retarget_enabled_tooltip: |-
   Összehangolja az alagutakat, és új célt keres, ha az előző megsemmisült.
-retarget_range: Keresési távolság (mező)
-retarget_range_tooltip: |-
-  A következő cél keresési távolsága. Alapértelmezett: 80.
-retarget_max: Új célok maximális száma
-retarget_max_tooltip: |-
-  Hányszor haladhat tovább egy alagút másik cél felé. Alapértelmezett: 10.
 targets_group: Alagútcélpontok
 targets_enabled: Tornyok és kapuk célzása
 targets_enabled_tooltip: |-
@@ -37,43 +29,22 @@ collapse_enabled: Az alagutak sebzik a célpontot
 collapse_enabled_tooltip: |-
   Az alagút végén lévő fal, torony vagy kapu az alább megadott sebzést kapja, ahelyett hogy azonnal leomlana, mint az eredeti játékban.
 collapse_damage: Célpont sebzése
-collapse_damage_tooltip: |-
-  A fal, torony vagy kapu sebzése az alagút végén. Alapértelmezett: 2500.
 collapse_spread: Közeli épületek sebzése
 collapse_spread_tooltip: |-
   Sebzi az alagút melletti közönséges épületeket. A szomszédos erődítmények kivételek.
-collapse_speed: Omlási sebesség (mező másodpercenként)
-collapse_speed_tooltip: |-
-  Milyen gyorsan omlik be az alagút a becsapódás után, alagútmező másodpercenként normál játéksebességnél: a talaj mezőről mezőre helyreáll és a környék megrázkódik, a céltól a bejárat felé. Kisebb érték lassabb, és több időre osztja el a munkát. Alapértelmezett: 80.
-collapse_spread_radius: Sebzési sugár (mező)
-collapse_spread_radius_tooltip: |-
-  A sebzés hatótávolsága az alagút mellett. Alapértelmezett: 2.
-collapse_spread_damage: Közeli épületek sebzése
-collapse_spread_damage_tooltip: |-
-  Minden hatótávon belüli közönséges épület sebzése. Alapértelmezett: 60.
 ui_enabled: „Támadás ide” gomb hozzáadása
 ui_enabled_tooltip: |-
   Megtartja az ásás gombot, és külön épülettámadási parancsot ad hozzá.
-stances_group: Alagútásók harci módjai
 stances_enabled: Védekező és támadó harci mód engedélyezése
 stances_enabled_tooltip: |-
   A tétlen alagútásók reagálnak a közeli ellenségre az ásási és mozgási parancsok megszakítása nélkül.
-raids_group: Alagútásók az MI portyáin
 raids_enabled: Portyázó alagútásók engedélyezése
 raids_enabled_tooltip: |-
   Az MI portyabeállításaiban kiválasztott alagútásók csatlakoznak a portyázó csapatokhoz.
-diagnostics_group: Diagnosztika
-diagnostics_enabled: Diagnosztikai üzenetek írása
-diagnostics_enabled_tooltip: |-
-  Alagúttevékenység naplózása hibakereséshez. Alapértelmezett: ki.
-balance_changes: Egyensúly-módosítások
+balance_changes: Egyensúlymódosítások
 bugfixes: Hibajavítások
 ai: MI
 improvements: Fejlesztések
-misc: Egyéb
-retarget_join: Csatlakozási távolság (mező)
-retarget_join_tooltip: |-
-  Az egy csoport első alagútjának kezdetéhez ilyen közel ásott alagutak mind annak célpontjához tartanak, és csak onnan ágaznak el. A távolabbi alagutak saját rést nyitnak. 0 = bármilyen távolság. Alapértelmezett: 15.
 digging_trap_proof: Az alagútásók figyelmen kívül hagyják a csapdavermeket
 digging_trap_proof_tooltip: |-
   A föld alatti alagútásók nem sérülnek a csapdavermektől, és nem is hozzák működésbe őket.
@@ -88,3 +59,4 @@ tags.behavior: Viselkedés
 tags.bugfixes: Hibajavítások
 tags.balance: Egyensúly
 tags.interface: Kezelőfelület
+qol: Kényelmi funkciók

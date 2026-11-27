@@ -1,3 +1,3 @@
 # Improved Tunnelers
 
-Improves how tunnelers choose targets, cooperate and respond to combat orders. They can continue digging toward enemy defenses and join AI raids. Customize tunnel collapse damage, temporary building restrictions after a breach, and tunneler behavior.
+Improve how tunnelers dig, pick targets and follow up on breaches. Choose how collapses damage buildings and when construction can resume. Select a tunneler to use separate attack and dig commands when enabled.
