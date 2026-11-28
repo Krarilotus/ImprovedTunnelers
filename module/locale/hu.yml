@@ -44,3 +44,7 @@ tags.balance: Egyensúly
 tags.interface: Kezelőfelület
 qol: Kényelmi funkciók
 collapse_group: Alagútomlasztások
+cat_attacks_raids: Támadások és portyák
+cat_siege_digging: Ostromgépek és ásás
+cat_siege_sapping: Ostrom és aláaknázás
+cat_unit_controls: Egységirányítás

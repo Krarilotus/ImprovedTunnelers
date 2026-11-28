@@ -45,3 +45,7 @@ tags.balance: Balance
 tags.interface: Interface
 qol: Quality of Life
 collapse_group: Tunnel collapses
+cat_attacks_raids: Attacks and raids
+cat_siege_digging: Siege equipment and digging
+cat_siege_sapping: Siege and sapping
+cat_unit_controls: Unit controls

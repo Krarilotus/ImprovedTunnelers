@@ -30,6 +30,7 @@ options:
       value: false
   category:
   - '{{balance_changes}}'
+  - '{{cat_siege_sapping}}'
 - url: improved-tunnelers.terrain.enabled
   name: improved-tunnelers-terrain-enabled
   header: '{{terrain_enabled}}'
@@ -41,6 +42,7 @@ options:
     value: false
   category:
   - '{{bugfixes}}'
+  - '{{cat_siege_digging}}'
 - url: improved-tunnelers.retarget.enabled
   name: improved-tunnelers-retarget-enabled
   header: '{{retarget_enabled}}'
@@ -52,6 +54,7 @@ options:
     value: false
   category:
   - '{{balance_changes}}'
+  - '{{cat_siege_sapping}}'
 - display: GroupBox
   hasHeader: true
   header: '{{targets_group}}'
@@ -76,6 +79,7 @@ options:
       value: false
   category:
   - '{{balance_changes}}'
+  - '{{cat_siege_sapping}}'
 - display: GroupBox
   hasHeader: true
   header: '{{ui_group}}'
@@ -109,6 +113,7 @@ options:
       value: false
   category:
   - '{{balance_changes}}'
+  - '{{cat_siege_sapping}}'
 - display: GroupBox
   hasHeader: true
   header: '{{collapse_group}}'
@@ -142,6 +147,7 @@ options:
       value: false
   category:
   - '{{balance_changes}}'
+  - '{{cat_siege_sapping}}'
 - url: improved-tunnelers.digging.overlay
   name: improved-tunnelers-digging-overlay
   header: '{{digging_overlay}}'
@@ -153,6 +159,7 @@ options:
     value: false
   category:
   - '{{qol}}'
+  - '{{cat_unit_controls}}'
 - url: improved-tunnelers.ui.enabled
   name: improved-tunnelers-ui-enabled
   header: '{{ui_enabled}}'
@@ -164,6 +171,7 @@ options:
     value: false
   category:
   - '{{qol}}'
+  - '{{cat_unit_controls}}'
 - url: improved-tunnelers.stances.enabled
   name: improved-tunnelers-stances-enabled
   header: '{{stances_enabled}}'
@@ -175,6 +183,7 @@ options:
     value: false
   category:
   - '{{qol}}'
+  - '{{cat_unit_controls}}'
 - url: improved-tunnelers.raids.enabled
   name: improved-tunnelers-raids-enabled
   header: '{{raids_enabled}}'
@@ -187,6 +196,7 @@ options:
   category:
   - '{{ai}}'
   - '{{improvements}}'
+  - '{{cat_attacks_raids}}'
 - url: improved-tunnelers.retarget.range
   name: improved-tunnelers-retarget-range
   display: Number

@@ -44,3 +44,7 @@ tags.balance: Balance
 tags.interface: Oberfläche
 qol: Komfort
 collapse_group: Tunneleinstürze
+cat_attacks_raids: Angriffe und Überfälle
+cat_siege_digging: Belagerungsgerät und Graben
+cat_siege_sapping: Belagerung und Untergraben
+cat_unit_controls: Truppensteuerung

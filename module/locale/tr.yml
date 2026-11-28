@@ -44,3 +44,7 @@ tags.balance: Denge
 tags.interface: Arayüz
 qol: Kullanım kolaylığı
 collapse_group: Tünel çökmeleri
+cat_attacks_raids: Saldırılar ve akınlar
+cat_siege_digging: Kuşatma donanımı ve kazı
+cat_siege_sapping: Kuşatma ve lağım
+cat_unit_controls: Birlik kontrolleri
