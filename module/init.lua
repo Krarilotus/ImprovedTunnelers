@@ -819,9 +819,9 @@ local writeInteger = core.writeInteger
 ---@param purpose string
 ---@return number|nil
 local function scanOptional(pattern, purpose)
-  local address, reason = core.AOBScanUnique(pattern)
-  if not address then log(INFO, "improved-tunnelers: " .. purpose .. " was " .. reason .. ".") end
-  return address
+  local found, address = pcall(core.AOBScan, pattern)
+  if found then return address end
+  log(INFO, "improved-tunnelers: " .. purpose .. " was not found.")
 end
 
 ---True when the bytes at base + offset are the ones this module expects.

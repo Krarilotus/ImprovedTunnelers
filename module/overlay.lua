@@ -317,9 +317,9 @@ function M.install(h)
   assert(M.memory, "The tunnel mark memory is unavailable.")
   local mem = h.memory or M.memory
   local function scan(pattern, purpose)
-    local address, reason = core.AOBScanUnique(pattern)
-    if not address then
-      log(WARNING, "improved-tunnelers: " .. purpose .. " was " .. reason .. ".")
+    local found, address = pcall(core.AOBScan, pattern)
+    if not found then
+      log(WARNING, "improved-tunnelers: " .. purpose .. " was not found.")
       return nil
     end
     return address
